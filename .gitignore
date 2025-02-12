@@ -2,3 +2,7 @@
 database.db
 *.egg-info
 **/__pycache__
+.dockerfile
+.terraform
+build/
+.swp
