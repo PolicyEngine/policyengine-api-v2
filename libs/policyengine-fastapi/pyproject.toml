@@ -27,5 +27,5 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry]
 requires-poetry = ">=2.0"
 packages = [
-  { include = "policyengine", from = "src" },
+  { include = "policyengine_fastapi", from = "src" },
 ]

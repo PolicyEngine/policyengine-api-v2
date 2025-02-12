@@ -1,5 +1,0 @@
-policyengine>=2.5.0
-git+https://github.com/policyengine/policyengine-api-prototype
-python_dotenv
-cloud-sql-python-connector[pg8000]
-sqlmodel
