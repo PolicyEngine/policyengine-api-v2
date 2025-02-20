@@ -21,7 +21,7 @@ def create_router():
         country_id: CountryId,
         household_json: dict = {},
         policy_json: dict = {},
-    ):
+    ) -> Any:
         # In future - disambiguate between inbound household JSON items, outbound household
         # schemas, and the actual household data model - need to confirm with others
 
