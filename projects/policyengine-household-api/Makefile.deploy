@@ -1,0 +1,8 @@
+deploy:
+	rm -rf build/staging
+	mkdir -p build/staging/libs
+	cp -R ../../libs/* build/staging/libs/
+	#Environment variables are defined in the github worfklow and have the TF_VAR prefix
+	#because they are also used by terraform and loaded as variables.
+	#--gcs_log_dir is required because the github deployment role does not have access to the default bucket.
+	gcloud builds submit --region=${TF_VAR_region} --tag ${TF_VAR_region}-docker.pkg.dev/${TF_VAR_project_id}/api-v2/policyengine-api-household:${TF_VAR_container_tag} --gcs-log-dir ${LOG_DIR}
