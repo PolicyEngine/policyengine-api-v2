@@ -11,13 +11,13 @@ __NOTE: MOST development should be possible locally. Deployment is slow and hard
   * Create a gcp account _with organization_
   * authenticate with gcloud as a user with permission to create projects.
   * Have your organization ID and billing account number handy.
-  * ``cd terraform/project-policyengine-api && make bootstrap``
+  * ``cd terraform/infra-policyengine-api && make bootstrap``
   * You should now have a terraform/.bootstrap_settings folder containing your project settings.
 * build the api docker image
-  * ``cd projects/policyengine-api-household && make deploy``
+  * ``cd projects/policyengine-api-full && make deploy``
   * There should now be a new hash under the tag "desktop" in the project artifact repository.
 * deploy to the cloud
-  * ``cd terraform/infra-policyengine-api && make deploy``
+  * ``cd terraform/project-policyengine-api-full && make deploy``
   * The cloudrun service should now be running using the latest image version of the tag "deksop" from your project artifact respository
 
 # Github Deploy to Cloud Quick Start

@@ -21,7 +21,7 @@ is_desktop=false
 
 # Set stage to current user if desktop
 if [ "$stage" == "desktop" ]; then
-    stage=$(whoami)
+    read -p "Enter username (used for stage): " stage
     is_desktop=true
 fi
 

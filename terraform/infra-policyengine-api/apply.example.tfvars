@@ -1,2 +1,3 @@
-project_id = "XXXX"
-is_prod = false
+org_id="XXXXX"
+billing_account="XXXX"
+stage="desktop"

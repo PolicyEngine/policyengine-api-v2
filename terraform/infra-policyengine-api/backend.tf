@@ -1,6 +1,6 @@
 terraform {
   backend "gcs" {
-    bucket = ""
-    prefix = "terraform/desktop/policyengine-api"
+    bucket = "nikhil-api-v2-dc52-state"
+    prefix = "terraform/project"
   }
 }
