@@ -1,0 +1,8 @@
+deploy: .terraform
+	terraform apply -input=false -auto-approve
+
+
+.terraform:
+	terraform init -backend-config="bucket=${TF_BACKEND_bucket}"
+
+
