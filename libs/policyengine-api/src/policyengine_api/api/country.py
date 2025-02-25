@@ -9,6 +9,7 @@ from policyengine_api.api.utils.metadata import (
     parse_default_value,
 )
 from policyengine_api.api.models.metadata.variable import Variable
+from policyengine_api.api.models.metadata.entity import Entity
 from policyengine_api.api.models.metadata.parameter import (
     ParameterScaleItem,
     ParameterNode,
@@ -20,6 +21,7 @@ from typing import Union
 # from policyengine_api.utils import (
 #     get_safe_json,
 # )
+from policyengine_core.entities import Entity as CoreEntity
 from policyengine_core.parameters import (
     ParameterNode as CoreParameterNode,
     Parameter as CoreParameter,
@@ -56,15 +58,16 @@ class PolicyEngineCountry:
         self.metadata: MetadataModule = MetadataModule(
             variables=self.build_variables(),
             parameters=self.build_parameters(),
+            entities=self.build_entities(),
         )
 
         # self.metadata = dict(
         #     status="ok",
         #     message=None,
         #     result=dict(
-        #         variables=self.build_variables(), # Working on
-        #         # parameters=self.build_parameters(), # Not done from here downward
-        #         entities=self.build_entities(),
+        #         variables=self.build_variables(), # Done
+        #         parameters=self.build_parameters(), # Done
+        #         entities=self.build_entities(), # Done
         #         variableModules=self.tax_benefit_system.variable_module_metadata,
         #         economy_options=self.build_microsimulation_options(),
         #         current_law_id={
@@ -261,19 +264,15 @@ class PolicyEngineCountry:
 
         return parameter_data
 
-    # Not done
-    def build_entities(self) -> dict:
+    def build_entities(self) -> dict[str, Entity]:
+        entities: list[CoreEntity] = self.tax_benefit_system.entities
         data = {}
-        for entity in self.tax_benefit_system.entities:
-            entity_data = {
-                "plural": entity.plural,
-                "label": entity.label,
-                "doc": entity.doc,
-                "is_person": entity.is_person,
-                "key": entity.key,
-            }
+
+        for entity in entities:
+
+            roles = {}
             if hasattr(entity, "roles"):
-                entity_data["roles"] = {
+                roles = {
                     role.key: {
                         "plural": role.plural,
                         "label": role.label,
@@ -281,9 +280,16 @@ class PolicyEngineCountry:
                     }
                     for role in entity.roles
                 }
-            else:
-                entity_data["roles"] = {}
-            data[entity.key] = entity_data
+
+            data[entity.key] = Entity(
+                plural=entity.plural,
+                label=entity.label,
+                doc=entity.doc,
+                is_person=entity.is_person,
+                key=entity.key,
+                roles=roles,
+            )
+
         return data
 
     def build_parameter_scale(

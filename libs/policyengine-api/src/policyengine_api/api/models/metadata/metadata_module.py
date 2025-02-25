@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from policyengine_api.api.models.metadata.variable import Variable
+from policyengine_api.api.models.metadata.entity import Entity
 from policyengine_api.api.models.metadata.parameter import (
     Parameter,
     ParameterNode,
@@ -10,7 +11,7 @@ from policyengine_api.api.models.metadata.parameter import (
 class MetadataModule(BaseModel):
     variables: dict[str, Variable]
     parameters: dict[str, Parameter | ParameterNode | ParameterScaleItem]
-    # entities: dict
+    entities: dict[str, Entity]
     # variableModules: dict
     # economy_options: dict
     # current_law_id: int
