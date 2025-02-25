@@ -11,8 +11,10 @@ from opentelemetry.sdk.resources import (
     SERVICE_INSTANCE_ID,
     Resource,
 )
-from policyengine_api.api.routers.calculate import (
-    create_router as create_calculate_router,
+from policyengine_api.api.routers import (
+    liveness_check,
+    readiness_check,
+    calculate,
 )
 from policyengine_api.api import initialize
 import logging
@@ -28,7 +30,9 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-app.include_router(create_calculate_router())
+app.include_router(liveness_check.router)
+app.include_router(readiness_check.router)
+app.include_router(calculate.router)
 
 # attach the api defined in the app package
 initialize(

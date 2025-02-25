@@ -10,22 +10,29 @@ from sqlmodel import Session
 # errors.
 # https://sqlmodel.tiangolo.com/tutorial/fastapi/tests/#configure-the-in-memory-database
 
-def create_sqlite_engine(filename:str | None = None)->Engine:
-    '''
+
+def create_sqlite_engine(filename: str | None = None) -> Engine:
+    """
     For desktop and testing, use sqlite to back sqlmodel
-    '''
+    """
     sqlite_url = f"sqlite:///{filename}" if filename else "sqlite:///:memory:"
     connect_args = {"check_same_thread": False}
-    return create_engine(sqlite_url, connect_args=connect_args, poolclass=StaticPool)
+    return create_engine(
+        sqlite_url, connect_args=connect_args, poolclass=StaticPool
+    )
 
-SessionGeneratorFactory = Callable[[],Generator[Session, Any, None]]
 
-def create_session_dep(engine:Engine)->SessionGeneratorFactory:
-    '''
+SessionGeneratorFactory = Callable[[], Generator[Session, Any, None]]
+
+
+def create_session_dep(engine: Engine) -> SessionGeneratorFactory:
+    """
     given an SQLModelEngine create a session dependency for use in
     routers.
-    '''
+    """
+
     def session_dep():
         with Session(engine) as session:
             yield session
+
     return session_dep

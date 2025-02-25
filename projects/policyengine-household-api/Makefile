@@ -23,7 +23,7 @@ build:
 	@echo "TODO: add back in the tests"
 
 dev:
-	fastapi dev policyengine_household_api/src/main.py
+	fastapi dev policyengine_household_api/src/main.py --reload
 
 format:
 	black . -l 79
