@@ -8,7 +8,10 @@ from policyengine_api.api.utils.metadata import (
     parse_enum_possible_values,
     parse_default_value,
 )
-from policyengine_api.api.models.metadata.variable import Variable
+from policyengine_api.api.models.metadata.variable import (
+    Variable,
+    VariableModule,
+)
 from policyengine_api.api.models.metadata.entity import Entity
 from policyengine_api.api.models.metadata.parameter import (
     ParameterScaleItem,
@@ -16,7 +19,7 @@ from policyengine_api.api.models.metadata.parameter import (
     Parameter,
 )
 from policyengine_api.api.models.metadata.metadata_module import MetadataModule
-from typing import Union
+from typing import Union, Any
 
 # from policyengine_api.utils import (
 #     get_safe_json,
@@ -59,6 +62,7 @@ class PolicyEngineCountry:
             variables=self.build_variables(),
             parameters=self.build_parameters(),
             entities=self.build_entities(),
+            variableModules=self.build_variable_modules(),
         )
 
         # self.metadata = dict(
@@ -68,7 +72,7 @@ class PolicyEngineCountry:
         #         variables=self.build_variables(), # Done
         #         parameters=self.build_parameters(), # Done
         #         entities=self.build_entities(), # Done
-        #         variableModules=self.tax_benefit_system.variable_module_metadata,
+        #         variableModules=self.tax_benefit_system.variable_module_metadata, # Done
         #         economy_options=self.build_microsimulation_options(),
         #         current_law_id={
         #             "uk": 1,
@@ -291,6 +295,19 @@ class PolicyEngineCountry:
             )
 
         return data
+
+    def build_variable_modules(self) -> dict[str, VariableModule]:
+        variable_modules: dict[str, dict[str, Any]] = (
+            self.tax_benefit_system.variable_module_metadata
+        )
+        modules = {}
+        for module_path, module in variable_modules.items():
+            modules[module_path] = VariableModule(
+                label=module.get("label", None),
+                description=module.get("description", None),
+                index=module.get("index", None),
+            )
+        return modules
 
     def build_parameter_scale(
         self, parameter: CoreParameterScale
