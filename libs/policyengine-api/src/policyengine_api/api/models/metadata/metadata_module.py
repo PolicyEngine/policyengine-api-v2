@@ -1,10 +1,15 @@
 from pydantic import BaseModel
-from .variable_module import VariableModule
+from policyengine_api.api.models.metadata.variable import Variable
+from policyengine_api.api.models.metadata.parameter import (
+    Parameter,
+    ParameterNode,
+    ParameterScaleItem,
+)
 
 
 class MetadataModule(BaseModel):
-    variables: VariableModule
-    # parameters: dict
+    variables: dict[str, Variable]
+    parameters: dict[str, Parameter | ParameterNode | ParameterScaleItem]
     # entities: dict
     # variableModules: dict
     # economy_options: dict

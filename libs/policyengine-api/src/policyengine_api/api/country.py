@@ -3,25 +3,28 @@ import json
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
 from policyengine_core.variables import Variable as CoreVariable
 from policyengine_api.api.utils.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.api.utils.json import get_safe_json
 from policyengine_api.api.utils.metadata import (
     parse_enum_possible_values,
     parse_default_value,
 )
-from policyengine_api.api.models.metadata import (
-    VariableModule,
-    Variable,
-    MetadataModule,
+from policyengine_api.api.models.metadata.variable import Variable
+from policyengine_api.api.models.metadata.parameter import (
+    ParameterScaleItem,
+    ParameterNode,
+    Parameter,
 )
+from policyengine_api.api.models.metadata.metadata_module import MetadataModule
 from typing import Union
 
 # from policyengine_api.utils import (
 #     get_safe_json,
 # )
 from policyengine_core.parameters import (
-    ParameterNode,
-    Parameter,
-    ParameterScale,
-    ParameterScaleBracket,
+    ParameterNode as CoreParameterNode,
+    Parameter as CoreParameter,
+    ParameterScale as CoreParameterScale,
+    ParameterScaleBracket as CoreParameterScaleBracket,
 )
 from typing import Annotated
 from policyengine_core.parameters import get_parameter
@@ -52,6 +55,7 @@ class PolicyEngineCountry:
     def build_metadata(self):
         self.metadata: MetadataModule = MetadataModule(
             variables=self.build_variables(),
+            parameters=self.build_parameters(),
         )
 
         # self.metadata = dict(
@@ -190,31 +194,10 @@ class PolicyEngineCountry:
             options["time_period"] = time_period
         return options
 
-    def build_variables(self) -> VariableModule:
+    def build_variables(self) -> dict[str, Variable]:
         variables: dict[str, CoreVariable] = self.tax_benefit_system.variables
         variable_data = {}
         for variable_name, variable in variables.items():
-            # variable_data[variable_name] = Variable({
-            #     "documentation": variable.documentation,
-            #     "entity": variable.entity.key,
-            #     "valueType": variable.value_type.__name__,
-            #     "definitionPeriod": variable.definition_period,
-            #     "name": variable_name,
-            #     "label": variable.label,
-            #     "category": variable.category,
-            #     "unit": variable.unit,
-            #     "moduleName": variable.module_name,
-            #     "indexInModule": variable.index_in_module,
-            #     "isInputVariable": variable.is_input_variable(),
-            #     "defaultValue": (
-            #         variable.default_value
-            #         if isinstance(variable.default_value, (int, float, bool))
-            #         else None
-            #     ),
-            #     "adds": variable.adds,
-            #     "subtracts": variable.subtracts,
-            #     "hidden_input": variable.hidden_input,
-            # })
             variable_data[variable_name] = Variable(
                 documentation=variable.documentation,
                 entity=variable.entity.key,
@@ -233,69 +216,51 @@ class PolicyEngineCountry:
                 hidden_input=variable.hidden_input,
                 possibleValues=parse_enum_possible_values(variable),
             )
-        variable_module = VariableModule(root=variable_data)
-        return variable_module
+        return variable_data
 
     # Not done
-    # def build_parameters(self) -> dict:
-    #     parameters = self.tax_benefit_system.parameters
-    #     parameter_data = {}
-    #     for parameter in parameters.get_descendants():
-    #         if "gov" != parameter.name[:3]:
-    #             continue
-    #         end_name = parameter.name.split(".")[-1]
-    #         if isinstance(parameter, ParameterScale):
-    #             parameter_data[parameter.name] = {
-    #                 "type": "parameterNode",
-    #                 "parameter": parameter.name,
-    #                 "description": parameter.description,
-    #                 "label": parameter.metadata.get(
-    #                     "label", end_name.replace("_", " ")
-    #                 ),
-    #             }
-    #         elif isinstance(parameter, ParameterScaleBracket):
-    #             bracket_index = int(
-    #                 parameter.name[parameter.name.index("[") + 1 : -1]
-    #             )
-    #             # Set the label to 'first bracket' for the first bracket, 'second bracket' for the second, etc.
-    #             bracket_label = f"bracket {bracket_index + 1}"
-    #             parameter_data[parameter.name] = {
-    #                 "type": "parameterNode",
-    #                 "parameter": parameter.name,
-    #                 "description": parameter.description,
-    #                 "label": parameter.metadata.get("label", bracket_label),
-    #             }
-    #         elif isinstance(parameter, Parameter):
-    #             parameter_data[parameter.name] = {
-    #                 "type": "parameter",
-    #                 "parameter": parameter.name,
-    #                 "description": parameter.description,
-    #                 "label": parameter.metadata.get(
-    #                     "label", end_name.replace("_", " ")
-    #                 ),
-    #                 "unit": parameter.metadata.get("unit"),
-    #                 "period": parameter.metadata.get("period"),
-    #                 "values": {
-    #                     value_at_instant.instant_str: get_safe_json(
-    #                         value_at_instant.value
-    #                     )
-    #                     for value_at_instant in parameter.values_list
-    #                 },
-    #                 "economy": parameter.metadata.get("economy", True),
-    #                 "household": parameter.metadata.get("household", True),
-    #             }
-    #         elif isinstance(parameters, ParameterNode):
-    #             parameter_data[parameter.name] = {
-    #                 "type": "parameterNode",
-    #                 "parameter": parameter.name,
-    #                 "description": parameter.description,
-    #                 "label": parameter.metadata.get(
-    #                     "label", end_name.replace("_", " ")
-    #                 ),
-    #                 "economy": parameter.metadata.get("economy", True),
-    #                 "household": parameter.metadata.get("household", True),
-    #             }
-    #     return parameter_data
+    def build_parameters(
+        self,
+    ) -> dict[str, ParameterScaleItem | ParameterNode | Parameter]:
+        APPROVED_TOP_LEVEL_FOLDERS = ["gov"]
+
+        parameters: list[
+            CoreParameter
+            | CoreParameterNode
+            | CoreParameterScaleBracket
+            | CoreParameterScale
+        ] = self.tax_benefit_system.parameters
+        parameter_data = {}
+        for parameter in parameters.get_descendants():
+
+            # Only include parameters from approved folders
+            if not any(
+                parameter.name.startswith(folder)
+                for folder in APPROVED_TOP_LEVEL_FOLDERS
+            ):
+                continue
+
+            match parameter:
+                case p if isinstance(parameter, CoreParameterScale):
+                    parameter_data[parameter.name] = (
+                        self.build_parameter_scale(parameter)
+                    )
+                case p if isinstance(parameter, CoreParameterScaleBracket):
+                    parameter_data[parameter.name] = (
+                        self.build_parameter_scale_bracket(parameter)
+                    )
+                case p if isinstance(parameter, CoreParameter):
+                    parameter_data[parameter.name] = self.build_parameter(
+                        parameter
+                    )
+                case p if isinstance(parameter, CoreParameterNode):
+                    parameter_data[parameter.name] = self.build_parameter_node(
+                        parameter
+                    )
+                case p:
+                    continue
+
+        return parameter_data
 
     # Not done
     def build_entities(self) -> dict:
@@ -321,6 +286,56 @@ class PolicyEngineCountry:
                 entity_data["roles"] = {}
             data[entity.key] = entity_data
         return data
+
+    def build_parameter_scale(self, parameter) -> ParameterScaleItem:
+        end_name = parameter.name.split(".")[-1]
+        return ParameterScaleItem(
+            type="parameterNode",
+            parameter=parameter.name,
+            description=parameter.description,
+            label=parameter.metadata.get("label", end_name.replace("_", " ")),
+        )
+
+    def build_parameter_scale_bracket(self, parameter) -> ParameterScaleItem:
+        # Set the label to 'bracket 1' for the first bracket, 'bracket 2' for the second, etc.
+        bracket_index = int(parameter.name[parameter.name.index("[") + 1 : -1])
+        bracket_label = f"bracket {bracket_index + 1}"
+        return ParameterScaleItem(
+            type="parameterNode",
+            parameter=parameter.name,
+            description=parameter.description,
+            label=parameter.metadata.get("label", bracket_label),
+        )
+
+    def build_parameter(self, parameter) -> Parameter:
+        end_name = parameter.name.split(".")[-1]
+        values_list = {
+            value_at_instant.instant_str: get_safe_json(value_at_instant.value)
+            for value_at_instant in parameter.values_list
+        }
+
+        return Parameter(
+            type="parameter",
+            parameter=parameter.name,
+            description=parameter.description,
+            label=parameter.metadata.get("label", end_name.replace("_", " ")),
+            unit=parameter.metadata.get("unit"),
+            period=parameter.metadata.get("period"),
+            values=values_list,
+            economy=parameter.metadata.get("economy", True),
+            household=parameter.metadata.get("household", True),
+        )
+
+    def build_parameter_node(self, parameter) -> ParameterNode:
+        end_name = parameter.name.split(".")[-1]
+        return ParameterNode(
+            type="parameterNode",
+            parameter=parameter.name,
+            description=parameter.description,
+            label=parameter.metadata.get("label", end_name.replace("_", " ")),
+            economy=parameter.metadata.get("economy", True),
+            household=parameter.metadata.get("household", True),
+        )
 
     # Not done
     def calculate(

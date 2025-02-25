@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import Any, Optional
-from policyengine_api.api.utils.enums import (
+from policyengine_api.api.enums import (
     PERIODS,
     VALUE_TYPES,
     ENTITIES_US,
