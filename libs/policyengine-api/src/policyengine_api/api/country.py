@@ -218,7 +218,6 @@ class PolicyEngineCountry:
             )
         return variable_data
 
-    # Not done
     def build_parameters(
         self,
     ) -> dict[str, ParameterScaleItem | ParameterNode | Parameter]:
@@ -287,7 +286,9 @@ class PolicyEngineCountry:
             data[entity.key] = entity_data
         return data
 
-    def build_parameter_scale(self, parameter) -> ParameterScaleItem:
+    def build_parameter_scale(
+        self, parameter: CoreParameterScale
+    ) -> ParameterScaleItem:
         end_name = parameter.name.split(".")[-1]
         return ParameterScaleItem(
             type="parameterNode",
@@ -296,7 +297,9 @@ class PolicyEngineCountry:
             label=parameter.metadata.get("label", end_name.replace("_", " ")),
         )
 
-    def build_parameter_scale_bracket(self, parameter) -> ParameterScaleItem:
+    def build_parameter_scale_bracket(
+        self, parameter: CoreParameterScaleBracket
+    ) -> ParameterScaleItem:
         # Set the label to 'bracket 1' for the first bracket, 'bracket 2' for the second, etc.
         bracket_index = int(parameter.name[parameter.name.index("[") + 1 : -1])
         bracket_label = f"bracket {bracket_index + 1}"
@@ -307,7 +310,7 @@ class PolicyEngineCountry:
             label=parameter.metadata.get("label", bracket_label),
         )
 
-    def build_parameter(self, parameter) -> Parameter:
+    def build_parameter(self, parameter: CoreParameter) -> Parameter:
         end_name = parameter.name.split(".")[-1]
         values_list = {
             value_at_instant.instant_str: get_safe_json(value_at_instant.value)
@@ -326,7 +329,9 @@ class PolicyEngineCountry:
             household=parameter.metadata.get("household", True),
         )
 
-    def build_parameter_node(self, parameter) -> ParameterNode:
+    def build_parameter_node(
+        self, parameter: CoreParameterNode
+    ) -> ParameterNode:
         end_name = parameter.name.split(".")[-1]
         return ParameterNode(
             type="parameterNode",
