@@ -1,4 +1,12 @@
-from sqlmodel import Field, Session, SQLModel, create_engine, Column, JSON, TIMESTAMP
+from sqlmodel import (
+    Field,
+    Session,
+    SQLModel,
+    create_engine,
+    Column,
+    JSON,
+    TIMESTAMP,
+)
 from policyengine import SimulationOptions
 from datetime import datetime
 from dotenv import load_dotenv
@@ -14,7 +22,8 @@ class Job(SQLModel, table=True):
     parameters: dict | None = Field(default=None, sa_column=Column(JSON))
     result: dict | None = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(
-        default_factory=datetime.utcnow, sa_column=Column(TIMESTAMP, default=datetime.utcnow)
+        default_factory=datetime.utcnow,
+        sa_column=Column(TIMESTAMP, default=datetime.utcnow),
     )
 
 
@@ -23,13 +32,14 @@ def get_local_database_engine():
     SQLModel.metadata.create_all(engine)
     return engine
 
+
 def get_production_database_engine():
     connector = Connector()
     getconn = lambda: connector.connect(
-        "policyengine-api-prototype:us-central1:policyengine-api-prototype-database", 
+        "policyengine-api-prototype:us-central1:policyengine-api-prototype-database",
         "pg8000",
         user="postgres",
-        password="postgres", # Obviously bad, just for testing
+        password="postgres",  # Obviously bad, just for testing
         db="postgres",
     )
     engine = create_engine(

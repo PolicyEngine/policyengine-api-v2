@@ -2,8 +2,13 @@ from fastapi import FastAPI
 from sqlmodel import Field, Session, SQLModel, create_engine
 import os
 from dotenv import load_dotenv
-from policyengine_api_prototype import Job, get_local_database_engine, get_production_database_engine
+from policyengine_api_prototype import (
+    Job,
+    get_local_database_engine,
+    get_production_database_engine,
+)
 import time
+
 load_dotenv()
 
 if os.getenv("LOCAL_DATABASE"):
@@ -13,9 +18,11 @@ else:
 
 app = FastAPI()
 
+
 @app.get("/")
 def read_root():
     return {"message": "Hello, World!"}
+
 
 @app.post("/job")
 def create_job(parameters: dict) -> Job:
@@ -25,6 +32,7 @@ def create_job(parameters: dict) -> Job:
         session.commit()
 
         return job
+
 
 @app.get("/job/{job_id}")
 def read_job(job_id: int) -> Job:

@@ -6,7 +6,11 @@ import os
 from sqlmodel import Field, Session, SQLModel, create_engine
 from policyengine_api_prototype import Job
 from dotenv import load_dotenv
-from policyengine_api_prototype import Job, get_local_database_engine, get_production_database_engine
+from policyengine_api_prototype import (
+    Job,
+    get_local_database_engine,
+    get_production_database_engine,
+)
 
 load_dotenv()
 
@@ -15,10 +19,12 @@ if os.getenv("LOCAL_DATABASE"):
 else:
     engine = get_production_database_engine()
 
+
 def execute_job(parameters: dict):
     simulation = Simulation(parameters)
     result = simulation.calculate().model_dump()
     return result
+
 
 def execute_job_from_id(job_id: int):
     with Session(engine) as session:

@@ -1,4 +1,5 @@
 from pathlib import Path
+from enum import Enum
 import pkg_resources
 
 REPO = Path(__file__).parents[1]
@@ -23,3 +24,10 @@ try:
 except:
     COUNTRY_PACKAGE_VERSIONS = {country: "0.0.0" for country in COUNTRIES}
 __version__ = VERSION
+
+
+class PERIODS(Enum):
+    DAY = "day"
+    MONTH = "month"
+    YEAR = "year"
+    ETERNITY = "eternity"
