@@ -125,7 +125,7 @@ def create_router(
 
     @router.get("/user/{id}")
     def get_user(
-        authUser: Annotated[AuthorizedUser, Depends(auth_user_optional)]
+        authUser: Annotated[AuthorizedUser, Depends(auth_user_optional)],
     ) -> UserPublic | UserPrivate:
         # model_validate will automatically convert the data in the
         # database model for a full row into just the fields defined in the

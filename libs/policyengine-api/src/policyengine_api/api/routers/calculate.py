@@ -2,13 +2,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, SQLModel, Field
 from policyengine_api.fastapi.database import SessionGeneratorFactory
-from policyengine_api.api.models.country_id import CountryId
+from policyengine_api.api.utils.enums import CountryId
 from policyengine_api.api.models.household import (
     HouseholdDataUS,
     HouseholdDataUK,
     HouseholdDataGeneric,
 )
-from policyengine_api.api.utils.constants import COUNTRIES
+from policyengine_api.api.country import COUNTRIES
 import logging
 from typing import Any
 
@@ -16,7 +16,7 @@ from typing import Any
 router = APIRouter()
 
 
-@router.post("/country_id/calculate")
+@router.post("/{country_id}/calculate")
 async def calculate(
     country_id: CountryId,
     household_json: dict = {},

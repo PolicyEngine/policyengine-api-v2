@@ -15,6 +15,7 @@ from policyengine_api.api.routers import (
     liveness_check,
     readiness_check,
     calculate,
+    metadata,
 )
 from policyengine_api.api import initialize
 import logging
@@ -33,6 +34,7 @@ app = FastAPI()
 app.include_router(liveness_check.router)
 app.include_router(readiness_check.router)
 app.include_router(calculate.router)
+app.include_router(metadata.router)
 
 # attach the api defined in the app package
 initialize(

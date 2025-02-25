@@ -1,28 +1,28 @@
 from pydantic import BaseModel
-from typing import Literal
-from policyengine_api.api.utils.constants import PERIODS
+from typing import Any, Optional
+from policyengine_api.api.utils.enums import (
+    PERIODS,
+    VALUE_TYPES,
+    ENTITIES_US,
+    ENTITIES_UK,
+    ENTITIES_GENERIC,
+)
 
 
-# TODO: Answer the below questions
-# 1. My first thought on some of these was to import from
-# relevant spots (-core, country packages), but converting their
-# formats to something viable here seemed difficult at best, flaky
-# at worst; however, hand-defining here leaves us open to errors if
-# the relevant passage in -core, country package is ever changed
 class Variable(BaseModel):
-    documentation: str
-    entity: str  # Need to modify to be one of a set list
-    valueType: str  # Fixed category / enum
-    definitionPeriod: Literal[PERIODS]
+    documentation: str | None  # Perhaps enforce no None's?
+    entity: ENTITIES_US | ENTITIES_UK | ENTITIES_GENERIC
+    valueType: VALUE_TYPES
+    definitionPeriod: PERIODS
     name: str
     label: str
     category: str | None
-    unit: Literal["currency-GBP", "currency-USD", "currency-EUR", "/1"]
+    unit: str | None  # Perhaps enforce no None's?
     moduleName: str
-    indexInModule: int
+    indexInModule: int | None  # Perhaps enforce no None's?
     isInputVariable: bool
-    defaultValue: int | float | bool | str  # Need to investigate
-    adds: list[str] | None
-    subtracts: list[str] | None
+    defaultValue: int | float | bool | str | None
+    adds: list[str] | str | None
+    subtracts: list[str] | str | None
     hidden_input: bool
-    possibleValues: list[dict[str, str]] | None
+    possibleValues: Optional[list[dict[str, Any]]] | None = None

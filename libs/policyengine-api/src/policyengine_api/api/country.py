@@ -1,20 +1,22 @@
 import importlib
-from flask import Response
 import json
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
-from policyengine_household_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_core.variables import Variable as CoreVariable
+from policyengine_api.api.utils.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.api.utils.metadata import (
+    parse_enum_possible_values,
+    parse_default_value,
+)
+from policyengine_api.api.models.metadata import (
+    VariableModule,
+    Variable,
+    MetadataModule,
+)
 from typing import Union
-from policyengine_household_api.utils import (
-    get_safe_json,
-    generate_computation_tree,
-)
-from policyengine_household_api.models.computation_tree import (
-    ComputationTree,
-    EntityDescription,
-)
-from policyengine_household_api.utils.google_cloud import (
-    GoogleCloudStorageManager,
-)
+
+# from policyengine_api.utils import (
+#     get_safe_json,
+# )
 from policyengine_core.parameters import (
     ParameterNode,
     Parameter,
@@ -46,31 +48,37 @@ class PolicyEngineCountry:
         )
         self.build_metadata()
 
+    # In progress
     def build_metadata(self):
-        self.metadata = dict(
-            status="ok",
-            message=None,
-            result=dict(
-                variables=self.build_variables(),
-                parameters=self.build_parameters(),
-                entities=self.build_entities(),
-                variableModules=self.tax_benefit_system.variable_module_metadata,
-                economy_options=self.build_microsimulation_options(),
-                current_law_id={
-                    "uk": 1,
-                    "us": 2,
-                    "ca": 3,
-                    "ng": 4,
-                    "il": 5,
-                }[self.country_id],
-                basicInputs=self.tax_benefit_system.basic_inputs,
-                modelled_policies=self.tax_benefit_system.modelled_policies,
-                version=pkg_resources.get_distribution(
-                    self.country_package_name
-                ).version,
-            ),
+        self.metadata: MetadataModule = MetadataModule(
+            variables=self.build_variables(),
         )
 
+        # self.metadata = dict(
+        #     status="ok",
+        #     message=None,
+        #     result=dict(
+        #         variables=self.build_variables(), # Working on
+        #         # parameters=self.build_parameters(), # Not done from here downward
+        #         entities=self.build_entities(),
+        #         variableModules=self.tax_benefit_system.variable_module_metadata,
+        #         economy_options=self.build_microsimulation_options(),
+        #         current_law_id={
+        #             "uk": 1,
+        #             "us": 2,
+        #             "ca": 3,
+        #             "ng": 4,
+        #             "il": 5,
+        #         }[self.country_id],
+        #         basicInputs=self.tax_benefit_system.basic_inputs,
+        #         modelled_policies=self.tax_benefit_system.modelled_policies,
+        #         version=pkg_resources.get_distribution(
+        #             self.country_package_name
+        #         ).version,
+        #     ),
+        # )
+
+    # Not done
     def build_microsimulation_options(self) -> dict:
         # { region: [{ name: "uk", label: "the UK" }], time_period: [{ name: 2022, label: "2022", ... }] }
         options = dict()
@@ -182,101 +190,114 @@ class PolicyEngineCountry:
             options["time_period"] = time_period
         return options
 
-    def build_variables(self) -> dict:
-        variables = self.tax_benefit_system.variables
+    def build_variables(self) -> VariableModule:
+        variables: dict[str, CoreVariable] = self.tax_benefit_system.variables
         variable_data = {}
         for variable_name, variable in variables.items():
-            variable_data[variable_name] = {
-                "documentation": variable.documentation,
-                "entity": variable.entity.key,
-                "valueType": variable.value_type.__name__,
-                "definitionPeriod": variable.definition_period,
-                "name": variable_name,
-                "label": variable.label,
-                "category": variable.category,
-                "unit": variable.unit,
-                "moduleName": variable.module_name,
-                "indexInModule": variable.index_in_module,
-                "isInputVariable": variable.is_input_variable(),
-                "defaultValue": (
-                    variable.default_value
-                    if isinstance(variable.default_value, (int, float, bool))
-                    else None
-                ),
-                "adds": variable.adds,
-                "subtracts": variable.subtracts,
-                "hidden_input": variable.hidden_input,
-            }
-            if variable.value_type.__name__ == "Enum":
-                variable_data[variable_name]["possibleValues"] = [
-                    dict(value=value.name, label=value.value)
-                    for value in variable.possible_values
-                ]
-                variable_data[variable_name][
-                    "defaultValue"
-                ] = variable.default_value.name
-        return variable_data
+            # variable_data[variable_name] = Variable({
+            #     "documentation": variable.documentation,
+            #     "entity": variable.entity.key,
+            #     "valueType": variable.value_type.__name__,
+            #     "definitionPeriod": variable.definition_period,
+            #     "name": variable_name,
+            #     "label": variable.label,
+            #     "category": variable.category,
+            #     "unit": variable.unit,
+            #     "moduleName": variable.module_name,
+            #     "indexInModule": variable.index_in_module,
+            #     "isInputVariable": variable.is_input_variable(),
+            #     "defaultValue": (
+            #         variable.default_value
+            #         if isinstance(variable.default_value, (int, float, bool))
+            #         else None
+            #     ),
+            #     "adds": variable.adds,
+            #     "subtracts": variable.subtracts,
+            #     "hidden_input": variable.hidden_input,
+            # })
+            variable_data[variable_name] = Variable(
+                documentation=variable.documentation,
+                entity=variable.entity.key,
+                valueType=variable.value_type.__name__,
+                definitionPeriod=variable.definition_period,
+                name=variable_name,
+                label=variable.label,
+                category=variable.category,
+                unit=variable.unit,
+                moduleName=variable.module_name,
+                indexInModule=variable.index_in_module,
+                isInputVariable=variable.is_input_variable(),
+                defaultValue=parse_default_value(variable),
+                adds=variable.adds,
+                subtracts=variable.subtracts,
+                hidden_input=variable.hidden_input,
+                possibleValues=parse_enum_possible_values(variable),
+            )
+        variable_module = VariableModule(root=variable_data)
+        return variable_module
 
-    def build_parameters(self) -> dict:
-        parameters = self.tax_benefit_system.parameters
-        parameter_data = {}
-        for parameter in parameters.get_descendants():
-            if "gov" != parameter.name[:3]:
-                continue
-            end_name = parameter.name.split(".")[-1]
-            if isinstance(parameter, ParameterScale):
-                parameter_data[parameter.name] = {
-                    "type": "parameterNode",
-                    "parameter": parameter.name,
-                    "description": parameter.description,
-                    "label": parameter.metadata.get(
-                        "label", end_name.replace("_", " ")
-                    ),
-                }
-            elif isinstance(parameter, ParameterScaleBracket):
-                bracket_index = int(
-                    parameter.name[parameter.name.index("[") + 1 : -1]
-                )
-                # Set the label to 'first bracket' for the first bracket, 'second bracket' for the second, etc.
-                bracket_label = f"bracket {bracket_index + 1}"
-                parameter_data[parameter.name] = {
-                    "type": "parameterNode",
-                    "parameter": parameter.name,
-                    "description": parameter.description,
-                    "label": parameter.metadata.get("label", bracket_label),
-                }
-            elif isinstance(parameter, Parameter):
-                parameter_data[parameter.name] = {
-                    "type": "parameter",
-                    "parameter": parameter.name,
-                    "description": parameter.description,
-                    "label": parameter.metadata.get(
-                        "label", end_name.replace("_", " ")
-                    ),
-                    "unit": parameter.metadata.get("unit"),
-                    "period": parameter.metadata.get("period"),
-                    "values": {
-                        value_at_instant.instant_str: get_safe_json(
-                            value_at_instant.value
-                        )
-                        for value_at_instant in parameter.values_list
-                    },
-                    "economy": parameter.metadata.get("economy", True),
-                    "household": parameter.metadata.get("household", True),
-                }
-            elif isinstance(parameters, ParameterNode):
-                parameter_data[parameter.name] = {
-                    "type": "parameterNode",
-                    "parameter": parameter.name,
-                    "description": parameter.description,
-                    "label": parameter.metadata.get(
-                        "label", end_name.replace("_", " ")
-                    ),
-                    "economy": parameter.metadata.get("economy", True),
-                    "household": parameter.metadata.get("household", True),
-                }
-        return parameter_data
+    # Not done
+    # def build_parameters(self) -> dict:
+    #     parameters = self.tax_benefit_system.parameters
+    #     parameter_data = {}
+    #     for parameter in parameters.get_descendants():
+    #         if "gov" != parameter.name[:3]:
+    #             continue
+    #         end_name = parameter.name.split(".")[-1]
+    #         if isinstance(parameter, ParameterScale):
+    #             parameter_data[parameter.name] = {
+    #                 "type": "parameterNode",
+    #                 "parameter": parameter.name,
+    #                 "description": parameter.description,
+    #                 "label": parameter.metadata.get(
+    #                     "label", end_name.replace("_", " ")
+    #                 ),
+    #             }
+    #         elif isinstance(parameter, ParameterScaleBracket):
+    #             bracket_index = int(
+    #                 parameter.name[parameter.name.index("[") + 1 : -1]
+    #             )
+    #             # Set the label to 'first bracket' for the first bracket, 'second bracket' for the second, etc.
+    #             bracket_label = f"bracket {bracket_index + 1}"
+    #             parameter_data[parameter.name] = {
+    #                 "type": "parameterNode",
+    #                 "parameter": parameter.name,
+    #                 "description": parameter.description,
+    #                 "label": parameter.metadata.get("label", bracket_label),
+    #             }
+    #         elif isinstance(parameter, Parameter):
+    #             parameter_data[parameter.name] = {
+    #                 "type": "parameter",
+    #                 "parameter": parameter.name,
+    #                 "description": parameter.description,
+    #                 "label": parameter.metadata.get(
+    #                     "label", end_name.replace("_", " ")
+    #                 ),
+    #                 "unit": parameter.metadata.get("unit"),
+    #                 "period": parameter.metadata.get("period"),
+    #                 "values": {
+    #                     value_at_instant.instant_str: get_safe_json(
+    #                         value_at_instant.value
+    #                     )
+    #                     for value_at_instant in parameter.values_list
+    #                 },
+    #                 "economy": parameter.metadata.get("economy", True),
+    #                 "household": parameter.metadata.get("household", True),
+    #             }
+    #         elif isinstance(parameters, ParameterNode):
+    #             parameter_data[parameter.name] = {
+    #                 "type": "parameterNode",
+    #                 "parameter": parameter.name,
+    #                 "description": parameter.description,
+    #                 "label": parameter.metadata.get(
+    #                     "label", end_name.replace("_", " ")
+    #                 ),
+    #                 "economy": parameter.metadata.get("economy", True),
+    #                 "household": parameter.metadata.get("household", True),
+    #             }
+    #     return parameter_data
 
+    # Not done
     def build_entities(self) -> dict:
         data = {}
         for entity in self.tax_benefit_system.entities:
@@ -301,6 +322,7 @@ class PolicyEngineCountry:
             data[entity.key] = entity_data
         return data
 
+    # Not done
     def calculate(
         self,
         household: dict,
@@ -401,51 +423,8 @@ class PolicyEngineCountry:
                         f"Error computing {variable_name} for {entity_id}: {e}"
                     )
 
-        # Execute all household tracer operations
-        try:
-            if enable_ai_explainer:
 
-                entity_description = EntityDescription.model_validate(
-                    simulation.describe_entities()
-                )
-
-                # Generate tracer output
-                log_lines: list = generate_computation_tree(simulation)
-
-                # Take the tracer output and create a new tracer object,
-                # storing in Google Cloud bucket
-                computation_tree_uuid: UUID = uuid4()
-                computation_tree_record: ComputationTree = ComputationTree(
-                    uuid=computation_tree_uuid,
-                    country_id=self.country_id,
-                    tree=log_lines,
-                    entity_description=entity_description,
-                )
-
-                storage_manager = GoogleCloudStorageManager()
-                storage_manager.store(
-                    uuid=computation_tree_uuid,
-                    data=computation_tree_record,
-                )
-
-                # computation_tree = ComputationTree()
-                # computation_tree_uuid = (
-                #     computation_tree.store_computation_tree(
-                #         country_id=self.country_id,
-                #         tree=log_lines,
-                #         entity_description=entity_description,
-                #     )
-                # )
-
-                # Return the household and the tracer's UUID
-                return household, str(computation_tree_uuid)
-
-            return household, None
-
-        except Exception as e:
-            print(f"Error computing tracer output: {e}")
-
-
+# Not done
 def create_policy_reform(policy_data: dict) -> dict:
     """
     Create a policy reform.
@@ -487,6 +466,7 @@ def create_policy_reform(policy_data: dict) -> dict:
     return reform
 
 
+# Not done
 def get_requested_computations(household: dict):
     requested_computations = dpath.util.search(
         household,
@@ -506,6 +486,7 @@ def get_requested_computations(household: dict):
     return requested_computation_data
 
 
+# Not done
 COUNTRIES = {
     "uk": PolicyEngineCountry("policyengine_uk", "uk"),
     "us": PolicyEngineCountry("policyengine_us", "us"),
@@ -515,7 +496,8 @@ COUNTRIES = {
 }
 
 
-def validate_country(country_id: str) -> Union[None, Response]:
+# Not done
+def validate_country(country_id: str) -> Union[None, str]:
     """Validate that a country ID is valid. If not, return a 404 response.
 
     Args:
@@ -529,5 +511,5 @@ def validate_country(country_id: str) -> Union[None, Response]:
             status="error",
             message=f"Country {country_id} not found. Available countries are: {', '.join(COUNTRIES.keys())}",
         )
-        return Response(json.dumps(body), status=404)
+        # return Response(json.dumps(body), status=404)
     return None

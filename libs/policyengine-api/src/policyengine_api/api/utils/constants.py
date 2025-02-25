@@ -1,5 +1,4 @@
 from pathlib import Path
-from enum import Enum
 import pkg_resources
 
 REPO = Path(__file__).parents[1]
@@ -8,7 +7,7 @@ POST = "POST"
 UPDATE = "UPDATE"
 LIST = "LIST"
 VERSION = "0.5.126"
-COUNTRIES = ("uk", "us", "ca", "ng", "il")
+COUNTRIES_SET = ("uk", "us", "ca", "ng", "il")
 COUNTRY_PACKAGE_NAMES = (
     "policyengine_uk",
     "policyengine_us",
@@ -19,15 +18,8 @@ COUNTRY_PACKAGE_NAMES = (
 try:
     COUNTRY_PACKAGE_VERSIONS = {
         country: pkg_resources.get_distribution(package_name).version
-        for country, package_name in zip(COUNTRIES, COUNTRY_PACKAGE_NAMES)
+        for country, package_name in zip(COUNTRIES_SET, COUNTRY_PACKAGE_NAMES)
     }
 except:
-    COUNTRY_PACKAGE_VERSIONS = {country: "0.0.0" for country in COUNTRIES}
+    COUNTRY_PACKAGE_VERSIONS = {country: "0.0.0" for country in COUNTRIES_SET}
 __version__ = VERSION
-
-
-class PERIODS(Enum):
-    DAY = "day"
-    MONTH = "month"
-    YEAR = "year"
-    ETERNITY = "eternity"
