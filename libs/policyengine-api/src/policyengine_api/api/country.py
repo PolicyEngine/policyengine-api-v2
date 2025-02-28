@@ -380,48 +380,6 @@ class PolicyEngineCountry:
 
 
 # Not done
-def create_policy_reform(policy_data: dict) -> dict:
-    """
-    Create a policy reform.
-
-    Args:
-        policy_data (dict): The policy data.
-
-    Returns:
-        dict: The reform.
-    """
-
-    def modify_parameters(parameters: ParameterNode) -> ParameterNode:
-        for path, values in policy_data.items():
-            node = parameters
-            for step in path.split("."):
-                if "[" in step:
-                    step, index = step.split("[")
-                    index = int(index[:-1])
-                    node = node.children[step].brackets[index]
-                else:
-                    node = node.children[step]
-            for period, value in values.items():
-                start, end = period.split(".")
-                node_type = type(node.values_list[-1].value)
-                if node_type == int:
-                    node_type = float  # '0' is of type int by default, but usually we want to cast to float.
-                node.update(
-                    start=instant(start),
-                    stop=instant(end),
-                    value=node_type(value),
-                )
-
-        return parameters
-
-    class reform(Reform):
-        def apply(self):
-            self.modify_parameters(modify_parameters)
-
-    return reform
-
-
-# Not done
 def get_requested_computations(household: dict):
     requested_computations = dpath.util.search(
         household,
