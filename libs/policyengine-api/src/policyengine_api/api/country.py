@@ -293,7 +293,7 @@ class PolicyEngineCountry:
             HouseholdDataUS | HouseholdDataUK | HouseholdDataGeneric
         ),
         reform: Union[dict, None] = None,
-    ) -> dict[str, Any]:  # Unsure on output type
+    ) -> HouseholdDataGeneric | HouseholdDataUK | HouseholdDataUS:
         system: TaxBenefitSystem = self._prepare_tax_benefit_system(reform)
         household: dict[str, Any] = household_model.model_dump()
 
@@ -312,7 +312,11 @@ class PolicyEngineCountry:
                 simulation, system, household_result, computation
             )
 
-        return household_result
+        if self.country_id == "us":
+            return HouseholdDataUS.model_validate(household_result)
+        if self.country_id == "uk":
+            return HouseholdDataUK.model_validate(household_result)
+        return HouseholdDataGeneric.model_validate(household_result)
 
     def _prepare_tax_benefit_system(
         self, reform: Union[dict, None] = None
@@ -503,7 +507,6 @@ class PolicyEngineCountry:
             print(f"Error computing {variable_name} for {entity_id}: {error}")
 
 
-# Not done
 def get_requested_computations(household: dict[str, Any]):
     requested_computations = dpath.util.search(
         household,

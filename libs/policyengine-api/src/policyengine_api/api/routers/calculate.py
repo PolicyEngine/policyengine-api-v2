@@ -1,7 +1,4 @@
-from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, SQLModel, Field
-from policyengine_api.fastapi.database import SessionGeneratorFactory
+from fastapi import APIRouter
 from policyengine_api.api.enums import COUNTRY_ID
 from policyengine_api.api.models.household import (
     HouseholdDataUS,
@@ -9,8 +6,6 @@ from policyengine_api.api.models.household import (
     HouseholdDataGeneric,
 )
 from policyengine_api.api.country import COUNTRIES
-import logging
-from typing import Any
 
 
 router = APIRouter()
@@ -21,21 +16,11 @@ async def calculate(
     country_id: COUNTRY_ID,
     household: HouseholdDataGeneric | HouseholdDataUK | HouseholdDataUS = {},
     policy: dict = {},
-) -> Any:
-    # In future - disambiguate between inbound household JSON items, outbound household
-    # schemas, and the actual household data model - need to confirm with others
+) -> HouseholdDataGeneric | HouseholdDataUK | HouseholdDataUS:
 
-    # Schemas for household_json, policy_json
     country = COUNTRIES.get(country_id.value)
 
-    print(type(household))
-
-    # What does result even look like?
-    result_raw: dict[str, Any] = country.calculate(household, policy)
-    if country_id == "us":
-        result = HouseholdDataUS.model_validate(result_raw)
-    elif country_id == "uk":
-        result = HouseholdDataUK.model_validate(result_raw)
-    else:
-        result = HouseholdDataGeneric.model_validate(result_raw)
+    result: HouseholdDataGeneric | HouseholdDataUK | HouseholdDataUS = (
+        country.calculate(household, policy)
+    )
     return result
