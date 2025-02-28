@@ -19,17 +19,19 @@ router = APIRouter()
 @router.post("/{country_id}/calculate")
 async def calculate(
     country_id: COUNTRY_ID,
-    household_json: dict = {},
-    policy_json: dict = {},
+    household: HouseholdDataGeneric | HouseholdDataUK | HouseholdDataUS = {},
+    policy: dict = {},
 ) -> Any:
     # In future - disambiguate between inbound household JSON items, outbound household
     # schemas, and the actual household data model - need to confirm with others
 
     # Schemas for household_json, policy_json
-    country = COUNTRIES.get(country_id)
+    country = COUNTRIES.get(country_id.value)
+
+    print(type(household))
 
     # What does result even look like?
-    result_raw: dict[str, Any] = country.calculate(household_json, policy_json)
+    result_raw: dict[str, Any] = country.calculate(household, policy)
     if country_id == "us":
         result = HouseholdDataUS.model_validate(result_raw)
     elif country_id == "uk":

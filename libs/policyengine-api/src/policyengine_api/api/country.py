@@ -2,11 +2,17 @@ import importlib
 import json
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
 from policyengine_core.variables import Variable as CoreVariable
+from policyengine_core.simulations import Simulation
 from policyengine_api.api.utils.constants import CURRENT_LAW_IDS
 from policyengine_api.api.utils.json import get_safe_json
 from policyengine_api.api.utils.metadata import (
     parse_enum_possible_values,
     parse_default_value,
+)
+from policyengine_api.api.models.household import (
+    HouseholdDataUS,
+    HouseholdDataUK,
+    HouseholdDataGeneric,
 )
 from policyengine_api.api.models.metadata.variable import (
     Variable,
@@ -39,6 +45,7 @@ from policyengine_core.parameters import (
 from typing import Annotated
 from policyengine_core.parameters import get_parameter
 import pkg_resources
+from copy import deepcopy
 from policyengine_core.model_api import Reform, Enum
 from policyengine_core.periods import instant
 import dpath
@@ -78,8 +85,8 @@ class PolicyEngineCountry:
         )
 
     def build_economy_options(self) -> EconomyOptions:
-        regions: list[Region] = self.build_regions(self.country_id)
-        time_periods: list[TimePeriod] = self.build_time_periods(
+        regions: list[Region] = self._build_regions(self.country_id)
+        time_periods: list[TimePeriod] = self._build_time_periods(
             self.country_id
         )
         return EconomyOptions(region=regions, time_period=time_periods)
@@ -255,7 +262,7 @@ class PolicyEngineCountry:
             household=parameter.metadata.get("household", True),
         )
 
-    def build_regions(self, country_id) -> list[Region]:
+    def _build_regions(self, country_id) -> list[Region]:
         cwd = Path(__file__).parent
         region_file_path = cwd.joinpath(
             f"data/regions/{country_id}_regions.json"
@@ -264,7 +271,7 @@ class PolicyEngineCountry:
             regions = json.load(region_file)
         return [Region(**region) for region in regions]
 
-    def build_time_periods(self, country_id) -> list[TimePeriod]:
+    def _build_time_periods(self, country_id) -> list[TimePeriod]:
         cwd = Path(__file__).parent
         country_time_period_path = cwd.joinpath(
             f"data/time_periods/{country_id}_time_periods.json"
@@ -280,107 +287,224 @@ class PolicyEngineCountry:
                 time_periods = json.load(time_period_file)
         return [TimePeriod(**time_period) for time_period in time_periods]
 
-    # Not done
     def calculate(
         self,
-        household: dict,
+        household_model: (
+            HouseholdDataUS | HouseholdDataUK | HouseholdDataGeneric
+        ),
         reform: Union[dict, None] = None,
-    ):
-        if reform is not None and len(reform.keys()) > 0:
-            system = self.tax_benefit_system.clone()
-            for parameter_name in reform:
-                for time_period, value in reform[parameter_name].items():
-                    start_instant, end_instant = time_period.split(".")
-                    parameter = get_parameter(
-                        system.parameters, parameter_name
-                    )
-                    node_type = type(parameter.values_list[-1].value)
-                    if node_type == int:
-                        node_type = float
-                    try:
-                        value = float(value)
-                    except:
-                        pass
-                    parameter.update(
-                        start=instant(start_instant),
-                        stop=instant(end_instant),
-                        value=node_type(value),
-                    )
-        else:
-            system = self.tax_benefit_system
+    ) -> dict[str, Any]:  # Unsure on output type
+        system: TaxBenefitSystem = self._prepare_tax_benefit_system(reform)
+        household: dict[str, Any] = household_model.model_dump()
 
-        simulation = self.country_package.Simulation(
+        simulation: Simulation = self.country_package.Simulation(
             tax_benefit_system=system,
             situation=household,
         )
 
-        household = json.loads(json.dumps(household))
+        household_result: dict[str, Any] = deepcopy(household)
+        requested_computations: list[tuple[str, str, str, str]] = (
+            get_requested_computations(household)
+        )
 
-        requested_computations = get_requested_computations(household)
+        for computation in requested_computations:
+            self._process_computation(
+                simulation, system, household_result, computation
+            )
 
-        for (
-            entity_plural,
-            entity_id,
-            variable_name,
-            period,
-        ) in requested_computations:
-            try:
-                variable = system.get_variable(variable_name)
-                result = simulation.calculate(variable_name, period)
-                population = simulation.get_population(entity_plural)
-                if "axes" in household:
-                    count_entities = len(household[entity_plural])
-                    entity_index = 0
-                    for _entity_id in household[entity_plural].keys():
-                        if _entity_id == entity_id:
-                            break
-                        entity_index += 1
-                    result = (
-                        result.astype(float)
-                        .reshape((-1, count_entities))
-                        .T[entity_index]
-                        .tolist()
-                    )
-                    # If the result contains infinities, throw an error
-                    if any([math.isinf(value) for value in result]):
-                        raise ValueError("Infinite value")
-                    else:
-                        household[entity_plural][entity_id][variable_name][
-                            period
-                        ] = result
-                else:
-                    entity_index = population.get_index(entity_id)
-                    if variable.value_type == Enum:
-                        entity_result = result.decode()[entity_index].name
-                    elif variable.value_type == float:
-                        entity_result = float(str(result[entity_index]))
-                        # Convert infinities to JSON infinities
-                        if entity_result == float("inf"):
-                            entity_result = "Infinity"
-                        elif entity_result == float("-inf"):
-                            entity_result = "-Infinity"
-                    elif variable.value_type == str:
-                        entity_result = str(result[entity_index])
-                    else:
-                        entity_result = result.tolist()[entity_index]
+        return household_result
 
-                    household[entity_plural][entity_id][variable_name][
-                        period
-                    ] = entity_result
-            except Exception as e:
-                if "axes" in household:
-                    pass
-                else:
-                    household[entity_plural][entity_id][variable_name][
-                        period
-                    ] = None
-                    print(
-                        f"Error computing {variable_name} for {entity_id}: {e}"
-                    )
+    def _prepare_tax_benefit_system(
+        self, reform: Union[dict, None] = None
+    ) -> TaxBenefitSystem:
+        """Prepare the tax benefit system with optional reforms applied."""
+        if not reform:
+            return self.tax_benefit_system
+
+        system: TaxBenefitSystem = self.tax_benefit_system.clone()
+
+        for parameter_name, periods in reform.items():
+            for time_period, value in periods.items():
+                self._update_parameter(
+                    system, parameter_name, time_period, value
+                )
+
+        return system
+
+    def _update_parameter(
+        self,
+        system: TaxBenefitSystem,
+        parameter_name: str,
+        time_period: str,
+        value: Any,
+    ) -> None:
+        """Update a specific parameter in the tax benefit system."""
+        start_instant: Annotated[str, "YYYY-MM-DD"]
+        end_instant: Annotated[str, "YYYY-MM-DD"]
+        start_instant, end_instant = time_period.split(".")
+        parameter: Parameter = get_parameter(system.parameters, parameter_name)
+
+        # Determine the appropriate type for the value
+        node_type = type(parameter.values_list[-1].value)
+
+        # Cast int to float to harmonize numeric handling
+        if node_type == int:
+            node_type = float
+
+        # Convert value to float if possible
+        try:
+            value = float(value)
+        except (ValueError, TypeError):
+            pass
+
+        parameter.update(
+            start=instant(start_instant),
+            stop=instant(end_instant),
+            value=node_type(value),
+        )
+
+    def _process_computation(
+        self,
+        simulation: Simulation,
+        system: TaxBenefitSystem,
+        household: dict[str, Any],
+        computation,
+    ):
+        """Process a single computation request and update the household result."""
+        entity_plural, entity_id, variable_name, period = computation
+
+        try:
+            variable: Variable = system.get_variable(variable_name)
+            result: Any = simulation.calculate(variable_name, period)
+
+            if "axes" in household:
+                self._handle_axes_computation(
+                    household,
+                    entity_plural,
+                    entity_id,
+                    variable_name,
+                    period,
+                    result,
+                )
+            else:
+                self._handle_single_computation(
+                    simulation,
+                    household,
+                    entity_plural,
+                    entity_id,
+                    variable_name,
+                    period,
+                    result,
+                    variable,
+                )
+        except Exception as e:
+            self._handle_computation_error(
+                household, entity_plural, entity_id, variable_name, period, e
+            )
+
+    def _handle_axes_computation(
+        self,
+        household: dict[str, Any],
+        entity_plural: str,
+        entity_id,
+        variable_name: str,
+        period,
+        result,
+    ) -> None:
+        """Handle computation for households with axes."""
+        count_entities: int = len(household[entity_plural])
+        entity_index: int = self._find_entity_index(
+            household, entity_plural, entity_id
+        )
+
+        # Reshape result and get values for the specific entity
+        result_values: list[float] = (
+            result.astype(float)
+            .reshape((-1, count_entities))
+            .T[entity_index]
+            .tolist()
+        )
+
+        # Check for infinite values
+        if any(math.isinf(value) for value in result_values):
+            raise ValueError("Infinite value")
+
+        # Update household with results
+        household[entity_plural][entity_id][variable_name][
+            period
+        ] = result_values
+
+    def _find_entity_index(
+        self, household: dict[str, Any], entity_plural: str, entity_id
+    ):
+        """Find the index of an entity within its plural group."""
+        entity_index = 0
+
+        _entity_id: str
+        for _entity_id in household[entity_plural].keys():
+            if _entity_id == entity_id:
+                break
+            entity_index += 1
+        return entity_index
+
+    def _handle_single_computation(
+        self,
+        simulation: Simulation,
+        household: dict[str, Any],
+        entity_plural: str,
+        entity_id,
+        variable_name: str,
+        period,
+        result,
+        variable: Variable,
+    ):
+        """Handle computation for a single entity."""
+        population = simulation.get_population(entity_plural)
+        entity_index = population.get_index(entity_id)
+
+        # Format the result based on variable type
+        entity_result = self._format_result(result, entity_index, variable)
+
+        # Update household with result
+        household[entity_plural][entity_id][variable_name][
+            period
+        ] = entity_result
+
+    def _format_result(self, result, entity_index, variable: Variable):
+        """Format calculation result based on variable type."""
+        if variable.value_type == Enum:
+            return result.decode()[entity_index].name
+        if variable.value_type == float:
+            value = float(str(result[entity_index]))
+            # Convert infinities to JSON-compatible strings
+            if value == float("inf"):
+                return "Infinity"
+            if value == float("-inf"):
+                return "-Infinity"
+            return value
+        if variable.value_type == str:
+            return str(result[entity_index])
+        return result.tolist()[entity_index]
+
+    def _handle_computation_error(
+        self,
+        household: dict[str, Any],
+        entity_plural: str,
+        entity_id: str,
+        variable_name: str,
+        period,
+        error,
+    ):
+        """Handle errors during computation."""
+
+        # Original code passes if "axes" in household - why?
+        if "axes" not in household:
+            household[entity_plural][entity_id][variable_name][period] = None
+            print(f"Error computing {variable_name} for {entity_id}: {error}")
 
 
 # Not done
-def get_requested_computations(household: dict):
+def get_requested_computations(household: dict[str, Any]):
     requested_computations = dpath.util.search(
         household,
         "*/*/*/*",

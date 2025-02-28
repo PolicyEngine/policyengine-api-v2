@@ -1,5 +1,5 @@
 from pydantic import BaseModel, RootModel
-from typing import Union, Any
+from typing import Union, Any, Optional
 
 
 example_household_us = {
@@ -45,6 +45,7 @@ class HouseholdEntity(RootModel):
 class HouseholdDataGeneric(BaseModel):
     households: dict[str, HouseholdEntity]
     people: dict[str, HouseholdEntity]
+    axes: Optional[dict[str, Any]] = None
 
 
 class HouseholdDataUS(HouseholdDataGeneric):
