@@ -1,4 +1,4 @@
-from pydantic import BaseModel, RootModel
+from pydantic import BaseModel, RootModel, Field
 from typing import Union, Any, Optional
 
 
@@ -34,6 +34,14 @@ example_household_us = {
 }
 
 
+class HouseholdAxes(BaseModel):
+    name: str  # Variable over which to apply axes
+    period: int | str  # The month or year to which the axes apply
+    count: int  # The number of axes
+    min: int  # The lowest axis
+    max: int  # The highest axis
+
+
 class HouseholdVariable(RootModel):
     root: Union[dict[str, Any], list[str]]
 
@@ -45,7 +53,7 @@ class HouseholdEntity(RootModel):
 class HouseholdDataGeneric(BaseModel):
     households: dict[str, HouseholdEntity]
     people: dict[str, HouseholdEntity]
-    axes: Optional[dict[str, Any]] = None
+    axes: Optional[dict[str, HouseholdAxes]] = None
 
 
 class HouseholdDataUS(HouseholdDataGeneric):
