@@ -20,6 +20,8 @@ deploy:
 
 build:
 	poetry install
+	mkdir -p artifacts
+	cd src && poetry run python -m policyengine_api_full.generate_openapi > ../artifacts/openapi.json
 	@echo "TODO: add back in the tests"
 
 dev:

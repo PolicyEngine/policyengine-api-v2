@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
     SQLModel.metadata.create_all(engine)
     yield
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=lifespan, title="policyengine-api-full", summary="External facing policyengineAPI containing all features")
 
 #attach the api defined in the app package
 initialize(app=app, 
