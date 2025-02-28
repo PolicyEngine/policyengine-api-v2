@@ -23,3 +23,11 @@ try:
 except:
     COUNTRY_PACKAGE_VERSIONS = {country: "0.0.0" for country in COUNTRIES_SET}
 __version__ = VERSION
+
+CURRENT_LAW_IDS={
+    "uk": 1,
+    "us": 2,
+    "ca": 3,
+    "ng": 4,
+    "il": 5,
+}

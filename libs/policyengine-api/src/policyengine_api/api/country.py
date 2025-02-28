@@ -2,7 +2,7 @@ import importlib
 import json
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
 from policyengine_core.variables import Variable as CoreVariable
-from policyengine_api.api.utils.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.api.utils.constants import COUNTRY_PACKAGE_VERSIONS, CURRENT_LAW_IDS
 from policyengine_api.api.utils.json import get_safe_json
 from policyengine_api.api.utils.metadata import (
     parse_enum_possible_values,
@@ -70,6 +70,7 @@ class PolicyEngineCountry:
             entities=self.build_entities(),
             variableModules=self.build_variable_modules(),
             economy_options=self.build_economy_options(),
+            current_law_id=CURRENT_LAW_IDS[self.country_id]
         )
 
         # self.metadata = dict(
