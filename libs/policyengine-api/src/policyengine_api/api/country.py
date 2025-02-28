@@ -70,7 +70,8 @@ class PolicyEngineCountry:
             entities=self.build_entities(),
             variableModules=self.build_variable_modules(),
             economy_options=self.build_economy_options(),
-            current_law_id=CURRENT_LAW_IDS[self.country_id]
+            current_law_id=CURRENT_LAW_IDS[self.country_id],
+            basicInputs=self.tax_benefit_system.basic_inputs,
         )
 
         # self.metadata = dict(

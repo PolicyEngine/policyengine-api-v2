@@ -18,7 +18,7 @@ class MetadataModule(BaseModel):
     entities: dict[str, Entity]
     variableModules: dict[str, VariableModule]
     economy_options: EconomyOptions
-    # basicInputs: dict
+    basicInputs: list[str]
     # modelled_policies: dict
     # version: str
     current_law_id: int
