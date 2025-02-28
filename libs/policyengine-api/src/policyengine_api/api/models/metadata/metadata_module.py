@@ -9,6 +9,7 @@ from policyengine_api.api.models.metadata.parameter import (
     ParameterNode,
     ParameterScaleItem,
 )
+from policyengine_api.api.models.metadata.economy_options import EconomyOptions
 
 
 class MetadataModule(BaseModel):
@@ -16,7 +17,7 @@ class MetadataModule(BaseModel):
     parameters: dict[str, Parameter | ParameterNode | ParameterScaleItem]
     entities: dict[str, Entity]
     variableModules: dict[str, VariableModule]
-    # economy_options: dict
+    economy_options: EconomyOptions
     # current_law_id: int
     # basicInputs: dict
     # modelled_policies: dict

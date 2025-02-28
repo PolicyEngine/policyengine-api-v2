@@ -13,6 +13,11 @@ from policyengine_api.api.models.metadata.variable import (
     VariableModule,
 )
 from policyengine_api.api.models.metadata.entity import Entity
+from policyengine_api.api.models.metadata.economy_options import (
+    Region,
+    TimePeriod,
+    EconomyOptions,
+)
 from policyengine_api.api.models.metadata.parameter import (
     ParameterScaleItem,
     ParameterNode,
@@ -37,6 +42,7 @@ import pkg_resources
 from policyengine_core.model_api import Reform, Enum
 from policyengine_core.periods import instant
 import dpath
+from pathlib import Path
 import math
 from uuid import UUID, uuid4
 import policyengine_uk
@@ -63,6 +69,7 @@ class PolicyEngineCountry:
             parameters=self.build_parameters(),
             entities=self.build_entities(),
             variableModules=self.build_variable_modules(),
+            economy_options=self.build_economy_options(),
         )
 
         # self.metadata = dict(
@@ -89,117 +96,12 @@ class PolicyEngineCountry:
         #     ),
         # )
 
-    # Not done
-    def build_microsimulation_options(self) -> dict:
-        # { region: [{ name: "uk", label: "the UK" }], time_period: [{ name: 2022, label: "2022", ... }] }
-        options = dict()
-        if self.country_id == "uk":
-            region = [
-                dict(name="uk", label="the UK"),
-                dict(name="eng", label="England"),
-                dict(name="scot", label="Scotland"),
-                dict(name="wales", label="Wales"),
-                dict(name="ni", label="Northern Ireland"),
-            ]
-            time_period = [
-                dict(name=2023, label="2023"),
-                dict(name=2024, label="2024"),
-                dict(name=2022, label="2022"),
-            ]
-            options["region"] = region
-            options["time_period"] = time_period
-        elif self.country_id == "us":
-            region = [
-                dict(name="us", label="the US"),
-                dict(name="enhanced_us", label="the US (enhanced CPS)"),
-                dict(name="al", label="Alabama"),
-                dict(name="ak", label="Alaska"),
-                dict(name="az", label="Arizona"),
-                dict(name="ar", label="Arkansas"),
-                dict(name="ca", label="California"),
-                dict(name="co", label="Colorado"),
-                dict(name="ct", label="Connecticut"),
-                dict(name="de", label="Delaware"),
-                dict(name="dc", label="District of Columbia"),
-                dict(name="fl", label="Florida"),
-                dict(name="ga", label="Georgia"),
-                dict(name="hi", label="Hawaii"),
-                dict(name="id", label="Idaho"),
-                dict(name="il", label="Illinois"),
-                dict(name="in", label="Indiana"),
-                dict(name="ia", label="Iowa"),
-                dict(name="ks", label="Kansas"),
-                dict(name="ky", label="Kentucky"),
-                dict(name="la", label="Louisiana"),
-                dict(name="me", label="Maine"),
-                dict(name="md", label="Maryland"),
-                dict(name="ma", label="Massachusetts"),
-                dict(name="mi", label="Michigan"),
-                dict(name="mn", label="Minnesota"),
-                dict(name="ms", label="Mississippi"),
-                dict(name="mo", label="Missouri"),
-                dict(name="mt", label="Montana"),
-                dict(name="ne", label="Nebraska"),
-                dict(name="nv", label="Nevada"),
-                dict(name="nh", label="New Hampshire"),
-                dict(name="nj", label="New Jersey"),
-                dict(name="nm", label="New Mexico"),
-                dict(name="ny", label="New York"),
-                dict(name="nyc", label="New York City"),  # Region, not State
-                dict(name="nc", label="North Carolina"),
-                dict(name="nd", label="North Dakota"),
-                dict(name="oh", label="Ohio"),
-                dict(name="ok", label="Oklahoma"),
-                dict(name="or", label="Oregon"),
-                dict(name="pa", label="Pennsylvania"),
-                dict(name="ri", label="Rhode Island"),
-                dict(name="sc", label="South Carolina"),
-                dict(name="sd", label="South Dakota"),
-                dict(name="tn", label="Tennessee"),
-                dict(name="tx", label="Texas"),
-                dict(name="ut", label="Utah"),
-                dict(name="vt", label="Vermont"),
-                dict(name="va", label="Virginia"),
-                dict(name="wa", label="Washington"),
-                dict(name="wv", label="West Virginia"),
-                dict(name="wi", label="Wisconsin"),
-                dict(name="wy", label="Wyoming"),
-            ]
-            time_period = [
-                dict(name=2023, label="2023"),
-                dict(name=2022, label="2022"),
-                dict(name=2021, label="2021"),
-            ]
-            options["region"] = region
-            options["time_period"] = time_period
-        elif self.country_id == "ca":
-            region = [
-                dict(name="ca", label="Canada"),
-            ]
-            time_period = [
-                dict(name=2023, label="2023"),
-            ]
-            options["region"] = region
-            options["time_period"] = time_period
-        elif self.country_id == "ng":
-            region = [
-                dict(name="ng", label="Nigeria"),
-            ]
-            time_period = [
-                dict(name=2023, label="2023"),
-            ]
-            options["region"] = region
-            options["time_period"] = time_period
-        elif self.country_id == "il":
-            region = [
-                dict(name="il", label="Israel"),
-            ]
-            time_period = [
-                dict(name=2023, label="2023"),
-            ]
-            options["region"] = region
-            options["time_period"] = time_period
-        return options
+    def build_economy_options(self) -> EconomyOptions:
+        regions: list[Region] = self.build_regions(self.country_id)
+        time_periods: list[TimePeriod] = self.build_time_periods(
+            self.country_id
+        )
+        return EconomyOptions(region=regions, time_period=time_periods)
 
     def build_variables(self) -> dict[str, Variable]:
         variables: dict[str, CoreVariable] = self.tax_benefit_system.variables
@@ -364,6 +266,31 @@ class PolicyEngineCountry:
             economy=parameter.metadata.get("economy", True),
             household=parameter.metadata.get("household", True),
         )
+
+    def build_regions(self, country_id) -> list[Region]:
+        cwd = Path(__file__).parent
+        region_file_path = cwd.joinpath(
+            f"data/regions/{country_id}_regions.json"
+        )
+        with open(region_file_path, "r") as region_file:
+            regions = json.load(region_file)
+        return [Region(**region) for region in regions]
+
+    def build_time_periods(self, country_id) -> list[TimePeriod]:
+        cwd = Path(__file__).parent
+        country_time_period_path = cwd.joinpath(
+            f"data/time_periods/{country_id}_time_periods.json"
+        )
+        if country_time_period_path.exists():
+            with open(country_time_period_path, "r") as time_period_file:
+                time_periods = json.load(time_period_file)
+        else:
+            time_period_path = cwd.joinpath(
+                "data/time_periods/default_time_periods.json"
+            )
+            with open(time_period_path, "r") as time_period_file:
+                time_periods = json.load(time_period_file)
+        return [TimePeriod(**time_period) for time_period in time_periods]
 
     # Not done
     def calculate(
