@@ -2,7 +2,7 @@ import importlib
 import json
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
 from policyengine_core.variables import Variable as CoreVariable
-from policyengine_api.api.utils.constants import COUNTRY_PACKAGE_VERSIONS, CURRENT_LAW_IDS
+from policyengine_api.api.utils.constants import CURRENT_LAW_IDS
 from policyengine_api.api.utils.json import get_safe_json
 from policyengine_api.api.utils.metadata import (
     parse_enum_possible_values,
@@ -13,6 +13,9 @@ from policyengine_api.api.models.metadata.variable import (
     VariableModule,
 )
 from policyengine_api.api.models.metadata.entity import Entity
+from policyengine_api.api.models.metadata.modelled_policies import (
+    ModelledPolicies,
+)
 from policyengine_api.api.models.metadata.economy_options import (
     Region,
     TimePeriod,
@@ -26,9 +29,6 @@ from policyengine_api.api.models.metadata.parameter import (
 from policyengine_api.api.models.metadata.metadata_module import MetadataModule
 from typing import Union, Any
 
-# from policyengine_api.utils import (
-#     get_safe_json,
-# )
 from policyengine_core.entities import Entity as CoreEntity
 from policyengine_core.parameters import (
     ParameterNode as CoreParameterNode,
@@ -62,7 +62,6 @@ class PolicyEngineCountry:
         )
         self.build_metadata()
 
-    # In progress
     def build_metadata(self):
         self.metadata: MetadataModule = MetadataModule(
             variables=self.build_variables(),
@@ -72,31 +71,11 @@ class PolicyEngineCountry:
             economy_options=self.build_economy_options(),
             current_law_id=CURRENT_LAW_IDS[self.country_id],
             basicInputs=self.tax_benefit_system.basic_inputs,
+            modelled_policies=self.build_modelled_policies(),
+            version=pkg_resources.get_distribution(
+                self.country_package_name
+            ).version,
         )
-
-        # self.metadata = dict(
-        #     status="ok",
-        #     message=None,
-        #     result=dict(
-        #         variables=self.build_variables(), # Done
-        #         parameters=self.build_parameters(), # Done
-        #         entities=self.build_entities(), # Done
-        #         variableModules=self.tax_benefit_system.variable_module_metadata, # Done
-        #         economy_options=self.build_microsimulation_options(),
-        #         current_law_id={
-        #             "uk": 1,
-        #             "us": 2,
-        #             "ca": 3,
-        #             "ng": 4,
-        #             "il": 5,
-        #         }[self.country_id],
-        #         basicInputs=self.tax_benefit_system.basic_inputs,
-        #         modelled_policies=self.tax_benefit_system.modelled_policies,
-        #         version=pkg_resources.get_distribution(
-        #             self.country_package_name
-        #         ).version,
-        #     ),
-        # )
 
     def build_economy_options(self) -> EconomyOptions:
         regions: list[Region] = self.build_regions(self.country_id)
@@ -213,6 +192,13 @@ class PolicyEngineCountry:
             )
         return modules
 
+    def build_modelled_policies(self) -> ModelledPolicies | None:
+        if self.tax_benefit_system.modelled_policies:
+            return ModelledPolicies(
+                **self.tax_benefit_system.modelled_policies
+            )
+        return None
+
     def build_parameter_scale(
         self, parameter: CoreParameterScale
     ) -> ParameterScaleItem:
@@ -299,7 +285,6 @@ class PolicyEngineCountry:
         self,
         household: dict,
         reform: Union[dict, None] = None,
-        enable_ai_explainer: bool = False,
     ):
         if reform is not None and len(reform.keys()) > 0:
             system = self.tax_benefit_system.clone()
@@ -331,8 +316,6 @@ class PolicyEngineCountry:
 
         household = json.loads(json.dumps(household))
 
-        # Run tracer on household
-        simulation.trace = True
         requested_computations = get_requested_computations(household)
 
         for (
@@ -458,7 +441,6 @@ def get_requested_computations(household: dict):
     return requested_computation_data
 
 
-# Not done
 COUNTRIES = {
     "uk": PolicyEngineCountry("policyengine_uk", "uk"),
     "us": PolicyEngineCountry("policyengine_us", "us"),
@@ -466,22 +448,3 @@ COUNTRIES = {
     "ng": PolicyEngineCountry("policyengine_ng", "ng"),
     "il": PolicyEngineCountry("policyengine_il", "il"),
 }
-
-
-# Not done
-def validate_country(country_id: str) -> Union[None, str]:
-    """Validate that a country ID is valid. If not, return a 404 response.
-
-    Args:
-        country_id (str): The country ID to validate.
-
-    Returns:
-
-    """
-    if country_id not in COUNTRIES:
-        body = dict(
-            status="error",
-            message=f"Country {country_id} not found. Available countries are: {', '.join(COUNTRIES.keys())}",
-        )
-        # return Response(json.dumps(body), status=404)
-    return None
