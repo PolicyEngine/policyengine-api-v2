@@ -3,7 +3,7 @@ from typing import Any
 from fastapi import FastAPI
 from sqlmodel import SQLModel
 from policyengine_api.fastapi.database import create_sqlite_engine
-from policyengine_api.fastapi.auth import JWTDecoder
+from policyengine_api.fastapi import ping
 from .settings import get_settings, Environment
 from policyengine_api.fastapi.opentelemetry import GCPLoggingInstrumentor, FastAPIEnhancedInstrumenter, export_ot_to_console, export_ot_to_gcp
 from opentelemetry.sdk.resources import SERVICE_NAME, SERVICE_INSTANCE_ID, Resource
@@ -35,6 +35,8 @@ initialize(app=app,
            engine=engine,
            jwt_issuer=get_settings().jwt_issuer,
            jwt_audience=get_settings().jwt_audience)
+
+ping.include_all_routers(app)
 
 #configure tracing and metrics
 GCPLoggingInstrumentor().instrument()

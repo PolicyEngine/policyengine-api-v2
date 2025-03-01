@@ -22,6 +22,9 @@ build:
 	poetry install
 	mkdir -p artifacts
 	cd src && poetry run python -m policyengine_api_full.generate_openapi > ../artifacts/openapi.json
+	mkdir -p artifacts/generated
+	rm -rf artifacts/generated/python_client
+	poetry generate-python-client --path=artifacts/openapi.json --output-path=artifacts/generated/python_client
 	@echo "TODO: add back in the tests"
 
 dev:
