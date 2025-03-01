@@ -1,0 +1,26 @@
+[project]
+name = "policyengine-api-full-integ"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Michael Smit",email = "mikesmit@coderberry.com"}
+]
+readme = "README.md"
+requires-python = ">=3.11, <4.0"
+dependencies = [
+    "pytest (>=8.3.4,<9.0.0)",
+    "policyengine_api_full_client @ ../policyengine-api-full/artifacts/generated/python_client",
+    "pydantic-settings (>=2.8.1,<3.0.0)"
+]
+
+[tool.poetry.dependencies]
+policyengine_api_full_client = {develop = true}
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+
+[tool.poetry]
+package-mode = false
+
