@@ -1,0 +1,20 @@
+[project]
+name = "poetry-plugin-openapi-generator"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Michael Smit",email = "mikesmit@coderberry.com"}
+]
+readme = "README.md"
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    "openapi-python-client (>=0.23.1)",
+    "poetry (>=2.0)"
+]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.plugins."poetry.application.plugin"]
+generate-python-client = "poetry_plugin_openapi_generator:OpenapiPythonApplicationPlugin"

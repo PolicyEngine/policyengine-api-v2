@@ -24,3 +24,8 @@ package-mode = false
 
 [tool.poetry.dependencies]
 policyengine-api = {develop = true}
+
+#Although it will let you add "develop = true" here, it doesn't work for plugins.
+# net result is you HAVE to clean poetry and reinstall if you change the plugin.
+[tool.poetry.requires-plugins]
+poetry-plugin-openapi-generator = {path = "../../libs/poetry-plugin-openapi-generator"}
