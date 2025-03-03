@@ -289,9 +289,7 @@ class PolicyEngineCountry:
 
     def calculate(
         self,
-        household_model: (
-            HouseholdUS | HouseholdUK | HouseholdGeneric
-        ),
+        household_model: HouseholdUS | HouseholdUK | HouseholdGeneric,
         reform: Union[dict, None] = None,
     ) -> HouseholdGeneric | HouseholdUK | HouseholdUS:
         system: TaxBenefitSystem = self._prepare_tax_benefit_system(reform)

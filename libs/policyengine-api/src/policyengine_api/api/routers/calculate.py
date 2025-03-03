@@ -19,11 +19,11 @@ async def calculate(
 ) -> HouseholdGeneric | HouseholdUK | HouseholdUS:
 
     # Household models above currently conflict with models defined in
-    # household/household.py; the household routes will be brought in 
+    # household/household.py; the household routes will be brought in
     # line in later iteration
     country = COUNTRIES.get(country_id.value)
 
-    result: HouseholdGeneric | HouseholdUK | HouseholdUS = (
-        country.calculate(household, policy)
+    result: HouseholdGeneric | HouseholdUK | HouseholdUS = country.calculate(
+        household, policy
     )
     return result
