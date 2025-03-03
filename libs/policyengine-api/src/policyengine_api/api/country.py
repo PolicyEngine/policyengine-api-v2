@@ -10,9 +10,9 @@ from policyengine_api.api.utils.metadata import (
     parse_default_value,
 )
 from policyengine_api.api.models.household import (
-    HouseholdDataUS,
-    HouseholdDataUK,
-    HouseholdDataGeneric,
+    HouseholdUS,
+    HouseholdUK,
+    HouseholdGeneric,
 )
 from policyengine_api.api.models.metadata.variable import (
     Variable,
@@ -290,10 +290,10 @@ class PolicyEngineCountry:
     def calculate(
         self,
         household_model: (
-            HouseholdDataUS | HouseholdDataUK | HouseholdDataGeneric
+            HouseholdUS | HouseholdUK | HouseholdGeneric
         ),
         reform: Union[dict, None] = None,
-    ) -> HouseholdDataGeneric | HouseholdDataUK | HouseholdDataUS:
+    ) -> HouseholdGeneric | HouseholdUK | HouseholdUS:
         system: TaxBenefitSystem = self._prepare_tax_benefit_system(reform)
         household: dict[str, Any] = household_model.model_dump()
 
@@ -313,10 +313,10 @@ class PolicyEngineCountry:
             )
 
         if self.country_id == "us":
-            return HouseholdDataUS.model_validate(household_result)
+            return HouseholdUS.model_validate(household_result)
         if self.country_id == "uk":
-            return HouseholdDataUK.model_validate(household_result)
-        return HouseholdDataGeneric.model_validate(household_result)
+            return HouseholdUK.model_validate(household_result)
+        return HouseholdGeneric.model_validate(household_result)
 
     def _prepare_tax_benefit_system(
         self, reform: Union[dict, None] = None

@@ -50,22 +50,22 @@ class HouseholdEntity(RootModel):
     root: dict[str, HouseholdVariable]
 
 
-class HouseholdDataGeneric(BaseModel):
+class HouseholdGeneric(BaseModel):
     households: dict[str, HouseholdEntity]
     people: dict[str, HouseholdEntity]
     axes: Optional[dict[str, HouseholdAxes]] = None
 
 
-class HouseholdDataUS(HouseholdDataGeneric):
+class HouseholdUS(HouseholdGeneric):
     families: dict[str, HouseholdEntity]
     spm_units: dict[str, HouseholdEntity]
     tax_units: dict[str, HouseholdEntity]
     marital_units: dict[str, HouseholdEntity]
 
 
-class HouseholdDataUK(HouseholdDataGeneric):
+class HouseholdUK(HouseholdGeneric):
     benunits: dict[str, HouseholdEntity]
 
 
 # Typing alias for all three possible household models
-HouseholdData = Union[HouseholdDataUS, HouseholdDataUK, HouseholdDataGeneric]
+HouseholdData = Union[HouseholdUS, HouseholdUK, HouseholdGeneric]
