@@ -1,0 +1,7 @@
+[
+  {"name": "uk", "label": "the UK"},
+  {"name": "eng", "label": "England"},
+  {"name": "scot", "label": "Scotland"},
+  {"name": "wales", "label": "Wales"},
+  {"name": "ni", "label": "Northern Ireland"}
+]
