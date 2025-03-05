@@ -19,8 +19,8 @@ from policyengine_api.api.models.metadata.variable import (
     VariableModule,
 )
 from policyengine_api.api.models.metadata.entity import Entity
-from policyengine_api.api.models.metadata.modelled_policies import (
-    ModelledPolicies,
+from policyengine_api.api.models.metadata.modeled_policies import (
+    ModeledPolicies,
 )
 from policyengine_api.api.models.metadata.economy_options import (
     Region,
@@ -78,7 +78,7 @@ class PolicyEngineCountry:
             economy_options=self._build_economy_options(),
             current_law_id=CURRENT_LAW_IDS[self.country_id],
             basicInputs=self.tax_benefit_system.basic_inputs,
-            modelled_policies=self._build_modelled_policies(),
+            modeled_policies=self._build_modeled_policies(),
             version=pkg_resources.get_distribution(
                 self.country_package_name
             ).version,
@@ -199,9 +199,9 @@ class PolicyEngineCountry:
             )
         return modules
 
-    def _build_modelled_policies(self) -> ModelledPolicies | None:
+    def _build_modeled_policies(self) -> ModeledPolicies | None:
         if self.tax_benefit_system.modelled_policies:
-            return ModelledPolicies(
+            return ModeledPolicies(
                 **self.tax_benefit_system.modelled_policies
             )
         return None
