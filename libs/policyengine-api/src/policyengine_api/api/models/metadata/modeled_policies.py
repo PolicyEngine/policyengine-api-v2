@@ -4,7 +4,7 @@ from typing import Optional
 
 class ModeledPoliciesBreakdown(BaseModel):
     modelled: list[str]
-    not_modelled: Optional[list[str]] = None
+    not_modelled: Optional[list[str]] = []
 
 
 # E.g., "IRELAND" in UK, "AZ" in US

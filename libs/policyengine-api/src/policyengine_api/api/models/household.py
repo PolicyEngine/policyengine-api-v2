@@ -53,18 +53,18 @@ class HouseholdEntity(RootModel):
 class HouseholdGeneric(BaseModel):
     households: dict[str, HouseholdEntity]
     people: dict[str, HouseholdEntity]
-    axes: Optional[dict[str, HouseholdAxes]] = None
+    axes: Optional[dict[str, HouseholdAxes]] = {}
 
 
 class HouseholdUS(HouseholdGeneric):
-    families: Optional[dict[str, HouseholdEntity]] = None
-    spm_units: Optional[dict[str, HouseholdEntity]] = None
-    tax_units: Optional[dict[str, HouseholdEntity]] = None
-    marital_units: Optional[dict[str, HouseholdEntity]] = None
+    families: Optional[dict[str, HouseholdEntity]] = {}
+    spm_units: Optional[dict[str, HouseholdEntity]] = {}
+    tax_units: Optional[dict[str, HouseholdEntity]] = {}
+    marital_units: Optional[dict[str, HouseholdEntity]] = {}
 
 
 class HouseholdUK(HouseholdGeneric):
-    benunits: Optional[dict[str, HouseholdEntity]] = None
+    benunits: Optional[dict[str, HouseholdEntity]] = {}
 
 
 # Typing alias for all three possible household models

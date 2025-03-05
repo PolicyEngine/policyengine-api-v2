@@ -25,7 +25,7 @@ class Variable(BaseModel):
     adds: list[str] | str | None
     subtracts: list[str] | str | None
     hidden_input: bool
-    possibleValues: Optional[list[dict[str, Any]]] | None = None
+    possibleValues: Optional[list[dict[str, Any]]] | None = []
 
 
 class VariableModule(BaseModel):
