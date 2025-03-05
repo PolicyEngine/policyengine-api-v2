@@ -67,31 +67,31 @@ class PolicyEngineCountry:
         self.tax_benefit_system: TaxBenefitSystem = (
             self.country_package.CountryTaxBenefitSystem()
         )
-        self.build_metadata()
+        self._build_metadata()
 
-    def build_metadata(self):
+    def _build_metadata(self):
         self.metadata: MetadataModule = MetadataModule(
-            variables=self.build_variables(),
-            parameters=self.build_parameters(),
-            entities=self.build_entities(),
-            variableModules=self.build_variable_modules(),
-            economy_options=self.build_economy_options(),
+            variables=self._build_variables(),
+            parameters=self._build_parameters(),
+            entities=self._build_entities(),
+            variableModules=self._build_variable_modules(),
+            economy_options=self._build_economy_options(),
             current_law_id=CURRENT_LAW_IDS[self.country_id],
             basicInputs=self.tax_benefit_system.basic_inputs,
-            modelled_policies=self.build_modelled_policies(),
+            modelled_policies=self._build_modelled_policies(),
             version=pkg_resources.get_distribution(
                 self.country_package_name
             ).version,
         )
 
-    def build_economy_options(self) -> EconomyOptions:
+    def _build_economy_options(self) -> EconomyOptions:
         regions: list[Region] = self._build_regions(self.country_id)
         time_periods: list[TimePeriod] = self._build_time_periods(
             self.country_id
         )
         return EconomyOptions(region=regions, time_period=time_periods)
 
-    def build_variables(self) -> dict[str, Variable]:
+    def _build_variables(self) -> dict[str, Variable]:
         variables: dict[str, CoreVariable] = self.tax_benefit_system.variables
         variable_data = {}
         for variable_name, variable in variables.items():
@@ -115,7 +115,7 @@ class PolicyEngineCountry:
             )
         return variable_data
 
-    def build_parameters(
+    def _build_parameters(
         self,
     ) -> dict[str, ParameterScaleItem | ParameterNode | Parameter]:
         APPROVED_TOP_LEVEL_FOLDERS = ["gov"]
@@ -139,18 +139,18 @@ class PolicyEngineCountry:
             match parameter:
                 case p if isinstance(parameter, CoreParameterScale):
                     parameter_data[parameter.name] = (
-                        self.build_parameter_scale(parameter)
+                        self._build_parameter_scale(parameter)
                     )
                 case p if isinstance(parameter, CoreParameterScaleBracket):
                     parameter_data[parameter.name] = (
-                        self.build_parameter_scale_bracket(parameter)
+                        self._build_parameter_scale_bracket(parameter)
                     )
                 case p if isinstance(parameter, CoreParameter):
-                    parameter_data[parameter.name] = self.build_parameter(
+                    parameter_data[parameter.name] = self._build_parameter(
                         parameter
                     )
                 case p if isinstance(parameter, CoreParameterNode):
-                    parameter_data[parameter.name] = self.build_parameter_node(
+                    parameter_data[parameter.name] = self._build_parameter_node(
                         parameter
                     )
                 case p:
@@ -158,7 +158,7 @@ class PolicyEngineCountry:
 
         return parameter_data
 
-    def build_entities(self) -> dict[str, Entity]:
+    def _build_entities(self) -> dict[str, Entity]:
         entities: list[CoreEntity] = self.tax_benefit_system.entities
         data = {}
 
@@ -186,7 +186,7 @@ class PolicyEngineCountry:
 
         return data
 
-    def build_variable_modules(self) -> dict[str, VariableModule]:
+    def _build_variable_modules(self) -> dict[str, VariableModule]:
         variable_modules: dict[str, dict[str, Any]] = (
             self.tax_benefit_system.variable_module_metadata
         )
@@ -199,14 +199,14 @@ class PolicyEngineCountry:
             )
         return modules
 
-    def build_modelled_policies(self) -> ModelledPolicies | None:
+    def _build_modelled_policies(self) -> ModelledPolicies | None:
         if self.tax_benefit_system.modelled_policies:
             return ModelledPolicies(
                 **self.tax_benefit_system.modelled_policies
             )
         return None
 
-    def build_parameter_scale(
+    def _build_parameter_scale(
         self, parameter: CoreParameterScale
     ) -> ParameterScaleItem:
         end_name = parameter.name.split(".")[-1]
@@ -217,7 +217,7 @@ class PolicyEngineCountry:
             label=parameter.metadata.get("label", end_name.replace("_", " ")),
         )
 
-    def build_parameter_scale_bracket(
+    def _build_parameter_scale_bracket(
         self, parameter: CoreParameterScaleBracket
     ) -> ParameterScaleItem:
         # Set the label to 'bracket 1' for the first bracket, 'bracket 2' for the second, etc.
@@ -230,7 +230,7 @@ class PolicyEngineCountry:
             label=parameter.metadata.get("label", bracket_label),
         )
 
-    def build_parameter(self, parameter: CoreParameter) -> Parameter:
+    def _build_parameter(self, parameter: CoreParameter) -> Parameter:
         end_name = parameter.name.split(".")[-1]
         values_list = {
             value_at_instant.instant_str: get_safe_json(value_at_instant.value)
@@ -249,7 +249,7 @@ class PolicyEngineCountry:
             household=parameter.metadata.get("household", True),
         )
 
-    def build_parameter_node(
+    def _build_parameter_node(
         self, parameter: CoreParameterNode
     ) -> ParameterNode:
         end_name = parameter.name.split(".")[-1]
