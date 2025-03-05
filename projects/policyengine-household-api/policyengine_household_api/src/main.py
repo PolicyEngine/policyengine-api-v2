@@ -12,8 +12,6 @@ from opentelemetry.sdk.resources import (
     Resource,
 )
 from policyengine_api.api.routers import (
-    liveness_check,
-    readiness_check,
     calculate,
     metadata,
 )
@@ -31,8 +29,6 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-app.include_router(liveness_check.router)
-app.include_router(readiness_check.router)
 app.include_router(calculate.router)
 app.include_router(metadata.router)
 
