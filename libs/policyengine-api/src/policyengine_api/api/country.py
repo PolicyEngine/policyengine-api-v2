@@ -350,6 +350,8 @@ class PolicyEngineCountry:
         node_type = type(parameter.values_list[-1].value)
 
         # Cast int to float to harmonize numeric handling
+        # Int-float casting copied/pasted from the original household API at
+        # https://github.com/PolicyEngine/policyengine-household-api/blob/96ebe4440f9cba81b09f64d53aa4f7e6e7003d77/policyengine_household_api/country.py#L319
         if node_type == int:
             node_type = float
 
