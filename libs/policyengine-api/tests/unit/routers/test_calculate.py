@@ -1,6 +1,7 @@
 import json
 from fastapi.testclient import TestClient
 from copy import deepcopy
+from ...fixtures.routers.calculate import client, mock_calculate_method
 from policyengine_api.api.data.examples.example_household import (
     example_household_output_us,
     example_household_input_us,
