@@ -10,7 +10,6 @@ from policyengine_api.api.data.examples.example_household import (
 )
 
 
-
 class HouseholdAxes(BaseModel):
     name: str  # Variable over which to apply axes
     period: int | str  # The month or year to which the axes apply

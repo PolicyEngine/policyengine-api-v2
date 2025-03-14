@@ -4,6 +4,8 @@ from policyengine_api.api.models.household import (
     HouseholdUS,
     HouseholdUK,
     HouseholdGeneric,
+)
+from policyengine_api.api.data.examples.example_household import (
     example_household_input_us,
 )
 from policyengine_api.api.country import COUNTRIES

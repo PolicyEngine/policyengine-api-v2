@@ -1,4 +1,3 @@
-
 example_people_us = {
     "you": {"age": {"2024": 40}, "employment_income": {"2024": 29000}},
     "your first dependent": {
@@ -16,7 +15,7 @@ example_spm_units_us = {
     "your household": {"members": ["you", "your first dependent"]}
 }
 
-# Note the difference below - inputs accept None to indicate the 
+# Note the difference below - inputs accept None to indicate the
 # user wants to calculate this variable, while outputs should never
 # contain None.
 example_tax_units_input_us = {
@@ -61,6 +60,7 @@ example_household_input_us = {
 }
 
 example_household_output_us = {
+    "axes": None,
     "people": example_people_us,
     "families": example_families_us,
     "spm_units": example_spm_units_us,
