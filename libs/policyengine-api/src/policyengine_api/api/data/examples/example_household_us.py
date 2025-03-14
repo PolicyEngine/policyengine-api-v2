@@ -59,8 +59,9 @@ example_household_input_us = {
     "marital_units": example_marital_units_us,
 }
 
+# Temporarily disabling axes to better understand schema
 example_household_output_us = {
-    "axes": None,
+    # "axes": None,
     "people": example_people_us,
     "families": example_families_us,
     "spm_units": example_spm_units_us,

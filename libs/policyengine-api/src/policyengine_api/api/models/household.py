@@ -1,6 +1,6 @@
 from pydantic import BaseModel, RootModel, Field
 from typing import Union, Any, Optional
-from policyengine_api.api.data.examples.example_household import (
+from policyengine_api.api.data.examples.example_household_us import (
     example_people_us,
     example_families_us,
     example_spm_units_us,
@@ -9,13 +9,13 @@ from policyengine_api.api.data.examples.example_household import (
     example_marital_units_us,
 )
 
-
-class HouseholdAxes(BaseModel):
-    name: str  # Variable over which to apply axes
-    period: int | str  # The month or year to which the axes apply
-    count: int  # The number of axes
-    min: int  # The lowest axis
-    max: int  # The highest axis
+# Temporarily disabling axes to better understand schema
+# class HouseholdAxes(BaseModel):
+#     name: str  # Variable over which to apply axes
+#     period: int | str  # The month or year to which the axes apply
+#     count: int  # The number of axes
+#     min: int  # The lowest axis
+#     max: int  # The highest axis
 
 
 class HouseholdVariable(RootModel):
@@ -31,7 +31,7 @@ class HouseholdGeneric(BaseModel):
         examples=[example_households_us]
     )
     people: dict[str, HouseholdEntity] = Field(examples=[example_people_us])
-    axes: Optional[dict[str, HouseholdAxes]] = None
+    # axes: Optional[HouseholdAxes] = None
 
 
 class HouseholdUS(HouseholdGeneric):
