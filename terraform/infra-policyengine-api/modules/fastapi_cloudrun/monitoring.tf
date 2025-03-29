@@ -25,6 +25,12 @@ resource "google_monitoring_uptime_check_config" "cloudrun_health_check" {
       host       =  regex("://([^/:]+)", google_cloud_run_v2_service.api.uri)[0]
     }
   }
+
+  # See https://github.com/PolicyEngine/policyengine-api-v2/issues/117
+  # in beta just check from the US to reduce cost
+  # in prod check europe and the US since those are the two regions we currently primarily
+  # operate in (pending multi-region expansion which we don't currently do)
+  selected_regions = var.is_prod ? ["USA", "EUROPE_WEST"] : ["USA"]
 }
 
 # Only reference the Slack notification channel if the variable is not empty
