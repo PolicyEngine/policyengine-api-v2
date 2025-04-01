@@ -16,6 +16,7 @@ env:
   TF_VAR_simulation_container_tag: ${{ github.sha }}
   BUILD_TAG: ${{ github.run_id }}.${{ github.run_number }}.${{ github.run_attempt }}
   COMMIT_TAG: ${{ github.sha }}
+  HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
 jobs:
   build:
     name: Build
