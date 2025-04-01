@@ -6,7 +6,7 @@ env:
   HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
     - name: checkout repo
       uses: actions/checkout@v4
