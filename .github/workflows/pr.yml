@@ -29,6 +29,7 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: "3.11"
+    - run: uv venv -p 3.11
     - run: uv pip install policyengine==0.1.2 policyengine-uk==2.22.6
     - run: uv run python test.py
   build:
