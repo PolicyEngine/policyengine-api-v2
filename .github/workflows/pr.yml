@@ -23,15 +23,12 @@ jobs:
     steps:
     - name: checkout repo
       uses: actions/checkout@v4
-    - name: Install uv
-      uses: astral-sh/setup-uv@v5
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: "3.11"
-    - run: uv venv -p 3.11.11
-    - run: uv pip install policyengine==0.1.2 policyengine-uk==2.22.6
-    - run: uv run python test.py
+        python-version: "3.11.11"
+    - run: pip install policyengine==0.1.2 policyengine-uk==2.22.6
+    - run: python test.py
   build:
     name: Build
     # Any runner supporting Node 20 or newer
