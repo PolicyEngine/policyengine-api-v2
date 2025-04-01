@@ -18,6 +18,8 @@ def test_simulation_output():
 
     result = sim.calculate_economy_comparison()
 
+    print(result.detailed_budget["pension_credit"].baseline)
+
     assert result.detailed_budget["pension_credit"].baseline == -6486021485.618753
 
 test_simulation_output()
