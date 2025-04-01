@@ -5,8 +5,18 @@ on:
 env:
   HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
 jobs:
-  test:
+  test_mac:
     runs-on: macos-latest
+    steps:
+    - name: checkout repo
+      uses: actions/checkout@v4
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+    - run: uv venv -p 3.11 --system
+    - run: uv pip install policyengine==0.1.2 policyengine-uk==2.22.6
+    - run: uv run python test.py
+  test_ubuntu:
+    runs-on: ubuntu-latest
     steps:
     - name: checkout repo
       uses: actions/checkout@v4
