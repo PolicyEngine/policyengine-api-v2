@@ -6,6 +6,7 @@ def test_simulation_output():
     sim = Simulation(**{
     "baseline": {},
     "country": "uk",
+    "data": "hf://policyengine/policyengine-uk-data/enhanced_frs_2022_23.h5@89e20b9",
     "reform": {
         "gov.hmrc.income_tax.rates.uk[0].rate": {
         "2025-01-01.2100-12-31": 0.31
