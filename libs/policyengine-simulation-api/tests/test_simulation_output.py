@@ -17,4 +17,4 @@ def test_simulation_output():
 
     result = sim.calculate_economy_comparison()
 
-    assert result.wealth_decile.average[10] == -4022.4955658985946
+    assert result.detailed_budget["pension_credit"].baseline == -6486021485.618753
