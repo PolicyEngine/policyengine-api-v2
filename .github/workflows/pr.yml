@@ -18,6 +18,19 @@ env:
   COMMIT_TAG: ${{ github.sha }}
   HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: checkout repo
+      uses: actions/checkout@v4
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: "3.11"
+    - run: uv pip install policyengine==0.1.2 policyengine-uk==2.22.6
+    - run: uv run python test.py
   build:
     name: Build
     # Any runner supporting Node 20 or newer
