@@ -37,6 +37,7 @@ module "cloud_run_simulation_api" {
   source = "./modules/fastapi_cloudrun"
 
   name = "api-simulation"
+  max_instance_request_concurrency = 1
   description = "PolicyEngine Simulation API"
   container_tag = var.simulation_container_tag
   docker_repo = "policyengine-api-simulation"

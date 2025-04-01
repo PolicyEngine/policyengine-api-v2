@@ -36,6 +36,12 @@ variable request_based_billing {
   default     = false
 }
 
+variable max_instance_request_concurrency {
+  description = "Maximum number of requests to allow in a single instance"
+  type        = number
+  default     = 80
+}
+
 variable "environment_secrets" {
   description = "Map of environment variable names to their corresponding secret IDs in Google Secret Manager"
   type = map(string)

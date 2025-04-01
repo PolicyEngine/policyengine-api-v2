@@ -31,7 +31,7 @@ resource "google_cloud_run_v2_service" "api" {
   template {
     service_account = google_service_account.api.email
     # Assumption from cost estimate.
-    max_instance_request_concurrency = var.is_prod ? 80 : null
+    max_instance_request_concurrency = var.is_prod ? var.max_instance_request_concurrency : null
     containers {
       image = local.api_image
       resources {
