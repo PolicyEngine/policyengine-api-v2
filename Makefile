@@ -1,6 +1,7 @@
 build:
 	cd libs/policyengine-fastapi && make build
 	cd libs/policyengine-api && make build
+	cd libs/policyengine-simulation-api && make build
 	cd projects/policyengine-api-full && make build
 	cd projects/policyengine-api-simulation && make build
 

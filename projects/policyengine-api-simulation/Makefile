@@ -21,8 +21,7 @@ deploy:
 
 build:
 	poetry install
-	poetry update
-	@echo "TODO: add back in the tests"
+	@echo "Todo: add back in the tests"
 
 dev:
 	poetry run fastapi dev src/policyengine_api_simulation/main.py --port 8001
