@@ -14,6 +14,7 @@ from opentelemetry.sdk.resources import (
 from policyengine_api.api.routers import (
     calculate,
     metadata,
+    inbound_test,
 )
 from policyengine_api.api import initialize
 import logging
@@ -31,6 +32,7 @@ app = FastAPI()
 
 app.include_router(calculate.router)
 app.include_router(metadata.router)
+app.include_router(inbound_test.router)
 
 # attach the api defined in the app package
 initialize(
