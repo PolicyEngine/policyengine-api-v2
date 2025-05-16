@@ -1795,13 +1795,13 @@ testing = ["coverage", "pytest", "pytest-benchmark"]
 
 [[package]]
 name = "policyengine"
-version = "0.3.5"
+version = "0.3.6"
 description = "A package to conduct policy analysis using PolicyEngine tax-benefit models."
 optional = false
 python-versions = ">=3.6"
 groups = ["main"]
 files = [
-    {file = "policyengine-0.3.5.tar.gz", hash = "sha256:a16c8142e6002d13051fbef2382f0000b7225d681caa76889eef04cdafed31d7"},
+    {file = "policyengine-0.3.6.tar.gz", hash = "sha256:a281ea3fe39c8544142e16e986efb02f3d4d6932f89955e7add3dbe7ae0cf3cf"},
 ]
 
 [package.dependencies]
