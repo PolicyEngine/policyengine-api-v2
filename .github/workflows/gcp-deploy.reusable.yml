@@ -57,6 +57,7 @@ jobs:
         make -f Makefile.deploy deploy-infra
         #parse the resulting output variables and make them outputs of this step.
         FULL_API_URL=$(cat terraform/infra-policyengine-api/terraform_output.json | jq -r .full_api_url.value)
+        SIMULATION_API_URL=$(cat terraform/infra-policyengine-api/terraform_output.json | jq -r .simulation_api_url.value)
         echo "exporting full_api_url ${FULL_API_URL}"
         echo "full_api_url=${FULL_API_URL}" >> "$GITHUB_OUTPUT"
 

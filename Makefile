@@ -45,4 +45,4 @@ deploy-project: terraform/.bootstrap_settings
 deploy: deploy-project deploy-infra
 
 integ-test: 
-	cd projects/policyengine-api-full-integ && make integ-test
+	cd projects/policyengine-apis-integ && make integ-test

@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     access_token: str | None = None
     timeout_in_millis: int = 200
 
-    model_config = SettingsConfigDict(env_prefix="integ_test_")
+    model_config = SettingsConfigDict(env_prefix="simulation_integ_test_")
 
 
 settings = Settings()

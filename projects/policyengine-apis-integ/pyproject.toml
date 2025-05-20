@@ -10,11 +10,13 @@ requires-python = ">=3.11, <4.0"
 dependencies = [
     "pytest (>=8.3.4,<9.0.0)",
     "policyengine_full_api_client @ ../policyengine-api-full/artifacts/clients/python",
-    "pydantic-settings (>=2.8.1,<3.0.0)"
+    "policyengine_simulation_api_client @ ../policyengine-api-simulation/artifacts/clients/python",
+    "pydantic-settings (>=2.8.1,<3.0.0)",
 ]
 
 [tool.poetry.dependencies]
-policyengine_full_api_client = {develop = true}
+#policyengine_full_api_client = {develop = true}
+#policyengine_simulation_api_client = {develop = true}
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

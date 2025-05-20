@@ -1,0 +1,9 @@
+{
+  "country":"us",
+  "scope":"macro",
+  "reform":{
+    "gov.irs.credits.ctc.refundable.fully_refundable": {"2023-01-01.2100-12-31":"true"}
+  },
+  "subsample":3,
+  "data":"gs://policyengine-us-data/cps_2023.h5"
+}

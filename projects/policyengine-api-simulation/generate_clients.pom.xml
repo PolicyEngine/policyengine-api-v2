@@ -31,26 +31,9 @@
                             <generatorName>python</generatorName>
                             <output>${project.basedir}/artifacts/clients/python</output>
                             <configOptions>
-                                <packageName>policyengine_full_api_client</packageName>
-                                <projectName>policyengine_full_api_client</projectName>
+                                <packageName>policyengine_simulation_api_client</packageName>
+                                <projectName>policyengine_simulation_api_client</projectName>
                                 <packageVersion>1.0.0</packageVersion>
-                            </configOptions>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>generate-typescript-client</id>
-                        <goals>
-                            <goal>generate</goal>
-                        </goals>
-                        <configuration>
-                            <inputSpec>${project.basedir}/artifacts/openapi.json</inputSpec>
-                            <generatorName>typescript-fetch</generatorName>
-                            <output>${project.basedir}/artifacts/clients/typescript</output>
-                            <configOptions>
-                                <npmName>policyengine-full-api-typescript-client</npmName>
-                                <npmVersion>1.0.0</npmVersion>
-                                <supportsES6>true</supportsES6>
-                                <typescriptThreePlus>true</typescriptThreePlus>
                             </configOptions>
                         </configuration>
                     </execution>

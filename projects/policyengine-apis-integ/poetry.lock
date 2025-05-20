@@ -73,7 +73,7 @@ optional = false
 python-versions = "^3.8"
 groups = ["main"]
 files = []
-develop = true
+develop = false
 
 [package.dependencies]
 pydantic = ">= 2"
@@ -84,6 +84,26 @@ urllib3 = ">= 1.25.3, < 3.0.0"
 [package.source]
 type = "directory"
 url = "../policyengine-api-full/artifacts/clients/python"
+
+[[package]]
+name = "policyengine-simulation-api-client"
+version = "1.0.0"
+description = "policyengine-api-simulation"
+optional = false
+python-versions = "^3.8"
+groups = ["main"]
+files = []
+develop = false
+
+[package.dependencies]
+pydantic = ">= 2"
+python-dateutil = ">= 2.8.2"
+typing-extensions = ">= 4.7.1"
+urllib3 = ">= 1.25.3, < 3.0.0"
+
+[package.source]
+type = "directory"
+url = "../policyengine-api-simulation/artifacts/clients/python"
 
 [[package]]
 name = "pydantic"
@@ -336,4 +356,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11, <4.0"
-content-hash = "55d113a17d4327c271980935d24543fbf823b3745b0342a288f5262e68ce6ae0"
+content-hash = "470c9f9bf30d91d11ea52912572e4ef86c95e6790a0f36aefc351c477dfc928f"
