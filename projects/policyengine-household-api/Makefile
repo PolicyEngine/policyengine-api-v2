@@ -20,7 +20,6 @@ deploy:
 
 build:
 	poetry install
-	poetry update
 	@echo "TODO: add back in the tests"
 
 dev:

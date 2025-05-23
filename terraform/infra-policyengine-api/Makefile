@@ -21,7 +21,7 @@ deploy: .terraform
 	@echo "Latest Full API SHA: ${FULL_SHA}"
 	@echo "Latest Simulation API SHA: ${SIM_SHA}"
 	@echo "Running terraform apply with ../.bootstrap_settings/apply.tfvars"
-	terraform apply -var-file ../.bootstrap_settings/apply.tfvars -var "full_container_tag=${TAG}@${FULL_SHA}" -var "simulation_container_tag=${TAG}@${SIM_SHA}" -var "commit_url=${COMMIT_URL}"
+	terraform apply -var-file ../.bootstrap_settings/apply.tfvars -var "full_container_tag=${TAG}@${FULL_SHA}" -var "simulation_container_tag=${TAG}@${SIM_SHA}" -var "commit_url=${COMMIT_URL}" -var "policyengine-us-package-version=desktop" -var "policyengine-uk-package-version=desktop"
 
 .terraform: ../.bootstrap_settings/backend.tfvars
 	@echo "Initializing terraform"

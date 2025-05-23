@@ -42,3 +42,13 @@ variable "commit_url" {
   type = string
   description = "URL of the commit this deployment is associated with"
 }
+
+variable "policyengine-us-package-version"{
+  type = string
+  description = "version of policyengine uk package in the simulation api"
+}
+
+variable "policyengine-uk-package-version" {
+  type = string
+  description = "version of the policyengine us package in the simulation api"
+}
