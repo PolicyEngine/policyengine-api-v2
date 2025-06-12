@@ -196,6 +196,20 @@ resource "google_workflows_workflow" "simulation_workflow" {
   source_contents = file("../../projects/policyengine-api-simulation/workflow.yaml")
 }
 
+# Grant the test service account permission to execute the workflow
+resource "google_project_iam_member" "workflow_invoker" {
+  project = var.project_id
+  role    = "roles/workflows.invoker"
+  member  = "serviceAccount:tester@${var.project_id}.iam.gserviceaccount.com"
+}
+
+# Grant the test service account permission to view workflow execution details
+resource "google_project_iam_member" "workflow_viewer" {
+  project = var.project_id
+  role    = "roles/workflows.viewer"
+  member  = "serviceAccount:tester@${var.project_id}.iam.gserviceaccount.com"
+}
+
 #Create a workflow for waiting for a specific set of country package versions to exist
 resource "google_workflows_workflow" "wait_for_country_packages" {
   name            = "wait-for-country-packages"
@@ -220,6 +234,7 @@ resource "google_project_iam_member" "workflow_sa_permissions" {
   role = each.key
   member = "serviceAccount:${google_service_account.workflow_sa.email}"
 }
+
 
 #give the workflow access to the bucket
 resource "google_storage_bucket_iam_member" "bucket_iam_member" {

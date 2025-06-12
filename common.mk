@@ -1,3 +1,5 @@
+-include ../../terraform/.bootstrap_settings/project.env
+
 build: remove_artifacts install checkformat pyright generate test 
 
 remove_artifacts:

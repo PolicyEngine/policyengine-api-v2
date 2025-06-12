@@ -95,6 +95,11 @@ jobs:
         python-version: "3.11"
     - name: Set up poetry
       run: uv pip install poetry --system
+    - name: Authenticate as tester SA in GCP
+      uses: "google-github-actions/auth@v2"
+      with:
+        workload_identity_provider: "${{ vars._GITHUB_IDENTITY_POOL_PROVIDER_NAME }}"
+        service_account: "tester@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com"
     - name: Auth as tester SA in GCP for full api
       id: get-full-id-token
       uses: "google-github-actions/auth@v2"
