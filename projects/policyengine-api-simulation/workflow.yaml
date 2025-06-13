@@ -60,7 +60,21 @@ main:
               Content-Type: "application/json"
             body: ${input}
           result: response
-        retry: ${http.default_retry}
+        retry:
+          predicate: ${custom_predicate}
+          max_retries: 5
+          backoff:
+            initial_delay: 1
+            max_delay: 60
+            multiplier: 1.25
     
     - returnResult:
         return: ${response.body}
+
+#retry on any failure. tag links may return 404 before traffic is routed
+#the pre-defined http retry strategies will ignore this.
+custom_predicate:
+  params: [e]
+  steps:
+    - retry_always:
+        return: true
