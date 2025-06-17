@@ -13,9 +13,8 @@ def retry_on_503(func):
             try:
                 return func(*args, **kwargs)
             except ServiceException as e:
-                # if e.http_resp.status == 503:
-                status_code = getattr(e, "http_resp", None)
-                if status_code and status_code.status == 503:
+                status = getattr(e, "status", None)
+                if status == 503:
                     if attempt < MAX_RETRIES - 1:
                         time.sleep(RETRY_DELAY_SECONDS)
                         continue
