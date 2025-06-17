@@ -1,6 +1,8 @@
 import policyengine_simulation_api_client
+from tests.utils.retry_503 import retry_on_503
 
 
+@retry_on_503
 def test_calculation_cliffs(client: policyengine_simulation_api_client.DefaultApi):
     options = policyengine_simulation_api_client.SimulationOptions(
         country="us",  # don't use uk. It will try to load extra stuff from huggingface
