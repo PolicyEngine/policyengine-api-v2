@@ -2,6 +2,10 @@
 name = "policyengine-simulation-api"
 version = "0.1.0"
 readme = "README.md"
+authors = [
+    {name = "PolicyEngine", email = "hello@policyengine.org"},
+]
+license = {file = "../../LICENSE"}
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "policyengine-fastapi",

@@ -2,6 +2,10 @@
 name = "policyengine-api-full-integ"
 version = "0.1.0"
 readme = "README.md"
+authors = [
+    {name = "PolicyEngine", email = "hello@policyengine.org"},
+]
+license = {file = "../../LICENSE"}
 requires-python = ">=3.11, <4.0"
 dependencies = [
     "pytest (>=8.3.4,<9.0.0)",

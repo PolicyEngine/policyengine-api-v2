@@ -3,6 +3,10 @@ name = "policyengine-api-full"
 version = "0.1.0"
 description = ""
 readme = "README.md"
+authors = [
+    {name = "PolicyEngine", email = "hello@policyengine.org"},
+]
+license = {file = "../../LICENSE"}
 requires-python = ">=3.11"
 dependencies = [
     "opentelemetry-instrumentation-sqlalchemy (>=0.51b0,<0.52)",
