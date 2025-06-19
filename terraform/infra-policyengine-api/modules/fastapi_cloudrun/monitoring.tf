@@ -117,3 +117,54 @@ resource "google_monitoring_alert_policy" "limit_alert" {
   }
 }
   
+resource "google_monitoring_alert_policy" "simulation_workflow_failure" {
+  display_name = "Simulation Workflow Failures (for tf test)"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Simulation Workflow Failed in Last 5 Minutes"
+
+    condition_threshold {
+      filter = <<-EOT
+        metric.type="workflows.googleapis.com/workflow/execution_count"
+        AND resource.type="cloud_workflow"
+        AND metric.label."status"="FAILED"
+        AND resource.label."workflow_name"="policyengine-api-simulation"
+      EOT
+
+      duration        = "300s"  # 5-minute window
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+
+      aggregations {
+        alignment_period     = "300s"
+        per_series_aligner   = "ALIGN_RATE"
+        cross_series_reducer = "REDUCE_SUM"
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content   = <<-EOT
+      🚨 *Simulation Workflow Failure Alert*
+
+      One or more executions of the simulation workflow failed within the last 5 minutes.
+
+      *Steps:*
+      - Check Cloud Workflows logs
+      - Confirm input data
+      - Review recent deploys: [Latest commit](${var.commit_url})
+    EOT
+    mime_type = "text/markdown"
+  }
+
+  user_labels = {
+    service = "policyengine-api"
+    type    = "workflow-alert"
+  }
+
+  enabled = true
+}
+
