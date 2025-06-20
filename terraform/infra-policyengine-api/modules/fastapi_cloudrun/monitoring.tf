@@ -117,7 +117,8 @@ resource "google_monitoring_alert_policy" "limit_alert" {
   }
 }
   
-resource "google_monitoring_alert_policy" "simulation_workflow_failure" {
+resource "google_monitoring_alert_policy" "simulation_workflow_failure_alert" {
+  project      = var.project_id
   display_name = "Simulation Workflow Failures (for tf test)"
   combiner     = "OR"
 
