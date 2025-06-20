@@ -8,3 +8,7 @@ generate:
 
 test:
 	echo "No tests"
+
+pyright:
+	echo "policyengine_api/api is broken, but pyright exclude by directory is unusable. Skipping." # https://github.com/microsoft/pyright/issues/10159
+	echo "https://github.com/PolicyEngine/policyengine-api-v2/issues/271 to address this"
