@@ -21,7 +21,8 @@ is_desktop=false
 
 # Set stage to current user if desktop
 if [ "$stage" == "desktop" ]; then
-    read -p "Enter username (used for stage): " stage
+    read -p "Enter username (used for stage): " username
+    stage="desk-$username"
     is_desktop=true
 fi
 

@@ -16,6 +16,11 @@ case "$project_id" in
         echo "stage is beta"
         stage="beta"
         ;;
+    desk-*)
+	echo "stage is desktop"
+        # Extract desk-username from the beginning
+        stage="${project_id%-*}"
+        ;;
     *)
         echo "Unable to determine stage from project name"
         exit 1

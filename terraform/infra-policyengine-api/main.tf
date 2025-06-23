@@ -31,7 +31,7 @@ module "cloud_run_full_api" {
   slack_notification_channel_name=var.slack_notification_channel_name
   commit_url = var.commit_url
 
-  uptime_timeout = var.is_prod ? "1s" : "30s"
+  uptime_timeout = "1s"
   min_instance_count = var.is_prod ? 1: 0
   max_instance_count = 2
   #guessing. Need to tune.
@@ -39,7 +39,7 @@ module "cloud_run_full_api" {
   #this service should return basically immediately to all requests.
   timeout = "1s"
 
-  enable_uptime_check = true
+  enable_uptime_check = var.is_prod ? true : false
 }
 
 module "cloud_run_tagger_api" {
@@ -65,7 +65,7 @@ module "cloud_run_tagger_api" {
   slack_notification_channel_name=var.slack_notification_channel_name
   commit_url = var.commit_url
 
-  uptime_timeout = var.is_prod ? "1s" : "30s"
+  uptime_timeout = "1s"
   min_instance_count = var.is_prod ? 1: 0
   max_instance_count = 1
   #guessing. Need to tune.
@@ -73,7 +73,7 @@ module "cloud_run_tagger_api" {
   #this service should return basically immediately to all requests.
   timeout = "1s"
 
-  enable_uptime_check = true
+  enable_uptime_check = var.is_prod ? true : false
 }
 
 #give the tagger api access to the bucket
@@ -163,6 +163,7 @@ resource "google_storage_bucket" "metadata" {
   storage_class = "STANDARD"
 
   uniform_bucket_level_access = true
+  force_destroy = true
 }
 
 locals {

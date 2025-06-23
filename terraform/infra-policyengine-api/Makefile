@@ -6,7 +6,7 @@ COMMIT_SHA := $(shell git rev-parse HEAD)
 COMMIT_URL := $(REPO_URL)/commit/$(COMMIT_SHA)
 
 # get the project ID
-include ../.bootstrap_settings/project.env
+-include ../.bootstrap_settings/project.env
 TAG?=desktop
 REPO?=api-v2
 REGION?=us-central1
@@ -23,6 +23,16 @@ deploy: .terraform
 	@echo "Latest Simulation API SHA: ${SIM_SHA}"
 	@echo "Running terraform apply with ../.bootstrap_settings/apply.tfvars"
 	terraform apply -var-file ../.bootstrap_settings/apply.tfvars -var "full_container_tag=${TAG}@${FULL_SHA}" -var "simulation_container_tag=${TAG}@${SIM_SHA}" -var "tagger_container_tag=${TAG}@${TAGGER_SHA}" -var "commit_url=${COMMIT_URL}" -var "policyengine-us-package-version=desktop" -var "policyengine-uk-package-version=desktop"
+
+attach: .terraform
+	@echo "attached"
+
+detach:
+	rm -rf .terraform
+
+destroy:
+	terraform plan -destroy -var-file ../.bootstrap_settings/apply.tfvars --var "full_container_tag=IGNORED" -var "simulation_container_tag=IGNORED" -var "tagger_container_tag=IGNORE" -var "commit_url=IGNORE" -var "policyengine-us-package-version=IGNORED" -var "policyengine-uk-package-version=IGNORED"
+	@echo 'please confirm this IS NOT a production project and then run terraform destroy -var-file ../.bootstrap_settings/apply.tfvars --var "full_container_tag=IGNORED" -var "simulation_container_tag=IGNORED" -var "tagger_container_tag=IGNORE" -var "commit_url=IGNORE" -var "policyengine-us-package-version=IGNORED" -var "policyengine-uk-package-version=IGNORED"'
 
 .terraform: ../.bootstrap_settings/backend.tfvars
 	@echo "Initializing terraform"
