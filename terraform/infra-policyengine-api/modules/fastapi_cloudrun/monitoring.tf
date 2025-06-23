@@ -119,28 +119,19 @@ resource "google_monitoring_alert_policy" "limit_alert" {
   
 resource "google_monitoring_alert_policy" "simulation_workflow_failure_alert" {
   project      = var.project_id
-  display_name = "Simulation Workflow Failures (for tf test)"
+  display_name = "Simulation Workflow Failures"
   combiner     = "OR"
 
   conditions {
     display_name = "Simulation Workflow Failed in Last 5 Minutes"
-
-    condition_threshold {
-      filter = <<-EOT
-        metric.type="workflows.googleapis.com/workflow/execution_count"
-        AND resource.type="cloud_workflow"
-        AND metric.label."status"="FAILED"
-        AND resource.label."workflow_name"="policyengine-api-simulation"
+    condition_prometheus_query_language {
+      query = <<-EOT
+        increase(workflows_googleapis_com:finished_execution_count{monitored_resource="workflows.googleapis.com/Workflow",status="FAILED"}[5m]) > 1
       EOT
-
-      duration        = "300s"  # 5-minute window
-      comparison      = "COMPARISON_GT"
-      threshold_value = 0
-
-      aggregations {
-        alignment_period     = "300s"
-        per_series_aligner   = "ALIGN_RATE"
-        cross_series_reducer = "REDUCE_SUM"
+      duration = "300s"
+      evaluation_interval = "60s"
+      labels = {
+        severity = "critical"
       }
     }
   }
@@ -154,16 +145,11 @@ resource "google_monitoring_alert_policy" "simulation_workflow_failure_alert" {
       One or more executions of the simulation workflow failed within the last 5 minutes.
 
       *Steps:*
-      - Check Cloud Workflows logs
+      - Check Cloud Workflows logs: [View Details](https://console.cloud.google.com/workflows/workflow/${var.region}/simulation-workflow/metrics?project=${var.project_id})
       - Confirm input data
       - Review recent deploys: [Latest commit](${var.commit_url})
     EOT
     mime_type = "text/markdown"
-  }
-
-  user_labels = {
-    service = "policyengine-api"
-    type    = "workflow-alert"
   }
 
   enabled = true
