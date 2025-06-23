@@ -1,13 +1,15 @@
-LIBDIRS := libs/policyengine-fastapi libs/policyengine-api libs/policyengine-simulation-api 
+LIBDIRS := libs/policyengine-fastapi 
 SERVICEDIRS := projects/policyengine-api-full projects/policyengine-api-simulation projects/policyengine-api-tagger
 SUBDIRS := $(LIBDIRS) $(SERVICEDIRS)
 
 build:
+	set -e; \
 	for dir in $(SUBDIRS); do \
 		$(MAKE) -C $$dir build; \
 	done
 
 update:
+	set -e; \
 	for dir in $(SUBDIRS); do \
 		$(MAKE) -C $$dir update; \
 	done
