@@ -34,7 +34,15 @@ dev:
 
 bootstrap:
 	cd terraform/project-policyengine-api && make bootstrap
-	
+
+attach:
+	$(MAKE) -C terraform/project-policyengine-api attach
+	$(MAKE) -C terraform/infra-policyengine-api attach
+
+detach:
+	$(MAKE) -C terraform/project-policyengine-api detach
+	$(MAKE) -C terraform/infra-policyengine-api detach
+
 deploy-infra: terraform/.bootstrap_settings
 	echo "Publishing API images"
 	cd projects/policyengine-api-full && make deploy
