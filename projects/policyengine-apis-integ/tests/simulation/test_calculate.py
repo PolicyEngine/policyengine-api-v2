@@ -1,7 +1,14 @@
 import policyengine_simulation_api_client
-import pytest
+from policyengine_simulation_api_client.exceptions import ServiceException
+import backoff
 
 
+@backoff.on_exception(
+    backoff.expo,
+    ServiceException,
+    max_tries=5,
+    giveup=lambda e: getattr(e, "status", None) != 503,
+)
 def test_calculation(client: policyengine_simulation_api_client.DefaultApi):
     options = policyengine_simulation_api_client.SimulationOptions(
         country="us",  # don't use uk. It will try to load extra stuff from huggingface
