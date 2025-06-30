@@ -1071,7 +1071,7 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "0.4.5"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "diskcache" },
@@ -1083,7 +1083,7 @@ dependencies = [
     { name = "policyengine-us" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2d/e9/65f8dbec13fe604dd224ca05c414db428659ed8f68033f7500edfaac5194/policyengine-0.4.5.tar.gz", hash = "sha256:8aca9503e6a2cd459049a0f06fb15cbfb90d6b135688dfe977780bece0dbdbc1", size = 204638, upload-time = "2025-06-05T05:09:36.27Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/50/df09b3040552da0bc0a5ca392d08c63451e5353a5705e2b68f4a207bd817/policyengine-0.5.0.tar.gz", hash = "sha256:2ab0584ee3ceca8eb1033e8f648ae8525bbfd49561d029bd187fed4445db9011", size = 205145, upload-time = "2025-06-26T20:06:28.539Z" }
 
 [[package]]
 name = "policyengine-core"
@@ -1190,20 +1190,20 @@ provides-extras = ["test", "build"]
 
 [[package]]
 name = "policyengine-uk"
-version = "2.32.3"
+version = "2.32.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "microdf-python" },
     { name = "policyengine-core" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5c/fd/3d97b354082396db6b81bc87c6137168dffe05ab20cac7dfdb4277f6c722/policyengine_uk-2.32.3.tar.gz", hash = "sha256:006f73d0802d60997baf99e6f5a5e6e1a378aeb9df89d2b5cda66ed5a3e84e2c", size = 1046437, upload-time = "2025-06-17T12:38:58.979Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/03/b7/5d6e16b1f50a29cad0a53e7735fb971aaf4bc5d6d5a3014918fc94396980/policyengine_uk-2.32.4.tar.gz", hash = "sha256:50e2427271b15c144b34086c9e2b78024d0513a9ea8aab4ba65de81d452c13c7", size = 1046491, upload-time = "2025-06-30T11:29:11.86Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/85/28/75c59fafa13f311ba4ab49689467c0051c178a25b72f2331167c4ffc1b6b/policyengine_uk-2.32.3-py3-none-any.whl", hash = "sha256:7a7cc32bd5e80d01c9a1bebb625f2438125faf1bc6afd616967c9485bf23958e", size = 1581167, upload-time = "2025-06-17T12:38:57.392Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/24/f6622e7ece04deaf400dde4975e788c8d5aebe2e24771bf69aa1e3b0e569/policyengine_uk-2.32.4-py3-none-any.whl", hash = "sha256:5d8a828cadfc5c2596e254c55bc0bec27cb24bfcd3bc7e7355fc68820c394781", size = 1581322, upload-time = "2025-06-30T11:29:10.157Z" },
 ]
 
 [[package]]
 name = "policyengine-us"
-version = "1.327.0"
+version = "1.327.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "microdf-python" },
@@ -1211,9 +1211,9 @@ dependencies = [
     { name = "policyengine-us-data" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a1/c8/2d11d15e902775a2b46513ec9f98236451e442eaa4da14511a6a5ae7d73c/policyengine_us-1.327.0.tar.gz", hash = "sha256:664a4aff094cf5a81146140c4f7d03292ab1481cf14aa6a1f2a270f98c509fa1", size = 1907095, upload-time = "2025-06-26T16:58:04.084Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fc/23/8b6ea4a3617664c36dfb4dcb47d681594119f6e7dbad4322382e2ffbca8a/policyengine_us-1.327.2.tar.gz", hash = "sha256:0b2463ef807d351fc588ac0271e5fef77a80f222e4eef3ac578bcc6197fba059", size = 1907679, upload-time = "2025-06-30T14:49:32.739Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ff/55/3a94a9018fc5889af85a6ec179bf0b481982af04b9a52086542360d5f292/policyengine_us-1.327.0-py3-none-any.whl", hash = "sha256:3e0201aca4dae443d4e0d5d8a1743f3e82e10f451f75c877712f7c406acf432e", size = 5665124, upload-time = "2025-06-26T16:58:00.112Z" },
+    { url = "https://files.pythonhosted.org/packages/bf/ec/07ac99294c2cbff5542ec3edb48291318e0483c05a502e964a881868b9c8/policyengine_us-1.327.2-py3-none-any.whl", hash = "sha256:2a0c5dc800bd89aaaf2093609859b0b7befed194e58397ae92d49690a4598586", size = 5665044, upload-time = "2025-06-30T14:49:29.903Z" },
 ]
 
 [[package]]
@@ -1800,15 +1800,15 @@ wheels = [
 
 [[package]]
 name = "uvicorn"
-version = "0.34.3"
+version = "0.35.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "h11" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/de/ad/713be230bcda622eaa35c28f0d328c3675c371238470abdea52417f17a8e/uvicorn-0.34.3.tar.gz", hash = "sha256:35919a9a979d7a59334b6b10e05d77c1d0d574c50e0fc98b8b1a0f165708b55a", size = 76631, upload-time = "2025-06-01T07:48:17.531Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5e/42/e0e305207bb88c6b8d3061399c6a961ffe5fbb7e2aa63c9234df7259e9cd/uvicorn-0.35.0.tar.gz", hash = "sha256:bc662f087f7cf2ce11a1d7fd70b90c9f98ef2e2831556dd078d131b96cc94a01", size = 78473, upload-time = "2025-06-28T16:15:46.058Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6d/0d/8adfeaa62945f90d19ddc461c55f4a50c258af7662d34b6a3d5d1f8646f6/uvicorn-0.34.3-py3-none-any.whl", hash = "sha256:16246631db62bdfbf069b0645177d6e8a77ba950cfedbfd093acef9444e4d885", size = 62431, upload-time = "2025-06-01T07:48:15.664Z" },
+    { url = "https://files.pythonhosted.org/packages/d2/e2/dc81b1bd1dcfe91735810265e9d26bc8ec5da45b4c0f6237e286819194c3/uvicorn-0.35.0-py3-none-any.whl", hash = "sha256:197535216b25ff9b785e29a0b79199f55222193d47f820816e7da751e9bc8d4a", size = 66406, upload-time = "2025-06-28T16:15:44.816Z" },
 ]
 
 [package.optional-dependencies]
