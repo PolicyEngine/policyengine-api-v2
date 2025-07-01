@@ -1,10 +1,11 @@
 # economy_simulation.py
 from fastapi import APIRouter, Query, Body, HTTPException
 from typing import Literal
-from policyengine_api.services.simulation_runner import SimulationRunner
+from policyengine_api.api.services.simulation_runner import SimulationRunner
 
 router = APIRouter()
 runner = SimulationRunner()
+
 
 @router.post("/{country_id}/economy/{policy_id}/over/{baseline_policy_id}")
 async def start_simulation(
@@ -39,6 +40,7 @@ async def start_simulation(
 async def get_simulation_result(execution_id: str):
     try:
         result = runner.get_simulation_result(execution_id)
+        print("SKLOGS: get api called")
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

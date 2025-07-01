@@ -1,10 +1,12 @@
-# simulation_runner.py
 import os
 import json
 import requests
-from google.cloud import workflows_v1, executions_v1
+from google.cloud import workflows_v1
+from google.cloud.workflows import executions_v1
 from google.cloud.workflows.executions_v1.types import Execution
 from typing import Literal, Any
+from policyengine_api_full.settings import get_settings, Environment
+from google.protobuf.json_format import MessageToDict
 
 class SimulationRunner:
     def __init__(self):
@@ -18,7 +20,7 @@ class SimulationRunner:
         else:
             self.desktop_url = os.getenv(
                 "SIMULATION_LOCAL_URL",
-                "http://localhost:8081/simulate/economy/comparison"
+                "http://localhost:8081/simulate/economy/comparison",
             )
 
     def _build_payload(
@@ -83,9 +85,38 @@ class SimulationRunner:
             )
             return {"execution_id": execution.name}
 
+    # def get_simulation_result(self, execution_id: str) -> dict:
+    #     if self.is_desktop:
+    #         print("SKLOGS: in dev mode")
+    #         raise RuntimeError("Polling is not supported in desktop mode.")
+    #     print("SKLOGS: not in dev mode")
+    #     return json.loads(self.execution_client.get_execution(name=execution_id).result)
+        
     def get_simulation_result(self, execution_id: str) -> dict:
         if self.is_desktop:
+            print("SKLOGS: in dev mode")
             raise RuntimeError("Polling is not supported in desktop mode.")
-        return json.loads(
-            self.execution_client.get_execution(name=execution_id).result
-        )
+        
+        execution = self.execution_client.get_execution(name=execution_id)
+        status = execution.state.name
+        
+        response = {
+            "execution_id": execution_id,
+            "status": status,
+        }
+
+        if status == "SUCCEEDED":
+            response["result"] = json.loads(execution.result or "{}")
+        elif status == "FAILED":
+            try:
+                error_dict = MessageToDict(execution.error)
+                response["error"] = error_dict.get("message", str(execution.error))
+            except Exception:
+                # fallback to string representation
+                response["error"] = str(execution.error)
+            response["result"] = None
+        else:
+            # Pending or other states — no result or error yet
+            response["result"] = None
+            response["error"] = None
+        return response
