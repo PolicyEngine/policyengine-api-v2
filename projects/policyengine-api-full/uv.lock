@@ -356,6 +356,21 @@ wheels = [
 ]
 
 [[package]]
+name = "google-cloud-workflows"
+version = "1.18.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/67/70/19c6f828d9d677819837743b412a061d003497f433411dfbc86063e77c94/google_cloud_workflows-1.18.2.tar.gz", hash = "sha256:4bb936419bfe110c9f67a4631be340ffe6bd2014299cc4c4f9321b5e5202d4df", size = 209360, upload-time = "2025-06-12T00:13:16.243Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6c/46/471eb98ce1afa95003f1ebae0135dc6a710e9fb7144693710219ddd77c59/google_cloud_workflows-1.18.2-py3-none-any.whl", hash = "sha256:e1dd52203860d91363a005b6b41f97eb2439a7c954e9cd6f7c77d29fac0c4421", size = 198584, upload-time = "2025-06-12T00:13:14.96Z" },
+]
+
+[[package]]
 name = "googleapis-common-protos"
 version = "1.70.0"
 source = { registry = "https://pypi.org/simple" }
@@ -867,6 +882,7 @@ name = "policyengine-api-full"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "google-cloud-workflows" },
     { name = "opentelemetry-instrumentation-fastapi" },
     { name = "opentelemetry-instrumentation-sqlalchemy" },
     { name = "policyengine-fastapi" },
@@ -887,6 +903,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'build'", specifier = ">=25.1.0" },
+    { name = "google-cloud-workflows", specifier = ">=1.18.1" },
     { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.51b0,<0.52" },
     { name = "opentelemetry-instrumentation-sqlalchemy", specifier = ">=0.51b0,<0.52" },
     { name = "policyengine-fastapi", editable = "../../libs/policyengine-fastapi" },
