@@ -1,16 +1,23 @@
 import os
 import json
-import requests
+import uuid
+import asyncio
+import httpx
+
+from typing import Literal, Any
 from google.cloud import workflows_v1
 from google.cloud.workflows import executions_v1
 from google.cloud.workflows.executions_v1.types import Execution
-from typing import Literal, Any
-from policyengine_api_full.settings import get_settings, Environment
 from google.protobuf.json_format import MessageToDict
+from policyengine_api_full.settings import get_settings, Environment
 
 class SimulationRunner:
     def __init__(self):
-        self.is_desktop = os.getenv("PE_MODE") == "desktop"
+        # self.is_desktop = os.getenv("PE_MODE") == "desktop"
+        settings = get_settings()
+        self.is_desktop = settings.environment == Environment.DESKTOP
+        print(f"SKLOGS ENVIRONMENT: {get_settings().environment}")
+
         if not self.is_desktop:
             self.project = "prod-api-v2-c4d5"
             self.location = "us-central1"
@@ -22,6 +29,8 @@ class SimulationRunner:
                 "SIMULATION_LOCAL_URL",
                 "http://localhost:8081/simulate/economy/comparison",
             )
+            self._simulations: dict[str, dict] = {}
+            self._lock = asyncio.Lock()  # To protect self._simulations
 
     def _build_payload(
         self,
@@ -47,7 +56,7 @@ class SimulationRunner:
             "data_version": data_version,
         }
 
-    def start_simulation(
+    async def start_simulation(
         self,
         country_id: str,
         reform: dict,
@@ -72,51 +81,75 @@ class SimulationRunner:
         )
 
         if self.is_desktop:
-            response = requests.post(self.desktop_url, json=payload)
-            response.raise_for_status()
-            return response.json()
+            async with httpx.AsyncClient() as client:
+                response = await client.post(self.desktop_url, json=payload)
+                response.raise_for_status()
+                result = response.json()
+
+            execution_id = f"desktop-{uuid.uuid4()}"
+            async with self._lock:
+                self._simulations[execution_id] = {
+                    "status": "SUCCEEDED",
+                    "result": result,
+                    "error": None,
+                }
+            return {"execution_id": execution_id}
+
         else:
-            workflow_path = self.workflows_client.workflow_path(
-                self.project, self.location, self.workflow
-            )
-            execution = self.execution_client.create_execution(
-                parent=workflow_path,
-                execution=Execution(argument=json.dumps(payload)),
-            )
+            # Use asyncio.to_thread for blocking I/O
+            def create_execution():
+                workflow_path = self.workflows_client.workflow_path(
+                    self.project, self.location, self.workflow
+                )
+                return self.execution_client.create_execution(
+                    parent=workflow_path,
+                    execution=Execution(argument=json.dumps(payload)),
+                )
+
+            execution = await asyncio.to_thread(create_execution)
             return {"execution_id": execution.name}
 
-    # def get_simulation_result(self, execution_id: str) -> dict:
-    #     if self.is_desktop:
-    #         print("SKLOGS: in dev mode")
-    #         raise RuntimeError("Polling is not supported in desktop mode.")
-    #     print("SKLOGS: not in dev mode")
-    #     return json.loads(self.execution_client.get_execution(name=execution_id).result)
-        
-    def get_simulation_result(self, execution_id: str) -> dict:
+    async def get_simulation_result(self, execution_id: str) -> dict:
         if self.is_desktop:
-            print("SKLOGS: in dev mode")
-            raise RuntimeError("Polling is not supported in desktop mode.")
-        
-        execution = self.execution_client.get_execution(name=execution_id)
-        status = execution.state.name
-        
-        response = {
-            "execution_id": execution_id,
-            "status": status,
-        }
+            print("SKLOGS: in desktop mode")
+            async with self._lock:
+                if execution_id not in self._simulations:
+                    raise ValueError(f"Unknown execution ID: {execution_id}")
+                simulation = self._simulations[execution_id]
 
-        if status == "SUCCEEDED":
-            response["result"] = json.loads(execution.result or "{}")
-        elif status == "FAILED":
-            try:
-                error_dict = MessageToDict(execution.error)
-                response["error"] = error_dict.get("message", str(execution.error))
-            except Exception:
-                # fallback to string representation
-                response["error"] = str(execution.error)
-            response["result"] = None
+            return {
+                "execution_id": execution_id,
+                "status": simulation["status"],
+                "result": simulation["result"],
+                "error": simulation["error"],
+            }
+
         else:
-            # Pending or other states — no result or error yet
-            response["result"] = None
-            response["error"] = None
-        return response
+            print("SKLOGS: in prod mode")
+
+            def get_execution():
+                return self.execution_client.get_execution(name=execution_id)
+
+            execution = await asyncio.to_thread(get_execution)
+            status = execution.state.name
+
+            response = {
+                "execution_id": execution_id,
+                "status": status,
+            }
+
+            if status == "SUCCEEDED":
+                response["result"] = json.loads(execution.result or "{}")
+                response["error"] = None
+            elif status == "FAILED":
+                try:
+                    error_dict = MessageToDict(execution.error)
+                    response["error"] = error_dict.get("message", str(execution.error))
+                except Exception:
+                    response["error"] = str(execution.error)
+                response["result"] = None
+            else:
+                response["result"] = None
+                response["error"] = None
+
+            return response

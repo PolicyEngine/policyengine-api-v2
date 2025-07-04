@@ -21,7 +21,7 @@ async def start_simulation(
     baseline: dict = Body(...),
 ):
     try:
-        result = runner.start_simulation(
+        result = await runner.start_simulation(
             country_id=country_id,
             reform=reform,
             baseline=baseline,
@@ -39,7 +39,7 @@ async def start_simulation(
 @router.get("/economy/result")
 async def get_simulation_result(execution_id: str):
     try:
-        result = runner.get_simulation_result(execution_id)
+        result = await runner.get_simulation_result(execution_id)
         print("SKLOGS: get api called")
         return result
     except Exception as e:
