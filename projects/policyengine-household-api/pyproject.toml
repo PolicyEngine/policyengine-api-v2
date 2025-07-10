@@ -10,7 +10,7 @@ dependencies = [
     "fastapi (>=0.115.8, <0.116.0)",
     "policyengine-api",
     "policyengine-uk (>=2.19.1)",
-    "policyengine-us (>=1.202.2)",
+    "policyengine-us (>=1.202.2,<1.338.0)",
     "policyengine-il (>=0.1.0)",
     "policyengine-ng (>=0.5.1)",
     "numpy (>=1.26.4,<1.27.0)"
