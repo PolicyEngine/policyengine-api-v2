@@ -284,7 +284,7 @@ standard = [
 
 [[package]]
 name = "fastapi-cloud-cli"
-version = "0.1.2"
+version = "0.1.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -295,9 +295,9 @@ dependencies = [
     { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/37/b2/d4d6ddadb93bd97b0794b3eab0cd8c24980fa40434e1d0bc55e7490506da/fastapi_cloud_cli-0.1.2.tar.gz", hash = "sha256:401abf00856211d1bfb8b24b1b8e8d5b9ff3a11037f7ca03723f6ba27008dde4", size = 22663, upload-time = "2025-07-08T16:53:38.121Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/06/d7/4a987c3d73ddae4a7c93f5d2982ea5b1dd58d4cc1044568bb180227bd0f7/fastapi_cloud_cli-0.1.4.tar.gz", hash = "sha256:a0ab7633d71d864b4041896b3fe2f462de61546db7c52eb13e963f4d40af0eba", size = 22712, upload-time = "2025-07-11T14:15:25.667Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bd/b9/b75d347a4481bb2f9566426d57417f4e897bf6769ff111c47ff9437b4ca9/fastapi_cloud_cli-0.1.2-py3-none-any.whl", hash = "sha256:d310db4b80297184f9525f4c63952e464e4f18513ec8d6db9271030d5ffe5af4", size = 18950, upload-time = "2025-07-08T16:53:36.495Z" },
+    { url = "https://files.pythonhosted.org/packages/42/cf/8635cd778b7d89714325b967a28c05865a2b6cab4c0b4b30561df4704f24/fastapi_cloud_cli-0.1.4-py3-none-any.whl", hash = "sha256:1db1ba757aa46a16a5e5dacf7cddc137ca0a3c42f65dba2b1cc6a8f24c41be42", size = 18957, upload-time = "2025-07-11T14:15:24.451Z" },
 ]
 
 [[package]]
@@ -602,7 +602,7 @@ wheels = [
 
 [[package]]
 name = "huggingface-hub"
-version = "0.33.2"
+version = "0.33.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
@@ -614,9 +614,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fa/42/8a95c5632080ae312c0498744b2b852195e10b05a20b1be11c5141092f4c/huggingface_hub-0.33.2.tar.gz", hash = "sha256:84221defaec8fa09c090390cd68c78b88e3c4c2b7befba68d3dc5aacbc3c2c5f", size = 426637, upload-time = "2025-07-02T06:26:05.156Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4b/9e/9366b7349fc125dd68b9d384a0fea84d67b7497753fe92c71b67e13f47c4/huggingface_hub-0.33.4.tar.gz", hash = "sha256:6af13478deae120e765bfd92adad0ae1aec1ad8c439b46f23058ad5956cbca0a", size = 426674, upload-time = "2025-07-11T12:32:48.694Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/44/f4/5f3f22e762ad1965f01122b42dae5bf0e009286e2dba601ce1d0dba72424/huggingface_hub-0.33.2-py3-none-any.whl", hash = "sha256:3749498bfa91e8cde2ddc2c1db92c79981f40e66434c20133b39e5928ac9bcc5", size = 515373, upload-time = "2025-07-02T06:26:03.072Z" },
+    { url = "https://files.pythonhosted.org/packages/46/7b/98daa50a2db034cab6cd23a3de04fa2358cb691593d28e9130203eb7a805/huggingface_hub-0.33.4-py3-none-any.whl", hash = "sha256:09f9f4e7ca62547c70f8b82767eefadd2667f4e116acba2e3e62a5a81815a7bb", size = 515339, upload-time = "2025-07-11T12:32:46.346Z" },
 ]
 
 [[package]]
@@ -1106,7 +1106,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/76/50/df09b3040552da0bc
 
 [[package]]
 name = "policyengine-core"
-version = "3.17.0"
+version = "3.17.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dpath" },
@@ -1125,9 +1125,9 @@ dependencies = [
     { name = "sortedcontainers" },
     { name = "wheel" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/40/35/3236961d543a1ab6c6151372e6a7383665c61c62e96bbd68de9079ccc76b/policyengine_core-3.17.0.tar.gz", hash = "sha256:0fca437564e85fbee9b936433fb0739e236adc77021a22bf78d5badcb05b2d90", size = 158939, upload-time = "2025-06-05T20:16:08.381Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/77/da/e65d00632b452add2f7da9b3d9345b6be1ac4adcbf90d13bd7274073c236/policyengine_core-3.17.1.tar.gz", hash = "sha256:d979c035968cdb345d8afad80fbdfb986239db5d885cabe6e1bca00da878ab8a", size = 159039, upload-time = "2025-07-12T14:24:00.632Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e0/93/f2861dfc068b7f14a983a8ea42a9207cb60ff3af3d71b4f8e5051673f7c8/policyengine_core-3.17.0-py3-none-any.whl", hash = "sha256:f2fd8068bed29790cb6b8e60c8fc3845f4e3aea41cd91aaccf7f7a53aa98a48a", size = 220407, upload-time = "2025-06-05T20:16:06.966Z" },
+    { url = "https://files.pythonhosted.org/packages/00/9f/9a5e358fdf4b9c72f421276ec8718e4db817ab5177d1b161b6763849afdb/policyengine_core-3.17.1-py3-none-any.whl", hash = "sha256:43c9e7f3b013b6dddbdf1a3edbaede26ec17b5da99837228820354f1f1233e50", size = 220480, upload-time = "2025-07-12T14:23:59.293Z" },
 ]
 
 [[package]]
@@ -1209,15 +1209,15 @@ provides-extras = ["test", "build"]
 
 [[package]]
 name = "policyengine-uk"
-version = "2.33.0"
+version = "2.35.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "microdf-python" },
     { name = "policyengine-core" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/90/a2/fe229ef5c04a948b0dea13618f2b8f846b83cd6a00145202e1b211372316/policyengine_uk-2.33.0.tar.gz", hash = "sha256:1ca62a613f51b2a44ae74afb87d763729578b1e7b33dc8b77b1414c10637aabd", size = 1048079, upload-time = "2025-07-09T12:35:25.376Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1e/c0/1fe59910c056e9d41fa7fa022e72538707fb2ce6c1df0c9b1a00d30bcbb6/policyengine_uk-2.35.1.tar.gz", hash = "sha256:edb4503360b083b085c62481ace98c8ccff632fde94994e76debc6bd2194e9e9", size = 1017829, upload-time = "2025-07-11T14:16:13.655Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6d/6b/0269013e65748f07db04262ef288b328ceca0352606aa3d8e2a3d5db9141/policyengine_uk-2.33.0-py3-none-any.whl", hash = "sha256:0fda289cfecb40ecadb820c064422f4b71fc639be2916651b8cd3ba01623d545", size = 1582495, upload-time = "2025-07-09T12:35:23.719Z" },
+    { url = "https://files.pythonhosted.org/packages/0b/93/e710101d312d7fd3fec627bd272a1f77f6a2e536f8badc04eddbad3689d3/policyengine_uk-2.35.1-py3-none-any.whl", hash = "sha256:7f2aa5eb707ed66670f7eb14524f2b82043f5945fbc7bc117d8e9de6776054c0", size = 1596761, upload-time = "2025-07-11T14:16:12.479Z" },
 ]
 
 [[package]]
