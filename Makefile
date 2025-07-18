@@ -12,6 +12,11 @@ update:
 		$(MAKE) -C $$dir update; \
 	done
 
+test:
+	for dir in $(SUBDIRS); do \
+		$(MAKE) -C $$dir test; \
+	done
+
 dev-api-full:
 	echo "Starting API (full) in dev mode"
 	cd projects/policyengine-api-full && make dev

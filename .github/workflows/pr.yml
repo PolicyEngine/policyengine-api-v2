@@ -18,7 +18,7 @@ env:
   COMMIT_TAG: ${{ github.sha }}
 jobs:
   build:
-    name: Build
+    name: Build and test
     # Any runner supporting Node 20 or newer
     runs-on: ubuntu-latest
     environment: beta
@@ -47,3 +47,5 @@ jobs:
         architecture: x64
     - name: Build application
       run: make build
+    - name: Run tests
+      run: make test
