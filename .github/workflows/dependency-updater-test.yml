@@ -1,0 +1,85 @@
+name: Update dependencies
+
+on:
+  pull_request:
+
+jobs:
+  update-dependencies:
+    name: Update dependencies
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.11"
+      
+      - name: Set up poetry
+        run: uv pip install poetry --system
+      
+      - name: Update dependencies
+        id: update
+        run: |
+          # Run the update command
+          make update
+          
+          # Check if there are changes
+          if [[ -z $(git status --porcelain) ]]; then
+            echo "No changes detected"
+            echo "changes_detected=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changes detected"
+            echo "changes_detected=true" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Run tests
+        if: steps.update.outputs.changes_detected == 'true'
+        run: |
+          # Add your test command here
+          make test
+          # or: pytest
+          # or: uv run pytest
+      
+      - name: Create pull request
+        if: steps.update.outputs.changes_detected == 'true'
+        run: |
+          # Configure git
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Create and push branch
+          git checkout -b update-dependencies
+          git add .
+          git commit -m "Update dependencies"
+          git push origin update-dependencies --force
+          
+          # Create or update PR
+          if gh pr view update-dependencies --json number > /dev/null 2>&1; then
+            echo "PR already exists, updating..."
+            gh pr edit update-dependencies --body "Automated dependency updates
+
+        This PR was automatically created by the dependency update workflow.
+        
+        Last updated: $(date)"
+          else
+            echo "Creating new PR..."
+            gh pr create \
+              --title "Update dependencies" \
+              --body "Automated dependency updates
+
+        This PR was automatically created by the dependency update workflow." \
+              --base main \
+              --head update-dependencies
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
