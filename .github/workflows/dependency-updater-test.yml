@@ -45,33 +45,23 @@ jobs:
       - name: Create pull request
         if: steps.update.outputs.changes_detected == 'true'
         run: |
-          # Configure git
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "policyengine-auto"
+          git config --global user.email "policyengine-auto@users.noreply.github.com"
           
-          # Create and push branch
           git checkout -b update-dependencies
           git add .
           git commit -m "Update dependencies"
           git push origin update-dependencies --force
           
-          # Create or update PR
-          if gh pr view update-dependencies --json number > /dev/null 2>&1; then
-            echo "PR already exists, updating..."
-            gh pr edit update-dependencies --body "Automated dependency updates
-          
+          # Try to create PR, ignore if it already exists
+          gh pr create \
+            --title "Update dependencies" \
+            --body "Automated dependency updates
+
           This PR was automatically created by the dependency update workflow.
           
-          Last updated: $(date)"
-          else
-            echo "Creating new PR..."
-            gh pr create \
-              --title "Update dependencies" \
-              --body "Automated dependency updates
-          
-          This PR was automatically created by the dependency update workflow." \
-              --base main \
-              --head update-dependencies
-          fi
+          Last updated: $(date)" \
+            --base main \
+            --head update-dependencies || echo "PR may already exist, continuing..."
         env:
-          GITHUB_TOKEN: ${{ secrets.POLICYENGINE_BOT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.BOT_TOKEN }}
