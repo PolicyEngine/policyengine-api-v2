@@ -1,11 +1,11 @@
-name: Update Dependencies
+name: Update dependencies
 
 on:
   pull_request:
 
 jobs:
   update-dependencies:
-    name: Update dependencies
+    name: File update PR
     runs-on: ubuntu-latest
     
     permissions:
