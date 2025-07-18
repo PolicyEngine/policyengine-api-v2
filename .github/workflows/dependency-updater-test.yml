@@ -1,4 +1,4 @@
-name: Update dependencies
+name: Update Dependencies
 
 on:
   pull_request:
@@ -67,17 +67,17 @@ jobs:
           if gh pr view update-dependencies --json number > /dev/null 2>&1; then
             echo "PR already exists, updating..."
             gh pr edit update-dependencies --body "Automated dependency updates
-
-        This PR was automatically created by the dependency update workflow.
-        
-        Last updated: $(date)"
+          
+          This PR was automatically created by the dependency update workflow.
+          
+          Last updated: $(date)"
           else
             echo "Creating new PR..."
             gh pr create \
               --title "Update dependencies" \
               --body "Automated dependency updates
-
-        This PR was automatically created by the dependency update workflow." \
+          
+          This PR was automatically created by the dependency update workflow." \
               --base main \
               --head update-dependencies
           fi
