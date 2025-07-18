@@ -374,7 +374,7 @@ wheels = [
 
 [[package]]
 name = "google-cloud-run"
-version = "0.10.18"
+version = "0.10.19"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "google-api-core", extra = ["grpc"] },
@@ -383,9 +383,9 @@ dependencies = [
     { name = "proto-plus" },
     { name = "protobuf" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7e/43/fc4df525681150790edfd6159ea7ca87849fdcaf3c440bd46390df1e63ac/google_cloud_run-0.10.18.tar.gz", hash = "sha256:53e61a0b313ce266c16e57165a9cb29bb801799beb944fd87c206cfca72c76cc", size = 358083, upload-time = "2025-05-15T16:41:03.195Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e2/47/0c023ac4a54a14e6d71cff6c9841b137b8b4d0b337937f9dbd592370c0d1/google_cloud_run-0.10.19.tar.gz", hash = "sha256:e95f9337c4a66c8a094881864c86f708b6a519b938bef890eef43606e44e7538", size = 358857, upload-time = "2025-07-18T16:33:25.499Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/93/6c/706c30daaf51b364c54cf9d549eed6c59982c45450a1ae6364d705e0ba91/google_cloud_run-0.10.18-py3-none-any.whl", hash = "sha256:754974343bde47f0ccbe30b0bfebd0632369126898ee6a305783ab7a6afcea3c", size = 333783, upload-time = "2025-05-15T16:41:01.719Z" },
+    { url = "https://files.pythonhosted.org/packages/aa/b0/4c33ca35a071a89714e2bef0d126aa9d16db2ae989b5f1d8c4fc54e128fc/google_cloud_run-0.10.19-py3-none-any.whl", hash = "sha256:cf9feea66898d57ef8c2d6095d599cab2c013750aef71c58f04a88495e370fca", size = 334208, upload-time = "2025-07-18T16:33:15.421Z" },
 ]
 
 [[package]]
