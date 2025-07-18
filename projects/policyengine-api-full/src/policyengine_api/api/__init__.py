@@ -4,7 +4,10 @@ from sqlalchemy import Engine
 from policyengine_api.fastapi.auth.jwt_decoder import JWTDecoder
 from policyengine_api.fastapi.database import create_session_dep
 from .household import include_all_routers
-
+from policyengine_api.api.routers import (
+    economy,
+)
+ 
 """
 Application defined as routers completely indipendent of environment allowing it
 to easily be run in whatever cloud provider container or desktop or test environment.
@@ -24,3 +27,9 @@ def initialize(app: FastAPI, engine: Engine, jwt_issuer: str, jwt_audience: str)
         optional_auth=optional_auth,
         auth=auth,
     )
+
+    # Attaching economy simulation routes separately.
+    # These endpoints run macro-economic impact simulations and may trigger
+    # cloud workflows (GCP) or a local simulation API when running in desktop mode.
+    # Keeping them separate to avoid coupling with household/user CRUD routes.
+    app.include_router(economy.router)
