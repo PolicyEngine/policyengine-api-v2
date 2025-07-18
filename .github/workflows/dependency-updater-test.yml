@@ -15,6 +15,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        # Checkout main branch
+        with:
+          ref: main
+        env:
+          GITHUB_TOKEN: ${{ secrets.POLICYENGINE_BOT_TOKEN }}
       
       - name: Install uv
         uses: astral-sh/setup-uv@v5
