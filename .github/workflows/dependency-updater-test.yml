@@ -64,4 +64,4 @@ jobs:
             --base main \
             --head update-dependencies || echo "PR may already exist, continuing..."
         env:
-          GITHUB_TOKEN: ${{ secrets.BOT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.POLICYENGINE_BOT_TOKEN }}
