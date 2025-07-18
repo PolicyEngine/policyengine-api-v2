@@ -42,14 +42,6 @@ jobs:
             echo "changes_detected=true" >> $GITHUB_OUTPUT
           fi
       
-      - name: Run tests
-        if: steps.update.outputs.changes_detected == 'true'
-        run: |
-          # Add your test command here
-          make test
-          # or: pytest
-          # or: uv run pytest
-      
       - name: Create pull request
         if: steps.update.outputs.changes_detected == 'true'
         run: |
