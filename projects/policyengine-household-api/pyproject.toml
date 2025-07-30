@@ -27,4 +27,4 @@ pythonpath = [
 testpaths = ["tests"]
 
 # [tool.uv.sources]
-# policyengine-api is from PyPI, not local
+policyengine-api = { path = "../../libs/policyengine-api", editable = true }
