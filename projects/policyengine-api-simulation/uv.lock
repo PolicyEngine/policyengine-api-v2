@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.13"
 
 [[package]]
@@ -1265,7 +1265,7 @@ requires-dist = [
     { name = "policyengine", specifier = ">=0.6.0" },
     { name = "policyengine-fastapi", editable = "../../libs/policyengine-fastapi" },
     { name = "policyengine-uk", specifier = ">=2.22.8" },
-    { name = "policyengine-us", specifier = ">=1.250.0,<1.338.0" },
+    { name = "policyengine-us", specifier = ">=1.250.0" },
     { name = "pydantic-settings", specifier = ">=2.7.1,<3.0.0" },
     { name = "pyright", marker = "extra == 'build'", specifier = ">=1.1.401" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.3.4" },
@@ -1290,7 +1290,7 @@ wheels = [
 
 [[package]]
 name = "policyengine-us"
-version = "1.337.0"
+version = "1.360.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "microdf-python" },
@@ -1298,9 +1298,9 @@ dependencies = [
     { name = "policyengine-us-data" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d6/1d/61434dc3d19a2c8cc36f7f856a2c819cde7d51f8503cdbd27a74e0db8067/policyengine_us-1.337.0.tar.gz", hash = "sha256:8c0d737e38a474241541fc84fd1073eb98db6caf53f9b623f396201c3fae4a77", size = 1923273, upload-time = "2025-07-08T19:01:43.147Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e4/71/27be474d12fdf558de1956c3dc39b5b1eb1e410a3f528a4ae1ebfb0c73df/policyengine_us-1.360.0.tar.gz", hash = "sha256:ddbbd422fdc449e18d6d0bbaf24511f948db17d267aa9f0c72b40568658fb574", size = 7895181, upload-time = "2025-07-31T14:00:26.015Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d3/58/53329a5f0cd3d360ed4707f60d0c0aac6401159001ce12368552e51a6e75/policyengine_us-1.337.0-py3-none-any.whl", hash = "sha256:750d40a8f4b434369f4a13bc5abc07291f2dbcb60b1ab40661ad1672af575051", size = 5706106, upload-time = "2025-07-08T19:01:39.167Z" },
+    { url = "https://files.pythonhosted.org/packages/00/b8/95002e4348a1b233e232c265bc5e670f051dce07ba72a086d99a4bfd4e54/policyengine_us-1.360.0-py3-none-any.whl", hash = "sha256:fb42f19db28f8f51839103eb8a718c66c900fb9b59abefd4390341d22dd08e5c", size = 5793193, upload-time = "2025-07-31T14:00:21.373Z" },
 ]
 
 [[package]]
