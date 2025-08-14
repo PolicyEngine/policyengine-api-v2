@@ -14,4 +14,4 @@ integ-test:
 	$(if $(TF_VAR_project_id),WORKFLOW_INTEG_TEST_PROJECT_ID='$(TF_VAR_project_id)') \
 	$(if $(PROJECT_ID),WORKFLOW_INTEG_TEST_PROJECT_ID='$(PROJECT_ID)') \
         WORKFLOW_INTEG_TEST_US_MODEL_VERSION='$(US_COUNTRY_PACKAGE_VERSION)' \
-	uv run pytest -n auto
+	pytest -n auto

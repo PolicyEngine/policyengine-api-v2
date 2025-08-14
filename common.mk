@@ -8,7 +8,7 @@ remove_artifacts:
 
 install:
 	echo "Downloading dependencies including test and build"
-	uv sync --extra test --extra build
+	uv sync --extra test --extra build --active
 
 checkformat:
 	echo "Checking python code formatting"
@@ -16,7 +16,7 @@ checkformat:
 	[ -d "src" ] && dirs="$$dirs src"; \
 	[ -d "tests" ] && dirs="$$dirs tests"; \
 	if [ -n "$$dirs" ]; then \
-		uv run black --check $$dirs; \
+		black --check $$dirs; \
 	else \
 		echo "Neither 'src' nor 'tests' directory found. Skipping Black formatting."; \
 	fi
@@ -28,18 +28,18 @@ format:
 	[ -d "tests" ] && dirs="$$dirs tests"; \
 	if [ -n "$$dirs" ]; then \
 		echo "Running Black on:$$dirs"; \
-		uv run black $$dirs; \
+		black $$dirs; \
 	else \
 		echo "Neither 'src' nor 'tests' directory found. Skipping Black formatting."; \
 	fi
 
 pyright:
 	echo "Checking python type usage"
-	uv run pyright 
+	pyright 
 
 test:
 	echo "Running unit tests"
-	uv run pytest
+	pytest
 
 generate:
 	echo "No code generation target defined"
