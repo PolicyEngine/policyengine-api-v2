@@ -32,19 +32,11 @@ jobs:
       uses: actions/checkout@v4
     - name: Install uv
       uses: astral-sh/setup-uv@v5
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: "3.13"
-    - name: Set up poetry
-      run: uv pip install poetry --system
-    #required to support python/typescript/etc. service client generation
-    - name: Set up JDK 11 for x64
-      uses: actions/setup-java@v4
-      with:
-        java-version: '11'
-        distribution: 'temurin'
-        architecture: x64
+      # Then create a uv venv 3.13 and activate it
+    - name: Create and activate uv venv
+      run: |
+        uv venv -p 3.13
+        echo "source .venv/bin/activate" >> $GITHUB_ENV
     - name: Build application
       run: make build
     - name: Run tests
