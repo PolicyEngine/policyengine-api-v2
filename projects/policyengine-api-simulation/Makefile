@@ -1,10 +1,13 @@
+# Define custom targets before including common.mk
+HAS_CUSTOM_GENERATE := 1
+HAS_CUSTOM_TEST := 1
+
 include ./makefile.env
 include ../../server_common.local.mk
 
 generate:
-	mkdir -p artifacts
-	cd src && python -m policyengine_api_simulation.generate_openapi > ../artifacts/openapi.json
+	cd src && python -m policyengine_api_simulation.generate_openapi
 	python ./generate_clients.py
 
 test:
-	echo "No tests to run"
+	$(Q)$(HELPER) subtask "Running tests" "echo 'No tests configured for simulation API'"

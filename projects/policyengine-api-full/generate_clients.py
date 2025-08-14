@@ -18,18 +18,10 @@ def generate_python_client():
     # Ensure output directory exists
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     
-    # Install build dependencies including openapi-python-client
-    print("Installing build dependencies...")
-    subprocess.run(
-        ["uv", "sync", "--extra", "build"],
-        check=True,
-        cwd=project_dir
-    )
-    
-    # Generate the client
+    # Generate the client (dependencies already installed by Makefile)
     print(f"Generating Python client from {spec_path}...")
     cmd = [
-        "uv", "run", "openapi-python-client",
+        "uv", "run", "--active", "openapi-python-client",
         "generate",
         "--path", str(spec_path),
         "--output-path", str(output_dir),

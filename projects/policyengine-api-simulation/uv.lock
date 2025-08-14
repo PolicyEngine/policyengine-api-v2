@@ -87,7 +87,7 @@ wheels = [
 
 [[package]]
 name = "blosc2"
-version = "3.6.1"
+version = "3.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "msgpack" },
@@ -98,13 +98,23 @@ dependencies = [
     { name = "py-cpuinfo", marker = "platform_machine != 'wasm32'" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/82/cb/ed9ee34a3835dcdee67927bcdc55ec3e912a9d08500612db05aebb885dd1/blosc2-3.6.1.tar.gz", hash = "sha256:0b6f05311fbee9e9dc23bd7f53a8690af3b60eef640a059f1eb624ca6699cc59", size = 3657993, upload-time = "2025-07-17T16:22:58.999Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/36/857c2711a8c965da932ea0ef2d46c0428af98e6d1a50df35bf902c290499/blosc2-3.7.0.tar.gz", hash = "sha256:c910b86048f8b8155d62289ced038d5b63f0883af8b8d19e0c9c05ac9319f54e", size = 3798878, upload-time = "2025-08-12T14:50:52.612Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/96/6a/cb3c693bd13050d9f68e180e9c5f2fa22060c1fcd04164eae4dd6a97c831/blosc2-3.6.1-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:47c4b5878795a4bd63f1c93c2bf286939a216e740227bcb18708654196972346", size = 4016932, upload-time = "2025-07-17T16:22:51.212Z" },
-    { url = "https://files.pythonhosted.org/packages/6d/a8/0ba60e4810af3d9daee1cc7f8b2a5f93da6b76e65e3e195b0a34a576bf06/blosc2-3.6.1-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:9c32b8ec2f878e77476c457cc57af57cb66e87a026850378d16659f543e1db2a", size = 3374697, upload-time = "2025-07-17T16:22:52.923Z" },
-    { url = "https://files.pythonhosted.org/packages/2b/2b/6df9bf29d698dab1f6ee63e96bcf689546e6875af3d0431b90ad2b491888/blosc2-3.6.1-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:9fc209348cbbedce1779ea4d7ce91b349e9298bfd32b92c274c3b5eb444dc206", size = 4287893, upload-time = "2025-07-17T16:22:54.345Z" },
-    { url = "https://files.pythonhosted.org/packages/eb/a6/6af387f01b3442e5c14f02cd05ce67e0232984cb4f34dab31e6e319c3ad8/blosc2-3.6.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:2332c14034a9f9f5739ec976af24f208677fe964fe1a196c9ae7603ba80ed886", size = 4426379, upload-time = "2025-07-17T16:22:55.692Z" },
-    { url = "https://files.pythonhosted.org/packages/87/64/34c1e5c3cd4ada2bebc13880715647cab660f8db85a57210dc4932021167/blosc2-3.6.1-cp313-cp313-win_amd64.whl", hash = "sha256:e440a600017592e37747f48592bfbc74baa848a74cf41513adf53287fd213015", size = 2218905, upload-time = "2025-07-17T16:22:57.169Z" },
+    { url = "https://files.pythonhosted.org/packages/87/43/32245c6c1a7ade416e6d2e06bf3b7ea71a2f5c0af3330adf79ff0641d838/blosc2-3.7.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:76fadcc7e0e660a55e03a00a283751e3b0878d89ddbeb6fe7e822d00617de1b9", size = 3954574, upload-time = "2025-08-12T14:50:27.451Z" },
+    { url = "https://files.pythonhosted.org/packages/87/ce/3a5e7fdbf755bd8f8ee351481acd5eae0f4b6bf8be1c6fd7bb48e5fe2de1/blosc2-3.7.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:0b04ff3a52a124274b2ebf2373e6bd80b442f687508467b23a17cafdd5b16488", size = 3421141, upload-time = "2025-08-12T14:50:28.739Z" },
+    { url = "https://files.pythonhosted.org/packages/65/7e/c8e832bdddc7b4792532e71c3ced2dc1448a913132ea8682faba988306b8/blosc2-3.7.0-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:d9d846251852dcb39306cc8b673fbebc7c642715387dc387ea0f718b4166beac", size = 4306897, upload-time = "2025-08-12T14:50:30.666Z" },
+    { url = "https://files.pythonhosted.org/packages/d6/47/1fbdf275472a4916b5049ed7c9e9c9947566f527c7104492dd3d640dea9f/blosc2-3.7.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:10aeb3aab5f3e5c97506cf13b2f1c76d9d7b2e02fb08ce9023864a6463c41d26", size = 4446430, upload-time = "2025-08-12T14:50:32.336Z" },
+    { url = "https://files.pythonhosted.org/packages/f0/12/7832f433e6598343161f05a1759a8e9dcea1e253ee50c631500b88c28647/blosc2-3.7.0-cp313-cp313-win_amd64.whl", hash = "sha256:4c5121113bbd90f5ae409189ce4810a46a0cf79d3b80d5e496b49e4bfeea795a", size = 2240429, upload-time = "2025-08-12T14:50:33.676Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/56/5d84833479026710b31dcd2b35efb7ae8b39444b303910fbecc013fe2f4e/blosc2-3.7.0-cp314-cp314-macosx_10_13_x86_64.whl", hash = "sha256:c8b209409ffcb513af7d867043f3e531aded26f3851a663793e5caa232407b48", size = 3955106, upload-time = "2025-08-12T14:50:35.538Z" },
+    { url = "https://files.pythonhosted.org/packages/08/db/236b81fd69a4112129a800e4ef8a97fd65b16247a521f41cbc7cd8b5891b/blosc2-3.7.0-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:9a031afd24e3360337e56cf83e5f41d54494ee30f45c80a4873809afe5f3388c", size = 3422683, upload-time = "2025-08-12T14:50:37.735Z" },
+    { url = "https://files.pythonhosted.org/packages/20/78/ffd03498dd779cb7f6b203551af3b345a5c9076a9d1b76bb03d0b20928e4/blosc2-3.7.0-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:9a92958d369f975a903e08ddf05c2bf20ae46b108cd467078d968d257ce3badc", size = 4312187, upload-time = "2025-08-12T14:50:39.094Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/04/b7a214271575604f45e444daf3b576c4b5ae3c74afe0b18f6a499f079437/blosc2-3.7.0-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:89e5774542d3323aa13e1ca4737fba05cba849d97e99a060cfe6d15cf6b2e419", size = 4445786, upload-time = "2025-08-12T14:50:40.488Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/04/40f39acc8e00ba7b6ad3f6aa7695f0f6d8629884cc4d869f0cf8ad658ffa/blosc2-3.7.0-cp314-cp314-win_amd64.whl", hash = "sha256:f9496a7643e52abfdadc062cbef6300ecc0ae02291077fb4036e638d038537e2", size = 2285032, upload-time = "2025-08-12T14:50:41.898Z" },
+    { url = "https://files.pythonhosted.org/packages/f3/9a/7b95b689b002f9a71ebf60afca601e4d63acc0343763488c47d00fd12141/blosc2-3.7.0-cp314-cp314t-macosx_10_13_x86_64.whl", hash = "sha256:e74390d033d9cb031373836d02671d6b8710d9529ea6c17a9edf1a43280bd934", size = 3973777, upload-time = "2025-08-12T14:50:43.448Z" },
+    { url = "https://files.pythonhosted.org/packages/f8/bd/c7ee60ce7f85b0420b7296fd1b596c1066263ab52d08a257a3a7be7c68c5/blosc2-3.7.0-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:d30d15153bff934cb508fea6e6c22de7e8629944b2781ca3d732cde1badd31e5", size = 3452853, upload-time = "2025-08-12T14:50:45.245Z" },
+    { url = "https://files.pythonhosted.org/packages/72/96/4b6ab38437cfd02c2696f3b4a2cb03ab4fdbf4443b9908d8a11c0a39f614/blosc2-3.7.0-cp314-cp314t-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:3c8a282c01a3482d2cb6d54df913a24ae5b4d83e25ff888b6e518a27b3b260c9", size = 4297851, upload-time = "2025-08-12T14:50:46.696Z" },
+    { url = "https://files.pythonhosted.org/packages/71/82/fb9ccdc5eeef68e0867ee64c3b07cc25052f600b50811bc7eeadade95ce1/blosc2-3.7.0-cp314-cp314t-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:22f39d9cf4184426adab0910c77c063efb7489ab2e3daa7165d6d631959a266d", size = 4434066, upload-time = "2025-08-12T14:50:49.722Z" },
+    { url = "https://files.pythonhosted.org/packages/56/f3/7978275eee5d596a4e772374752d07f85824b17ac75e6868ff73179f2945/blosc2-3.7.0-cp314-cp314t-win_amd64.whl", hash = "sha256:d2a06fd513910c25e02aed735bc6dc2c5a839e10543cfa5a81b412318ec8c665", size = 2331435, upload-time = "2025-08-12T14:50:51.277Z" },
 ]
 
 [[package]]
@@ -1554,7 +1564,7 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "0.6.0"
+version = "0.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "diskcache" },
@@ -1566,11 +1576,11 @@ dependencies = [
     { name = "policyengine-us" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ba/17/7bf9a4ca82e01ab6dcb94cbfe516789860a8d20ba05fec5c32d54837c72d/policyengine-0.6.0.tar.gz", hash = "sha256:fd0d724c30e3b76f1f08fd4f47faaf2e5f797c1475b8dad247ca112b2f342da3", size = 205170, upload-time = "2025-07-17T10:29:19.65Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b0/97/6e21ea2f22ae3ac667146fab2d5cff9fb4a481fa8abd53b394d1aef06cb2/policyengine-0.6.1.tar.gz", hash = "sha256:e647c09bb353b10bb4416267309df31dbac941b159e0615db7483249e276721b", size = 202869, upload-time = "2025-08-14T08:12:38.477Z" }
 
 [[package]]
 name = "policyengine-core"
-version = "3.19.4"
+version = "3.20.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dpath" },
@@ -1590,9 +1600,9 @@ dependencies = [
     { name = "standard-imghdr" },
     { name = "wheel" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/52/48/9cc189920e7d3f86f857ff098d9447e5625f3639ac31d19b50a23723be70/policyengine_core-3.19.4.tar.gz", hash = "sha256:1e482634ac37186aaa4e1ddff7f097488836f711c399d4dfafe4e7a7ac24776b", size = 159580, upload-time = "2025-07-28T09:18:43.427Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d3/d7/cd4ae165221b3d5630a5c95e6df0a10be06d461b6545552a5f4a11c40907/policyengine_core-3.20.0.tar.gz", hash = "sha256:10c428467c8629861986f356f7f13ff8bf23ec907961779cf9f6add63f147fdf", size = 159655, upload-time = "2025-08-12T15:54:35.437Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f3/ff/879621afd620388027e134ed5461c49a72cf85c519ab0455d736857975c5/policyengine_core-3.19.4-py3-none-any.whl", hash = "sha256:885c3b54de208f5a35518229a18caf0719bc5c39ffa2ac30ee7c953bb621d8a4", size = 220766, upload-time = "2025-07-28T09:18:41.848Z" },
+    { url = "https://files.pythonhosted.org/packages/01/47/9cd4a2cfd675c5267dc905b2f23313b37df734f94f65490ca083422db39f/policyengine_core-3.20.0-py3-none-any.whl", hash = "sha256:c802edf10059242f7c03b54f7e8c78703ae053defcfe4ec75c677ed0714c07a6", size = 220871, upload-time = "2025-08-12T15:54:33.799Z" },
 ]
 
 [[package]]
@@ -1676,21 +1686,21 @@ provides-extras = ["test", "build"]
 
 [[package]]
 name = "policyengine-uk"
-version = "2.45.4"
+version = "2.47.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "microdf-python" },
     { name = "policyengine-core" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6c/37/36c6eb474da70660132796691892bb04ec521cb4bbbc1637fbbc22bc3b4a/policyengine_uk-2.45.4.tar.gz", hash = "sha256:3ce5b46b207756c00373ab421b9b45360108ea1083ea2fd0e416841902e43639", size = 1032608, upload-time = "2025-08-04T14:25:22.035Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/15/ce/550e0fcbbee9e80f2cf562566cc4f9d135784e22c0d7d66bab577fe2278e/policyengine_uk-2.47.3.tar.gz", hash = "sha256:7a6ba2e25d02ba290dcf06551a74c03069d927c62cd7ac6eaa18ab982c3426db", size = 1045248, upload-time = "2025-08-13T08:16:14.317Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/76/4c9c39dd0d7225226172b7daf069c9db60d6fdc0f87ecfb33a6cfc2f9475/policyengine_uk-2.45.4-py3-none-any.whl", hash = "sha256:246209712fce64ea311d204f05abfc38ddb7d8ac9b7fc3620801815caafcb778", size = 1586328, upload-time = "2025-08-04T14:25:20.233Z" },
+    { url = "https://files.pythonhosted.org/packages/4c/41/e06310f2e9c383d7f20d51efe9347d3d3b0bb3289dd2824e435b7bcb8607/policyengine_uk-2.47.3-py3-none-any.whl", hash = "sha256:39a7c00de49c3c2c914814e19adda0733ad617a5a254f8a779dbdb1349eee40c", size = 1601750, upload-time = "2025-08-13T08:16:12.892Z" },
 ]
 
 [[package]]
 name = "policyengine-us"
-version = "1.369.0"
+version = "1.370.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "microdf-python" },
@@ -1698,9 +1708,9 @@ dependencies = [
     { name = "policyengine-us-data" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6b/58/0f2bc4e69b86f7da21b45c9652635d6111c247017eadb03099fdabdb0078/policyengine_us-1.369.0.tar.gz", hash = "sha256:030ca8383e89bab58b40e83b69c0803b092c2c3330bfacc259799494392f3a61", size = 7926917, upload-time = "2025-08-11T01:54:16.24Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6c/e2/181946bae2696d6d32100d32dbf0ad2bcbd30a83e257b5383f1b72dea943/policyengine_us-1.370.1.tar.gz", hash = "sha256:163806dea383e36921dbdb570d3b891491a9e679ac1731e263faf4c7e9096a45", size = 7927274, upload-time = "2025-08-13T01:11:36.217Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/97/bc/4290f53beafcaec26e0966cbf0723d2218c2bc9c5b78977d54b3d20bc68a/policyengine_us-1.369.0-py3-none-any.whl", hash = "sha256:5edf38f1ba945f2ad11b6306ea1156030b1156650204d5b50ff15b2546351e92", size = 5819555, upload-time = "2025-08-11T01:54:12.34Z" },
+    { url = "https://files.pythonhosted.org/packages/2d/c2/abe2203ae99c2491e1d42aa1c4100891ac92d06a5d0cf46063669d9f3369/policyengine_us-1.370.1-py3-none-any.whl", hash = "sha256:6240a6d4ce4280d3b328ce16015fe20770b86c026836f42f9f1289e8ee30b15b", size = 5820040, upload-time = "2025-08-13T01:11:31.645Z" },
 ]
 
 [[package]]
