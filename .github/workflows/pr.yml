@@ -5,10 +5,9 @@ on:
 
 jobs:
   build:
-    name: Build and test
+    name: Test
     # Any runner supporting Node 20 or newer
     runs-on: ubuntu-latest
-    environment: beta
 
     # Add "id-token" with the intended permissions.
     permissions:
