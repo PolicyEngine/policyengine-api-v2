@@ -36,8 +36,11 @@ jobs:
     - name: Create and activate uv venv
       run: |
         uv venv -p 3.13
-        echo "source .venv/bin/activate" >> $GITHUB_ENV
     - name: Build application
-      run: make build
+      run: |
+        . .venv/bin/activate
+        make build
     - name: Run tests
-      run: make test
+      run: |
+        . .venv/bin/activate
+        make test
