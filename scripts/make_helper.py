@@ -144,6 +144,20 @@ if __name__ == "__main__":
         items = sys.argv[2:]
         list_items(items)
     
+    elif command == "stream":
+        # Run a command with streaming output
+        if len(sys.argv) < 4:
+            console.print("[red]Usage: make_helper.py stream <name> <command>")
+            sys.exit(1)
+        name = sys.argv[2]
+        cmd = " ".join(sys.argv[3:])
+        console.print(f"[cyan]▶[/cyan] {name}")
+        # Run without capturing output to allow streaming
+        result = subprocess.run(cmd, shell=True)
+        if result.returncode != 0:
+            console.print(f"[red]✗[/red] {name} failed")
+            sys.exit(result.returncode)
+    
     elif command == "progress":
         # Run command with progress bar for multiple subdirectories
         if len(sys.argv) < 4:
