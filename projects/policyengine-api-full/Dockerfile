@@ -12,6 +12,9 @@ ENV ENVIRONMENT="production" \
 
 WORKDIR /app
 
+# Copy LICENSE file to the root where it's expected
+COPY LICENSE ./LICENSE
+
 # Copy the entire project structure for dependencies
 COPY libs/policyengine-fastapi ./libs/policyengine-fastapi/
 COPY projects/policyengine-api-full ./projects/policyengine-api-full/
@@ -23,5 +26,5 @@ RUN uv sync --frozen --no-dev
 
 EXPOSE 8080
 
-# Run with uv
-CMD ["uv", "run", "fastapi", "run", "src/policyengine_api_full/main.py", "--port", "8080"]
+# Run with uvicorn
+CMD ["uv", "run", "uvicorn", "policyengine_api_full.main:app", "--host", "0.0.0.0", "--port", "8080"]

@@ -1,5 +1,5 @@
 LIBDIRS := libs/policyengine-fastapi 
-SERVICEDIRS := projects/policyengine-api-full projects/policyengine-api-simulation projects/policyengine-api-tagger
+SERVICEDIRS := projects/policyengine-api-full projects/policyengine-api-simulation projects/policyengine-api-tagger projects/policyengine-household-api
 SUBDIRS := $(LIBDIRS) $(SERVICEDIRS)
 
 # Helper for pretty output
@@ -99,28 +99,54 @@ integ-test:
 
 docker-build:
 	$(Q)$(HELPER) section "Building Docker images"
-	$(Q)$(HELPER) task "Building policyengine-api-full image" "docker build -f projects/policyengine-api-full/Dockerfile -t policyengine-api-full:test ."
-	$(Q)$(HELPER) task "Building policyengine-api-simulation image" "docker build -f projects/policyengine-api-simulation/Dockerfile -t policyengine-api-simulation:test ."
-	$(Q)$(HELPER) task "Building policyengine-api-tagger image" "docker build -f projects/policyengine-api-tagger/Dockerfile -t policyengine-api-tagger:test ."
+	$(Q)$(HELPER) stream "Building policyengine-api-full image" "docker build -f projects/policyengine-api-full/Dockerfile -t policyengine-api-full:test ."
+	$(Q)$(HELPER) stream "Building policyengine-api-simulation image" "docker build -f projects/policyengine-api-simulation/Dockerfile -t policyengine-api-simulation:test ."
+	$(Q)$(HELPER) stream "Building policyengine-api-tagger image" "docker build -f projects/policyengine-api-tagger/Dockerfile -t policyengine-api-tagger:test ."
+	$(Q)$(HELPER) stream "Building policyengine-household-api image" "docker build -f projects/policyengine-household-api/Dockerfile -t policyengine-household-api:test ."
 	$(Q)$(HELPER) complete "Docker images built"
 
 docker-test:
 	$(Q)$(HELPER) section "Testing Docker images"
-	$(Q)$(HELPER) task "Testing policyengine-api-full startup" "\
-		docker run --rm -d --name test-api-full -p 8081:8080 policyengine-api-full:test && \
-		sleep 10 && \
+	$(Q)$(HELPER) stream "Testing policyengine-api-full startup" "\
+		echo '→ Starting container on port 8081...' && \
+		docker run -p 8081:8080 policyengine-api-full:test && \
+		echo '→ Waiting for startup (15 seconds)...' && \
+		sleep 15 && \
+		echo '→ Checking health endpoint...' && \
 		curl -f http://localhost:8081/health && \
-		docker stop test-api-full"
-	$(Q)$(HELPER) task "Testing policyengine-api-simulation startup" "\
-		docker run --rm -d --name test-api-sim -p 8082:8080 policyengine-api-simulation:test && \
-		sleep 10 && \
+		echo && echo '→ Stopping container...' && \
+		docker stop test-api-full && \
+		echo '✓ policyengine-api-full test passed'"
+	$(Q)$(HELPER) stream "Testing policyengine-api-simulation startup" "\
+		echo '→ Starting container on port 8082...' && \
+		docker run -p 8082:8080 policyengine-api-simulation:test && \
+		echo '→ Waiting for startup (15 seconds)...' && \
+		sleep 15 && \
+		echo '→ Checking health endpoint...' && \
 		curl -f http://localhost:8082/health && \
-		docker stop test-api-sim"
-	$(Q)$(HELPER) task "Testing policyengine-api-tagger startup" "\
-		docker run --rm -d --name test-api-tag -p 8083:8080 policyengine-api-tagger:test && \
-		sleep 10 && \
+		echo && echo '→ Stopping container...' && \
+		docker stop test-api-sim && \
+		echo '✓ policyengine-api-simulation test passed'"
+	$(Q)$(HELPER) stream "Testing policyengine-api-tagger startup" "\
+		echo '→ Starting container on port 8083...' && \
+		docker run -p 8083:8080 policyengine-api-tagger:test && \
+		echo '→ Waiting for startup (15 seconds)...' && \
+		sleep 15 && \
+		echo '→ Checking health endpoint...' && \
 		curl -f http://localhost:8083/health && \
-		docker stop test-api-tag"
+		echo && echo '→ Stopping container...' && \
+		docker stop test-api-tag && \
+		echo '✓ policyengine-api-tagger test passed'"
+	$(Q)$(HELPER) stream "Testing policyengine-household-api startup" "\
+		echo '→ Starting container on port 8084...' && \
+		docker run -p 8084:8080 policyengine-household-api:test && \
+		echo '→ Waiting for startup (15 seconds)...' && \
+		sleep 15 && \
+		echo '→ Checking health endpoint...' && \
+		curl -f http://localhost:8084/health && \
+		echo && echo '→ Stopping container...' && \
+		docker stop test-api-household && \
+		echo '✓ policyengine-household-api test passed'"
 	$(Q)$(HELPER) complete "Docker tests completed"
 
 docker-check: docker-build docker-test
