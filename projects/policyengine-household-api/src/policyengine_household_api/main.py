@@ -53,7 +53,7 @@ resource = Resource.create(
 
 match (get_settings().environment):
     case Environment.DESKTOP:
-        pass# export_ot_to_console(resource)
+        pass  # export_ot_to_console(resource)
     case Environment.PRODUCTION:
         export_ot_to_gcp(resource)
     case value:

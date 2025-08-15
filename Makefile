@@ -11,6 +11,9 @@ ifeq ($(V),1)
     Q =
 endif
 
+# Include common.mk
+include common.mk
+
 build:
 	$(Q)$(HELPER) section "Building all projects"
 	$(Q)set -e; \
