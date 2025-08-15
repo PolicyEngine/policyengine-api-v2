@@ -1,48 +1,57 @@
 -include ../../terraform/.bootstrap_settings/project.env
 
+# Helper for pretty output
+HELPER := python ../../scripts/make_helper.py
+
+# Silent commands by default, use V=1 for verbose
+Q = @
+ifeq ($(V),1)
+    Q =
+endif
+
 build: remove_artifacts install checkformat pyright generate test 
 
 remove_artifacts:
-	echo "Removing artifacts directory"
-	rm -rf artifacts
+	$(Q)$(HELPER) subtask "Removing artifacts" "rm -rf artifacts"
 
 install:
-	echo "Downloading dependencies including test and build"
-	uv sync --extra test --extra build
+	$(Q)$(HELPER) subtask "Installing dependencies" "uv sync --active --extra test --extra build"
 
 checkformat:
-	echo "Checking python code formatting"
-	@dirs=""; \
+	$(Q)dirs=""; \
 	[ -d "src" ] && dirs="$$dirs src"; \
 	[ -d "tests" ] && dirs="$$dirs tests"; \
 	if [ -n "$$dirs" ]; then \
-		uv run black --check $$dirs; \
+		$(HELPER) subtask "Checking code format" "black --check $$dirs"; \
 	else \
-		echo "Neither 'src' nor 'tests' directory found. Skipping Black formatting."; \
+		$(HELPER) subtask "Checking code format" "echo 'No source directories found'"; \
 	fi
 
 format:
-	echo "Updating python code formatting"
-	@dirs=""; \
+	$(Q)dirs=""; \
 	[ -d "src" ] && dirs="$$dirs src"; \
 	[ -d "tests" ] && dirs="$$dirs tests"; \
 	if [ -n "$$dirs" ]; then \
-		echo "Running Black on:$$dirs"; \
-		uv run black $$dirs; \
+		$(HELPER) subtask "Formatting code" "black $$dirs"; \
 	else \
-		echo "Neither 'src' nor 'tests' directory found. Skipping Black formatting."; \
+		$(HELPER) subtask "Formatting code" "echo 'No source directories found'"; \
 	fi
 
+# Default targets that can be overridden - defined only if not already defined
+ifndef HAS_CUSTOM_PYRIGHT
 pyright:
-	echo "Checking python type usage"
-	uv run pyright 
+	$(Q)$(HELPER) subtask "Type checking" "pyright"
+endif
 
+ifndef HAS_CUSTOM_TEST
 test:
-	echo "Running unit tests"
-	uv run pytest
+	$(Q)$(HELPER) subtask "Running tests" "pytest"
+endif
 
+ifndef HAS_CUSTOM_GENERATE
 generate:
-	echo "No code generation target defined"
+	$(Q)$(HELPER) subtask "Code generation" "echo 'No generation target defined'"
+endif
 
 update:
-	uv lock --upgrade
+	$(Q)$(HELPER) subtask "Updating lockfile" "uv lock --upgrade"

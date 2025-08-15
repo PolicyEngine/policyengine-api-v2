@@ -3,25 +3,11 @@ name: Pull request
 on:
   pull_request:
 
-env:
-  TF_BACKEND_bucket: ${{ vars.PROJECT_ID }}-state
-  #TF_VAR_whatever will be picked up as terraform variables.
-  TF_VAR_org_id: ${{ secrets.ORG_ID }}
-  TF_VAR_billing_account: ${{ secrets.BILLING_ACCOUNT }}
-  TF_VAR_github_repo_owner_id: ${{ github.repository_owner_id }}
-  TF_VAR_github_repo: ${{ github.repository }}
-  TF_VAR_project_id: ${{ vars.PROJECT_ID }}
-  TF_VAR_region: ${{ vars.REGION }}
-  TF_VAR_full_container_tag: ${{ github.sha }}
-  TF_VAR_simulation_container_tag: ${{ github.sha }}
-  BUILD_TAG: ${{ github.run_id }}.${{ github.run_number }}.${{ github.run_attempt }}
-  COMMIT_TAG: ${{ github.sha }}
 jobs:
   build:
-    name: Build and test
+    name: Test
     # Any runner supporting Node 20 or newer
     runs-on: ubuntu-latest
-    environment: beta
 
     # Add "id-token" with the intended permissions.
     permissions:
@@ -32,20 +18,16 @@ jobs:
       uses: actions/checkout@v4
     - name: Install uv
       uses: astral-sh/setup-uv@v5
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: "3.13"
-    - name: Set up poetry
-      run: uv pip install poetry --system
-    #required to support python/typescript/etc. service client generation
-    - name: Set up JDK 11 for x64
-      uses: actions/setup-java@v4
-      with:
-        java-version: '11'
-        distribution: 'temurin'
-        architecture: x64
+      # Then create a uv venv 3.13 and activate it
+    - name: Create and activate uv venv
+      run: |
+        uv venv -p 3.13
+        uv pip install rich
     - name: Build application
-      run: make build
+      run: |
+        . .venv/bin/activate
+        make build
     - name: Run tests
-      run: make test
+      run: |
+        . .venv/bin/activate
+        make test

@@ -1,4 +1,4 @@
-Monorepo containing all the libraries, applications, terraform and github actions required to build/test/deploy/release the PolicyEngine api V2.
+Monorepo containing all the libraries, applications, terraform and github actions required to build/test/deploy/release the PolicyEngine api V2. 
 
 # Local Development Quick Start
 * [install poetry](https://python-poetry.org/docs/#installation)

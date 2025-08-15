@@ -2,68 +2,88 @@ LIBDIRS := libs/policyengine-fastapi
 SERVICEDIRS := projects/policyengine-api-full projects/policyengine-api-simulation projects/policyengine-api-tagger
 SUBDIRS := $(LIBDIRS) $(SERVICEDIRS)
 
+# Helper for pretty output
+HELPER := python3 scripts/make_helper.py
+
+# Silent commands by default, use V=1 for verbose
+Q = @
+ifeq ($(V),1)
+    Q =
+endif
+
 build:
-	set -e; \
+	$(Q)$(HELPER) section "Building all projects"
+	$(Q)set -e; \
 	for dir in $(SUBDIRS); do \
-		$(MAKE) -C $$dir build; \
+		base=$$(basename $$dir); \
+		$(HELPER) task "Building $$base" "$(MAKE) -C $$dir build"; \
 	done
+	$(Q)$(HELPER) complete "Build completed"
 
 update:
-	set -e; \
+	$(Q)$(HELPER) section "Updating dependencies"
+	$(Q)set -e; \
 	for dir in $(SUBDIRS); do \
-		$(MAKE) -C $$dir update; \
+		base=$$(basename $$dir); \
+		$(HELPER) task "Updating $$base" "$(MAKE) -C $$dir update"; \
 	done
+	$(Q)$(HELPER) complete "Dependencies updated"
 
 test:
-	for dir in $(SUBDIRS); do \
-		$(MAKE) -C $$dir test; \
+	$(Q)$(HELPER) section "Running tests"
+	$(Q)for dir in $(SUBDIRS); do \
+		base=$$(basename $$dir); \
+		$(HELPER) task "Testing $$base" "$(MAKE) -C $$dir test"; \
 	done
+	$(Q)$(HELPER) complete "Tests completed"
 
 dev-api-full:
-	echo "Starting API (full) in dev mode"
-	cd projects/policyengine-api-full && make dev
+	$(Q)$(HELPER) task "Starting API (full) in dev mode" "cd projects/policyengine-api-full && make dev"
 
 dev-api-simulation:
-	echo "Starting API (simulation) in dev mode"
-	cd projects/policyengine-api-simulation && make dev
+	$(Q)$(HELPER) task "Starting API (simulation) in dev mode" "cd projects/policyengine-api-simulation && make dev"
 
 dev-api-household:
-	echo "Starting API (household) in dev mode"
-	cd projects/policyengine-household-api && make dev
+	$(Q)$(HELPER) task "Starting API (household) in dev mode" "cd projects/policyengine-household-api && make dev"
 
 dev-api-tagger:
-	echo "Starting API (tagger) in dev mode"
-	cd projects/policyengine-tagger-api && make dev
+	$(Q)$(HELPER) task "Starting API (tagger) in dev mode" "cd projects/policyengine-tagger-api && make dev"
 
 dev:
-	echo "Starting APIs (full+simulation) in dev mode"
-	make dev-api-full & make dev-api-simulation
+	$(Q)$(HELPER) section "Starting development servers"
+	$(Q)$(HELPER) task "Starting APIs (full+simulation)" "make dev-api-full & make dev-api-simulation"
 
 bootstrap:
-	cd terraform/project-policyengine-api && make bootstrap
+	$(Q)$(HELPER) task "Bootstrapping terraform" "cd terraform/project-policyengine-api && make bootstrap"
 
 attach:
-	$(MAKE) -C terraform/project-policyengine-api attach
-	$(MAKE) -C terraform/infra-policyengine-api attach
+	$(Q)$(HELPER) section "Attaching terraform state"
+	$(Q)$(HELPER) task "Attaching project state" "$(MAKE) -C terraform/project-policyengine-api attach"
+	$(Q)$(HELPER) task "Attaching infrastructure state" "$(MAKE) -C terraform/infra-policyengine-api attach"
+	$(Q)$(HELPER) complete "Terraform state attached"
 
 detach:
-	$(MAKE) -C terraform/project-policyengine-api detach
-	$(MAKE) -C terraform/infra-policyengine-api detach
+	$(Q)$(HELPER) section "Detaching terraform state"
+	$(Q)$(HELPER) task "Detaching project state" "$(MAKE) -C terraform/project-policyengine-api detach"
+	$(Q)$(HELPER) task "Detaching infrastructure state" "$(MAKE) -C terraform/infra-policyengine-api detach"
+	$(Q)$(HELPER) complete "Terraform state detached"
 
 deploy-infra: terraform/.bootstrap_settings
-	echo "Publishing API images"
-	cd projects/policyengine-api-full && make deploy
-	cd projects/policyengine-api-simulation && make deploy
-	cd projects/policyengine-api-tagger && make deploy
-	echo "Deploying infrastructure"
-	cd terraform/infra-policyengine-api && make deploy
+	$(Q)$(HELPER) section "Deploying infrastructure"
+	$(Q)$(HELPER) task "Publishing API (full) image" "cd projects/policyengine-api-full && make deploy"
+	$(Q)$(HELPER) task "Publishing API (simulation) image" "cd projects/policyengine-api-simulation && make deploy"
+	$(Q)$(HELPER) task "Publishing API (tagger) image" "cd projects/policyengine-api-tagger && make deploy"
+	$(Q)$(HELPER) task "Deploying terraform infrastructure" "cd terraform/infra-policyengine-api && make deploy"
+	$(Q)$(HELPER) complete "Infrastructure deployed"
 
 deploy-project: terraform/.bootstrap_settings
-	echo "Deploying project"
-	cd terraform/project-policyengine-api && make deploy
+	$(Q)$(HELPER) task "Deploying project configuration" "cd terraform/project-policyengine-api && make deploy"
 
-deploy: deploy-project deploy-infra
+deploy: 
+	$(Q)$(HELPER) section "Full deployment"
+	$(Q)$(MAKE) deploy-project
+	$(Q)$(MAKE) deploy-infra
+	$(Q)$(HELPER) complete "Deployment completed"
 
 integ-test: 
-	echo "Running integration tests"
-	$(MAKE) -C projects/policyengine-apis-integ
+	$(Q)$(HELPER) task "Running integration tests" "$(MAKE) -C projects/policyengine-apis-integ"
