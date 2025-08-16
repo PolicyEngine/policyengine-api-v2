@@ -16,7 +16,10 @@ from opentelemetry.sdk.resources import (
 )
 from policyengine_api.simulation_api import initialize
 from policyengine_api.fastapi import ping
-from policyengine_api.fastapi.health import HealthRegistry, HealthSystemReporter
+from policyengine_api.fastapi.health import (
+    HealthRegistry,
+    HealthSystemReporter,
+)
 import logging
 
 """
