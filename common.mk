@@ -1,5 +1,9 @@
 -include ../../terraform/.bootstrap_settings/project.env
 
+
+# Ensure rich is installed before using make_helper
+ENSURE_RICH := $(shell python ../../scripts/ensure_rich.py 2>&1)
+
 # Helper for pretty output
 HELPER := python ../../scripts/make_helper.py
 
