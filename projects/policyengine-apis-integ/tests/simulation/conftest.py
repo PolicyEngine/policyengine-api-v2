@@ -20,11 +20,6 @@ def client() -> Client:
     timeout = httpx.Timeout(timeout=settings.timeout_in_millis / 1000)
     if settings.access_token:
         return AuthenticatedClient(
-            base_url=settings.base_url,
-            token=settings.access_token,
-            timeout=timeout
+            base_url=settings.base_url, token=settings.access_token, timeout=timeout
         )
-    return Client(
-        base_url=settings.base_url,
-        timeout=timeout
-    )
+    return Client(base_url=settings.base_url, timeout=timeout)

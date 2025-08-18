@@ -12,11 +12,12 @@ from rich import box
 
 console = Console()
 
+
 def get_indent_prefix(indent_level, is_last_line=False):
     """Get the tree-style prefix for the current indent level."""
     if indent_level == 0:
         return ""
-    
+
     prefix = ""
     for i in range(indent_level):
         if i < indent_level - 1:
@@ -24,6 +25,7 @@ def get_indent_prefix(indent_level, is_last_line=False):
         else:
             prefix += "├─" if not is_last_line else "└─"
     return prefix
+
 
 def get_continuing_prefix(indent_level):
     """Get the continuing tree line prefix for multi-line output."""
@@ -35,10 +37,10 @@ def get_continuing_prefix(indent_level):
 def run_task(name, cmd, show_output=False, allow_failure=False):
     """Run a task with a nice spinner and status indicator."""
     # Get current indent level from environment
-    indent_level = int(os.environ.get('MAKE_INDENT_LEVEL', '0'))
+    indent_level = int(os.environ.get("MAKE_INDENT_LEVEL", "0"))
     prefix = get_indent_prefix(indent_level)
     continuing = get_continuing_prefix(indent_level)
-    
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -49,8 +51,8 @@ def run_task(name, cmd, show_output=False, allow_failure=False):
 
         # Pass incremented indent level to child processes
         new_env = os.environ.copy()
-        new_env['MAKE_INDENT_LEVEL'] = str(indent_level + 1)
-        
+        new_env["MAKE_INDENT_LEVEL"] = str(indent_level + 1)
+
         if show_output:
             result = subprocess.run(cmd, shell=True, text=True, env=new_env)
         else:
@@ -70,7 +72,9 @@ def run_task(name, cmd, show_output=False, allow_failure=False):
                     console.print(f"{continuing}  {line}", style="dim")
         else:
             if allow_failure:
-                console.print(f"{prefix}[yellow]⚠[/yellow] {name} (non-critical failure)")
+                console.print(
+                    f"{prefix}[yellow]⚠[/yellow] {name} (non-critical failure)"
+                )
             else:
                 console.print(f"{prefix}[red]✗[/red] {name}")
                 # Show full output on error, not in a panel to avoid truncation
@@ -86,14 +90,16 @@ def run_task(name, cmd, show_output=False, allow_failure=False):
 def run_subtask(name, cmd):
     """Run a subtask with indented output."""
     # Get current indent level from environment
-    indent_level = int(os.environ.get('MAKE_INDENT_LEVEL', '0')) + 1  # Subtasks get extra level
+    indent_level = (
+        int(os.environ.get("MAKE_INDENT_LEVEL", "0")) + 1
+    )  # Subtasks get extra level
     prefix = get_indent_prefix(indent_level)
     continuing = get_continuing_prefix(indent_level)
-    
+
     # Pass incremented indent level to child processes
     new_env = os.environ.copy()
-    new_env['MAKE_INDENT_LEVEL'] = str(indent_level)
-    
+    new_env["MAKE_INDENT_LEVEL"] = str(indent_level)
+
     result = subprocess.run(
         cmd,
         shell=True,
@@ -119,9 +125,9 @@ def run_subtask(name, cmd):
 def section_header(title):
     """Print a nice section header."""
     # Get current indent level from environment
-    indent_level = int(os.environ.get('MAKE_INDENT_LEVEL', '0'))
+    indent_level = int(os.environ.get("MAKE_INDENT_LEVEL", "0"))
     prefix = get_continuing_prefix(indent_level)
-    
+
     console.print()
     if indent_level > 0:
         # For nested sections, use a simpler format with tree line
@@ -206,13 +212,15 @@ if __name__ == "__main__":
     elif command == "stream":
         # Run a command with streaming output
         if len(sys.argv) < 4:
-            console.print("[red]Usage: make_helper.py stream <name> <command> [indent_level]")
+            console.print(
+                "[red]Usage: make_helper.py stream <name> <command> [indent_level]"
+            )
             sys.exit(1)
         name = sys.argv[2]
-        
+
         # Check for indent level from environment or arguments
-        env_indent = int(os.environ.get('MAKE_INDENT_LEVEL', '0'))
-        
+        env_indent = int(os.environ.get("MAKE_INDENT_LEVEL", "0"))
+
         # Check if there's an indent level specified in arguments
         if len(sys.argv) > 4 and sys.argv[-1].isdigit():
             indent_level = int(sys.argv[-1])
@@ -220,7 +228,7 @@ if __name__ == "__main__":
         else:
             indent_level = env_indent
             cmd = " ".join(sys.argv[3:])
-        
+
         # Apply tree-style prefixes
         prefix = get_indent_prefix(indent_level)
         # For stream output, we want to show a tree line connecting to the parent
@@ -229,44 +237,44 @@ if __name__ == "__main__":
             continuing = "│ "  # Always show a tree line for streamed output
         else:
             continuing = get_continuing_prefix(indent_level)
-        
+
         console.print(f"{prefix}[cyan]▶[/cyan] {name}")
-        
+
         # Set environment variable for nested calls
         new_env = os.environ.copy()
-        new_env['MAKE_INDENT_LEVEL'] = str(indent_level + 1)
-        
+        new_env["MAKE_INDENT_LEVEL"] = str(indent_level + 1)
+
         # Always use Popen to process output line by line with proper indentation
         process = subprocess.Popen(
-            cmd, 
-            shell=True, 
-            stdout=subprocess.PIPE, 
+            cmd,
+            shell=True,
+            stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
             universal_newlines=True,
-            env=new_env
+            env=new_env,
         )
-        
+
         # Process output line by line with tree continuation
-        for line in iter(process.stdout.readline, ''):
+        for line in iter(process.stdout.readline, ""):
             if line:
                 # Strip trailing newline but keep other whitespace
-                line = line.rstrip('\n\r')
+                line = line.rstrip("\n\r")
                 if line:  # Only print non-empty lines
                     # Handle special cases like Docker's progress output
-                    if line.startswith('#'):
+                    if line.startswith("#"):
                         # Docker build steps - add special formatting
                         console.print(f"{continuing}[dim] {line}[/dim]")
-                    elif line.startswith('=>') or line.startswith(' =>'):
+                    elif line.startswith("=>") or line.startswith(" =>"):
                         # Docker layer output
                         console.print(f"{continuing}[cyan] {line}[/cyan]")
                     else:
                         console.print(f"{continuing} {line}")
-        
+
         process.wait()
         result_code = process.returncode
-            
+
         if result_code != 0:
             console.print(f"{prefix}[red]✗[/red] {name} failed")
             sys.exit(result_code)

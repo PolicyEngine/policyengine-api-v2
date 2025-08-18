@@ -1,6 +1,13 @@
 from policyengine_api_simulation_client import Client
-from policyengine_api_simulation_client.api.default import simulate_simulate_economy_comparison_post
-from policyengine_api_simulation_client.models import SimulationOptions, ParametricReform, SimulationOptionsCountry, SimulationOptionsScope
+from policyengine_api_simulation_client.api.default import (
+    simulate_simulate_economy_comparison_post,
+)
+from policyengine_api_simulation_client.models import (
+    SimulationOptions,
+    ParametricReform,
+    SimulationOptionsCountry,
+    SimulationOptionsScope,
+)
 from policyengine_api_simulation_client.errors import UnexpectedStatus
 import backoff
 import httpx
@@ -26,4 +33,6 @@ def test_calculation(client: Client):
         subsample=200,  # reduce the number of households to speed things up.
         data="gs://policyengine-us-data/cps_2023.h5",  # force the service to use google storage (policyengine.py defaults to huggingface)
     )
-    response = simulate_simulate_economy_comparison_post.sync(client=client, body=options)
+    response = simulate_simulate_economy_comparison_post.sync(
+        client=client, body=options
+    )
