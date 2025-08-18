@@ -85,12 +85,8 @@ jobs:
       id-token: "write"
 
     steps:
-    - name: checkout repo
+    - name: Checkout repo
       uses: actions/checkout@v4
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: "3.13"
     - name: Install uv
       uses: astral-sh/setup-uv@v5
     - name: Create uv venv
@@ -102,7 +98,7 @@ jobs:
       with:
         workload_identity_provider: "${{ vars._GITHUB_IDENTITY_POOL_PROVIDER_NAME }}"
         service_account: "tester@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com"
-    - name: Auth as tester SA in GCP for full api
+    - name: Auth as tester SA in GCP for full API
       id: get-full-id-token
       uses: "google-github-actions/auth@v2"
       with: 
@@ -111,7 +107,7 @@ jobs:
         token_format: "id_token"
         id_token_audience: ${{ needs.deploy.outputs.full_api_url }}
         id_token_include_email: true
-    - name: Auth as tester SA in GCP for simulation api
+    - name: Auth as tester SA in GCP for simulation API
       id: get-simulation-id-token
       uses: "google-github-actions/auth@v2"
       with:
@@ -120,9 +116,9 @@ jobs:
         token_format: "id_token"
         id_token_audience: ${{ needs.deploy.outputs.simulation_api_url }}
         id_token_include_email: true
-    - name: Mask id token to prevent accidental leak
+    - name: Mask ID token to prevent accidental leak
       run: echo "::add-mask::${{steps.get-id-token.outputs.id_token}}"
-    - name: run integ tests against deployed API
+    - name: Run integration tests against deployed API
       run: |
         . .venv/bin/activate
         make -f Makefile.deploy integ-test  FULL_API_ACCESS_TOKEN=${{steps.get-full-id-token.outputs.id_token}} FULL_API_URL=${{needs.deploy.outputs.full_api_url }} SIMULATION_API_ACCESS_TOKEN=${{steps.get-simulation-id-token.outputs.id_token}} SIMULATION_API_URL=${{needs.deploy.outputs.simulation_api_url}}
