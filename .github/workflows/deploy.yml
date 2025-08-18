@@ -31,7 +31,7 @@ jobs:
     secrets: inherit
   deploy_prod:
     name: Deploy production
-    needs: [build_prod]
+    needs: [build_prod, deploy_beta]
     uses: ./.github/workflows/gcp-deploy.reusable.yml
     with:
       environment: prod
