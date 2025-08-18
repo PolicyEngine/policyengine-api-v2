@@ -31,7 +31,7 @@ def test_calculation(client: Client):
             }
         ),
         subsample=200,  # reduce the number of households to speed things up.
-        data="gs://policyengine-us-data/cps_2023.h5",  # force the service to use google storage (policyengine.py defaults to huggingface)
+        data="gs://policyengine-us-data/enhanced_cps_2024.h5",  # force the service to use google storage (policyengine.py defaults to huggingface)
     )
     response = simulate_simulate_economy_comparison_post.sync(
         client=client, body=options
