@@ -15,4 +15,4 @@ deploy:
 
 dev:
 	echo "Running ${SERVICE_NAME} dev instance"
-	cd src && uvicorn ${MODULE_NAME}:app --reload --port ${DEV_PORT} --workers ${WORKER_COUNT}
+	cd src && uv run uvicorn ${MODULE_NAME}:app --reload --port ${DEV_PORT} --workers ${WORKER_COUNT}
