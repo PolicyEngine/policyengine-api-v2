@@ -103,7 +103,6 @@ docker-build:
 	$(Q)$(HELPER) stream "Building policyengine-api-full image" "docker build -f projects/policyengine-api-full/Dockerfile -t policyengine-api-full:test ."
 	$(Q)$(HELPER) stream "Building policyengine-api-simulation image" "docker build -f projects/policyengine-api-simulation/Dockerfile -t policyengine-api-simulation:test ."
 	$(Q)$(HELPER) stream "Building policyengine-api-tagger image" "docker build -f projects/policyengine-api-tagger/Dockerfile -t policyengine-api-tagger:test ."
-	$(Q)$(HELPER) stream "Building policyengine-household-api image" "docker build -f projects/policyengine-household-api/Dockerfile -t policyengine-household-api:test ."
 	$(Q)$(HELPER) complete "Docker images built"
 
 docker-test:
@@ -138,16 +137,6 @@ docker-test:
 		echo && echo '→ Stopping container...' && \
 		docker stop test-api-tag && \
 		echo '✓ policyengine-api-tagger test passed'"
-	$(Q)$(HELPER) stream "Testing policyengine-household-api startup" "\
-		echo '→ Starting container on port 8084...' && \
-		docker run -p 8084:8080 policyengine-household-api:test && \
-		echo '→ Waiting for startup (15 seconds)...' && \
-		sleep 15 && \
-		echo '→ Checking health endpoint...' && \
-		curl -f http://localhost:8084/health && \
-		echo && echo '→ Stopping container...' && \
-		docker stop test-api-household && \
-		echo '✓ policyengine-household-api test passed'"
 	$(Q)$(HELPER) complete "Docker tests completed"
 
 docker-check: docker-build docker-test

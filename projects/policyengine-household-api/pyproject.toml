@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "policyengine_household_api"
 version = "0.1.0"
@@ -16,6 +20,9 @@ dependencies = [
     "numpy (>=2.0.0,<3.0.0)"
 ]
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/policyengine_household_api"]
+
 [project.optional-dependencies]
 test = [ "pytest>=8.3.4", "pytest-asyncio>=0.25.3", "pytest-cov>=6.1.1",]
 build = [ "pyright>=1.1.401", "black>=25.1.0",]
@@ -26,5 +33,5 @@ pythonpath = [
 ]
 testpaths = ["tests"]
 
-# [tool.uv.sources]
-policyengine-api = { path = "../../libs/policyengine-api", editable = true }
+[tool.uv.sources]
+policyengine-fastapi = { path = "../../libs/policyengine-fastapi", editable = true }

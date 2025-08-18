@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "policyengine-api-full"
 version = "0.1.0"
@@ -14,6 +18,9 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi (>=0.51b0,<0.52)",
     "policyengine-fastapi"
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/policyengine_api_full", "src/policyengine_api"]
 
 [tool.uv.sources]
 policyengine-fastapi = { path = "../../libs/policyengine-fastapi", editable = true }

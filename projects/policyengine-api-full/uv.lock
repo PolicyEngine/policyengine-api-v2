@@ -807,7 +807,7 @@ wheels = [
 [[package]]
 name = "policyengine-api-full"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "opentelemetry-instrumentation-fastapi" },
     { name = "opentelemetry-instrumentation-sqlalchemy" },
