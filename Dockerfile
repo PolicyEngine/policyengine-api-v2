@@ -1,5 +1,5 @@
 #as per uv documentation
-FROM python:3.12-slim-bookworm
+FROM python:3.13
 ARG SERVICE_NAME=UNSET_SERVICE_NAME
 ARG MODULE_NAME=UNSET_MODULE_NAME
 ARG WORKER_COUNT=1

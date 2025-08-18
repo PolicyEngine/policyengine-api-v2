@@ -28,6 +28,7 @@ jobs:
     # Any runner supporting Node 20 or newer
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
+    name: Build simulation API image
 
     permissions:
       contents: "read"
@@ -52,6 +53,7 @@ jobs:
     # Any runner supporting Node 20 or newer
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
+    name: Build full API image
 
     # Add "id-token" with the intended permissions.
     permissions:
@@ -77,6 +79,7 @@ jobs:
     # Any runner supporting Node 20 or newer
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
+    name: Build tagger API image
 
     # Add "id-token" with the intended permissions.
     permissions:

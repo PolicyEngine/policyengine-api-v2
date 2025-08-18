@@ -27,6 +27,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    name: Deploy
     outputs:
       #This is required for the test step so it can authenticate and connect to
       #the beta endpoint
@@ -75,6 +76,7 @@ jobs:
 
   integ_test:
     needs: [deploy]
+    name: Run integration test
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
 
