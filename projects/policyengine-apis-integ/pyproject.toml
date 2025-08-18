@@ -9,8 +9,8 @@ license = {file = "../../LICENSE"}
 requires-python = ">=3.13, <4.0"
 dependencies = [
     "pytest (>=8.3.4,<9.0.0)",
-    "policyengine_full_api_client",
-    "policyengine_simulation_api_client",
+    "policyengine_api_full_client",
+    "policyengine_api_simulation_client",
     "pydantic-settings (>=2.8.1,<3.0.0)",
     "google-cloud-workflows>=1.18.1",
 ]
@@ -26,8 +26,8 @@ pythonpath = [
 testpaths = ["tests"]
 
 [tool.uv.sources]
-policyengine_full_api_client = { path = "../policyengine-api-full/artifacts/clients/python" }
-policyengine_simulation_api_client = { path = "../policyengine-api-simulation/artifacts/clients/python" }
+policyengine_api_full_client = { path = "../policyengine-api-full/artifacts/clients/python" }
+policyengine_api_simulation_client = { path = "../policyengine-api-simulation/artifacts/clients/python" }
 
 [tool.pyright]
 #The generated clients do not do the "public export" convention

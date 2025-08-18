@@ -1,5 +1,5 @@
-import policyengine_simulation_api_client
-from policyengine_simulation_api_client.exceptions import ServiceException
+import policyengine_api_simulation_client
+from policyengine_api_simulation_client.exceptions import ServiceException
 import backoff
 
 
@@ -13,8 +13,8 @@ import backoff
     max_tries=5,
     giveup=lambda e: getattr(e, "status", None) != 503,
 )
-def test_ping(client: policyengine_simulation_api_client.DefaultApi):
+def test_ping(client: policyengine_api_simulation_client.DefaultApi):
     response = client.ping_ping_post(
-        policyengine_simulation_api_client.PingRequest(value=12)
+        policyengine_api_simulation_client.PingRequest(value=12)
     )
     assert response.incremented == 13
