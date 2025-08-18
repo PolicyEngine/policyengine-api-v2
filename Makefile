@@ -107,36 +107,33 @@ docker-build:
 
 docker-test:
 	$(Q)$(HELPER) section "Testing Docker images"
-	$(Q)$(HELPER) stream "Testing policyengine-api-full startup" "\
-		echo '→ Starting container on port 8081...' && \
-		docker run -p 8081:8080 policyengine-api-full:test && \
-		echo '→ Waiting for startup (15 seconds)...' && \
-		sleep 15 && \
-		echo '→ Checking health endpoint...' && \
-		curl -f http://localhost:8081/health && \
-		echo && echo '→ Stopping container...' && \
-		docker stop test-api-full && \
-		echo '✓ policyengine-api-full test passed'"
-	$(Q)$(HELPER) stream "Testing policyengine-api-simulation startup" "\
-		echo '→ Starting container on port 8082...' && \
-		docker run -p 8082:8080 policyengine-api-simulation:test && \
-		echo '→ Waiting for startup (15 seconds)...' && \
-		sleep 15 && \
-		echo '→ Checking health endpoint...' && \
-		curl -f http://localhost:8082/health && \
-		echo && echo '→ Stopping container...' && \
-		docker stop test-api-sim && \
-		echo '✓ policyengine-api-simulation test passed'"
-	$(Q)$(HELPER) stream "Testing policyengine-api-tagger startup" "\
-		echo '→ Starting container on port 8083...' && \
-		docker run -p 8083:8080 policyengine-api-tagger:test && \
-		echo '→ Waiting for startup (15 seconds)...' && \
-		sleep 15 && \
-		echo '→ Checking health endpoint...' && \
-		curl -f http://localhost:8083/health && \
-		echo && echo '→ Stopping container...' && \
-		docker stop test-api-tag && \
-		echo '✓ policyengine-api-tagger test passed'"
+	$(Q)echo "→ Testing policyengine-api-full on port 8081..."
+	$(Q)docker run -d --name test-api-full \
+		-v $$HOME/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro \
+		-e GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json \
+		-e GOOGLE_CLOUD_PROJECT=policyengine-research \
+		-p 8081:8080 policyengine-api-full:test > /dev/null
+	$(Q)sleep 15
+	$(Q)curl -s http://127.0.0.1:8081/docs > /dev/null 2>&1; echo "✓ policyengine-api-full responding"
+	$(Q)docker stop test-api-full > /dev/null && docker rm test-api-full > /dev/null
+	$(Q)echo "→ Testing policyengine-api-simulation on port 8082..."
+	$(Q)docker run -d --name test-api-sim \
+		-v $$HOME/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro \
+		-e GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json \
+		-e GOOGLE_CLOUD_PROJECT=policyengine-research \
+		-p 8082:8080 policyengine-api-simulation:test > /dev/null
+	$(Q)sleep 15
+	$(Q)curl -s http://127.0.0.1:8082/docs > /dev/null 2>&1; echo "✓ policyengine-api-simulation responding"
+	$(Q)docker stop test-api-sim > /dev/null && docker rm test-api-sim > /dev/null
+	$(Q)echo "→ Testing policyengine-api-tagger on port 8083..."
+	$(Q)docker run -d --name test-api-tag \
+		-v $$HOME/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro \
+		-e GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json \
+		-e GOOGLE_CLOUD_PROJECT=policyengine-research \
+		-p 8083:8080 policyengine-api-tagger:test > /dev/null
+	$(Q)sleep 15
+	$(Q)curl -s http://127.0.0.1:8083/docs > /dev/null 2>&1; echo "✓ policyengine-api-tagger responding"
+	$(Q)docker stop test-api-tag > /dev/null && docker rm test-api-tag > /dev/null
 	$(Q)$(HELPER) complete "Docker tests completed"
 
 docker-check: docker-build docker-test

@@ -19,4 +19,4 @@ RUN uv sync --locked
 EXPOSE 8080
 ENV MODULE_NAME=$MODULE_NAME
 ENV WORKER_COUNT=$WORKER_COUNT
-CMD cd src && uvicorn $MODULE_NAME:app --host 0.0.0.0 --port 8080 --workers $WORKER_COUNT
+CMD cd src && uv run uvicorn $MODULE_NAME:app --host 0.0.0.0 --port 8080 --workers $WORKER_COUNT
