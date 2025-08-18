@@ -5,10 +5,20 @@ import subprocess
 import sys
 import os
 from pathlib import Path
-from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
-from rich.panel import Panel
-from rich import box
+
+# Try to import rich, install with uv if not available
+try:
+    from rich.console import Console
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+    from rich.panel import Panel
+    from rich import box
+except ImportError:
+    print("Installing rich...")
+    subprocess.check_call([sys.executable, "-m", "uv", "pip", "install", "rich"])
+    from rich.console import Console
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+    from rich.panel import Panel
+    from rich import box
 
 console = Console()
 
