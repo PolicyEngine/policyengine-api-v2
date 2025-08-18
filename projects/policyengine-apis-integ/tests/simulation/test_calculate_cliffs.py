@@ -1,4 +1,4 @@
-from policyengine_api_simulation_client import Client
+from policyengine_api_simulation_client import Client, AuthenticatedClient
 from policyengine_api_simulation_client.api.default import (
     simulate_simulate_economy_comparison_post,
 )
@@ -7,6 +7,7 @@ from policyengine_api_simulation_client.models import (
     ParametricReform,
     SimulationOptionsCountry,
     SimulationOptionsScope,
+    EconomyComparison,
 )
 from policyengine_api_simulation_client.errors import UnexpectedStatus
 import backoff
@@ -20,7 +21,7 @@ import httpx
     giveup=lambda e: getattr(e, "response", {}).get("status_code", 0) != 503,
 )
 def test_calculation_cliffs(
-    client: Client,
+    client: Client | AuthenticatedClient,
 ):
     options = SimulationOptions(
         country=SimulationOptionsCountry.US,  # don't use uk. It will try to load extra stuff from huggingface
@@ -36,6 +37,7 @@ def test_calculation_cliffs(
         client=client, body=options
     )
     # Check that cliff impact data is present in the simulation result
+    assert isinstance(response, EconomyComparison)
     assert (
         response.cliff_impact is not None
     ), "Expected 'cliff_impact' to be present in the output."

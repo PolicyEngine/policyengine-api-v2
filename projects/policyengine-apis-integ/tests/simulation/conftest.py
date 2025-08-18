@@ -16,7 +16,7 @@ settings = Settings()
 
 
 @pytest.fixture()
-def client() -> Client:
+def client() -> Client | AuthenticatedClient:
     timeout = httpx.Timeout(timeout=settings.timeout_in_millis / 1000)
     if settings.access_token:
         return AuthenticatedClient(
