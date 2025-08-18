@@ -107,7 +107,6 @@ def export_ot_to_gcp(resource: Resource):
     useful when running in the google cloud
     """
 
-    log.info("Configuring opentelemetry trace/metrics to log to stdout for desktop")
     traceProvider = TracerProvider(resource=resource)
     processor = BatchSpanProcessor(CloudTraceSpanExporter())
     traceProvider.add_span_processor(processor)

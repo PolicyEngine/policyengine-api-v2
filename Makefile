@@ -11,6 +11,7 @@ ifeq ($(V),1)
     Q =
 endif
 
+
 build:
 	$(Q)$(HELPER) section "Building all projects"
 	$(Q)set -e; \
@@ -38,20 +39,29 @@ test:
 	$(Q)$(HELPER) complete "Tests completed"
 
 dev-api-full:
-	$(Q)$(HELPER) task "Starting API (full) in dev mode" "cd projects/policyengine-api-full && make dev"
+	$(Q)$(HELPER) stream "Starting API (full) in dev mode" "cd projects/policyengine-api-full && make dev"
 
 dev-api-simulation:
-	$(Q)$(HELPER) task "Starting API (simulation) in dev mode" "cd projects/policyengine-api-simulation && make dev"
+	$(Q)$(HELPER) stream "Starting API (simulation) in dev mode" "cd projects/policyengine-api-simulation && make dev"
 
 dev-api-household:
-	$(Q)$(HELPER) task "Starting API (household) in dev mode" "cd projects/policyengine-household-api && make dev"
+	$(Q)$(HELPER) stream "Starting API (household) in dev mode" "cd projects/policyengine-household-api && make dev"
 
 dev-api-tagger:
-	$(Q)$(HELPER) task "Starting API (tagger) in dev mode" "cd projects/policyengine-tagger-api && make dev"
+	$(Q)$(HELPER) stream "Starting API (tagger) in dev mode" "cd projects/policyengine-tagger-api && make dev"
 
 dev:
 	$(Q)$(HELPER) section "Starting development servers"
-	$(Q)$(HELPER) task "Starting APIs (full+simulation)" "make dev-api-full & make dev-api-simulation"
+	$(Q)$(HELPER) stream "Starting APIs (full+simulation)" "make dev-api-full & make dev-api-simulation"
+
+dev-setup:
+	$(Q)$(HELPER) section "Setting up development environment"
+	$(Q)set -e; \
+	for dir in $(SUBDIRS); do \
+		base=$$(basename $$dir); \
+		$(HELPER) task "Installing $$base dependencies" "cd $$dir && uv sync --active --extra test --extra build"; \
+	done
+	$(Q)$(HELPER) complete "Development setup completed"
 
 bootstrap:
 	$(Q)$(HELPER) task "Bootstrapping terraform" "cd terraform/project-policyengine-api && make bootstrap"
@@ -87,3 +97,47 @@ deploy:
 
 integ-test: 
 	$(Q)$(HELPER) task "Running integration tests" "$(MAKE) -C projects/policyengine-apis-integ"
+
+docker-build:
+	$(Q)$(HELPER) section "Building Docker images"
+	$(Q)$(HELPER) stream "Building policyengine-api-full image" "docker build -f projects/policyengine-api-full/Dockerfile -t policyengine-api-full:test ."
+	$(Q)$(HELPER) stream "Building policyengine-api-simulation image" "docker build -f projects/policyengine-api-simulation/Dockerfile -t policyengine-api-simulation:test ."
+	$(Q)$(HELPER) stream "Building policyengine-api-tagger image" "docker build -f projects/policyengine-api-tagger/Dockerfile -t policyengine-api-tagger:test ."
+	$(Q)$(HELPER) complete "Docker images built"
+
+docker-test:
+	$(Q)$(HELPER) section "Testing Docker images"
+	$(Q)$(HELPER) stream "Testing policyengine-api-full startup" "\
+		echo '→ Starting container on port 8081...' && \
+		docker run -p 8081:8080 policyengine-api-full:test && \
+		echo '→ Waiting for startup (15 seconds)...' && \
+		sleep 15 && \
+		echo '→ Checking health endpoint...' && \
+		curl -f http://localhost:8081/health && \
+		echo && echo '→ Stopping container...' && \
+		docker stop test-api-full && \
+		echo '✓ policyengine-api-full test passed'"
+	$(Q)$(HELPER) stream "Testing policyengine-api-simulation startup" "\
+		echo '→ Starting container on port 8082...' && \
+		docker run -p 8082:8080 policyengine-api-simulation:test && \
+		echo '→ Waiting for startup (15 seconds)...' && \
+		sleep 15 && \
+		echo '→ Checking health endpoint...' && \
+		curl -f http://localhost:8082/health && \
+		echo && echo '→ Stopping container...' && \
+		docker stop test-api-sim && \
+		echo '✓ policyengine-api-simulation test passed'"
+	$(Q)$(HELPER) stream "Testing policyengine-api-tagger startup" "\
+		echo '→ Starting container on port 8083...' && \
+		docker run -p 8083:8080 policyengine-api-tagger:test && \
+		echo '→ Waiting for startup (15 seconds)...' && \
+		sleep 15 && \
+		echo '→ Checking health endpoint...' && \
+		curl -f http://localhost:8083/health && \
+		echo && echo '→ Stopping container...' && \
+		docker stop test-api-tag && \
+		echo '✓ policyengine-api-tagger test passed'"
+	$(Q)$(HELPER) complete "Docker tests completed"
+
+docker-check: docker-build docker-test
+	$(Q)$(HELPER) complete "Docker build and test completed"
