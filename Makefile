@@ -139,6 +139,14 @@ docker-test:
 docker-check: docker-build docker-test
 	$(Q)$(HELPER) complete "Docker build and test completed"
 
+kill-ports:
+	$(Q)$(HELPER) section "Killing processes on development ports"
+	$(Q)$(HELPER) task "Killing port 8080" "lsof -ti:8080 | xargs kill -9 2>/dev/null || true"
+	$(Q)$(HELPER) task "Killing port 8081" "lsof -ti:8081 | xargs kill -9 2>/dev/null || true"
+	$(Q)$(HELPER) task "Killing port 8082" "lsof -ti:8082 | xargs kill -9 2>/dev/null || true"
+	$(Q)$(HELPER) task "Killing port 8083" "lsof -ti:8083 | xargs kill -9 2>/dev/null || true"
+	$(Q)$(HELPER) complete "Ports cleared"
+
 docker-debug:
 	$(Q)$(HELPER) section "Docker container diagnostics"
 	@echo "Active containers:"
