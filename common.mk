@@ -1,7 +1,8 @@
 -include ../../terraform/.bootstrap_settings/project.env
 
+
 # Helper for pretty output
-HELPER := python ../../scripts/make_helper.py
+HELPER := python ../../scripts/ensure_rich.py && python ../../scripts/make_helper.py
 
 # Silent commands by default, use V=1 for verbose
 Q = @

@@ -3,7 +3,7 @@ SERVICEDIRS := projects/policyengine-api-full projects/policyengine-api-simulati
 SUBDIRS := $(LIBDIRS) $(SERVICEDIRS)
 
 # Helper for pretty output
-HELPER := python3 scripts/make_helper.py
+HELPER := python3 scripts/ensure_rich.py && python3 scripts/make_helper.py
 
 # Silent commands by default, use V=1 for verbose
 Q = @
