@@ -87,14 +87,16 @@ jobs:
     steps:
     - name: checkout repo
       uses: actions/checkout@v4
-    - name: Install uv
-      uses: astral-sh/setup-uv@v5
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: "3.11"
-    - name: Set up poetry
-      run: uv pip install poetry --system
+        python-version: "3.13"
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+    - name: Create uv venv
+      run: |
+        uv venv -p 3.13
+        uv pip install rich
     - name: Authenticate as tester SA in GCP
       uses: "google-github-actions/auth@v2"
       with:
@@ -121,4 +123,6 @@ jobs:
     - name: Mask id token to prevent accidental leak
       run: echo "::add-mask::${{steps.get-id-token.outputs.id_token}}"
     - name: run integ tests against deployed API
-      run: make -f Makefile.deploy integ-test  FULL_API_ACCESS_TOKEN=${{steps.get-full-id-token.outputs.id_token}} FULL_API_URL=${{needs.deploy.outputs.full_api_url }} SIMULATION_API_ACCESS_TOKEN=${{steps.get-simulation-id-token.outputs.id_token}} SIMULATION_API_URL=${{needs.deploy.outputs.simulation_api_url}}
+      run: |
+        . .venv/bin/activate
+        make -f Makefile.deploy integ-test  FULL_API_ACCESS_TOKEN=${{steps.get-full-id-token.outputs.id_token}} FULL_API_URL=${{needs.deploy.outputs.full_api_url }} SIMULATION_API_ACCESS_TOKEN=${{steps.get-simulation-id-token.outputs.id_token}} SIMULATION_API_URL=${{needs.deploy.outputs.simulation_api_url}}
