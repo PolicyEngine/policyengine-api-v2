@@ -2,6 +2,8 @@ LIBDIRS := libs/policyengine-fastapi
 SERVICEDIRS := projects/policyengine-api-full projects/policyengine-api-simulation projects/policyengine-api-tagger
 SUBDIRS := $(LIBDIRS) $(SERVICEDIRS)
 
+# Ensure rich is installed before using make_helper
+ENSURE_RICH := $(shell python3 ../../scripts/ensure_rich.py 2>&1)
 # Helper for pretty output
 HELPER := python3 scripts/make_helper.py
 
