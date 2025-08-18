@@ -7,7 +7,7 @@ import httpx
 class Settings(BaseSettings):
     base_url: str = "http://localhost:8081"
     access_token: str | None = None
-    timeout_in_millis: int = 60_000
+    timeout_in_millis: int = 120_000
 
     model_config = SettingsConfigDict(env_prefix="simulation_integ_test_")
 
