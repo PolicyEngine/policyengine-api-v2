@@ -1,5 +1,5 @@
 LIBDIRS := libs/policyengine-fastapi 
-SERVICEDIRS := projects/policyengine-api-full projects/policyengine-api-simulation projects/policyengine-api-tagger projects/policyengine-household-api
+SERVICEDIRS := projects/policyengine-api-full projects/policyengine-api-simulation projects/policyengine-api-tagger
 SUBDIRS := $(LIBDIRS) $(SERVICEDIRS)
 
 # Helper for pretty output
