@@ -13,7 +13,7 @@ def test_calculate_default_model(client: SimplifiedWorkflowClient):
                 }
             },
             "subsample": 200,  # reduce the number of households to speed things up.
-            "data": "gs://policyengine-us-data/small_enhanced_cps_2024.h5",  # force the service to use google storage (policyengine.py defaults to huggingface)
+            "data": "gs://policyengine-us-data/cps_2023.h5",  # force the service to use google storage (policyengine.py defaults to huggingface)
         }
     )
     assert execution.state == executions.Execution.State.SUCCEEDED
