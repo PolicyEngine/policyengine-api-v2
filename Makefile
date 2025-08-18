@@ -138,3 +138,44 @@ docker-test:
 
 docker-check: docker-build docker-test
 	$(Q)$(HELPER) complete "Docker build and test completed"
+
+docker-test-custom:
+	$(Q)$(HELPER) section "Testing custom Docker image"
+	@if [ -z "$(IMAGE)" ]; then \
+		echo "Error: IMAGE variable not set"; \
+		echo "Usage: make docker-test-custom IMAGE=<image:tag> [PORT=8090]"; \
+		echo "Examples:"; \
+		echo "  make docker-test-custom IMAGE=my-image:latest"; \
+		echo "  make docker-test-custom IMAGE=gcr.io/project/image:tag PORT=8091"; \
+		exit 1; \
+	fi
+	@# Clean up any existing container
+	@docker rm -f test-custom 2>/dev/null || true
+	$(Q)$(HELPER) stream "Testing $(IMAGE)" "\
+		PORT=$${PORT:-8090} && \
+		echo '→ Pulling image...' && \
+		docker pull $(IMAGE) && \
+		echo '→ Starting container on port '$$PORT'...' && \
+		docker run -d --name test-custom \
+			-v $$HOME/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro \
+			-e GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json \
+			-e GOOGLE_CLOUD_PROJECT=policyengine-research \
+			-p $$PORT:8080 \
+			--platform linux/amd64 \
+			$(IMAGE) && \
+		echo '→ Waiting for service to start (15s)...' && \
+		sleep 15 && \
+		echo '→ Testing endpoint...' && \
+		if curl -s http://127.0.0.1:$$PORT/docs > /dev/null 2>&1; then \
+			echo '✓ $(IMAGE) responding on port '$$PORT; \
+			echo '→ Recent logs:'; \
+			docker logs test-custom --tail 20; \
+		else \
+			echo '✗ Service not responding. Logs:'; \
+			docker logs test-custom --tail 50; \
+		fi && \
+		echo '→ Cleaning up...' && \
+		docker stop test-custom > /dev/null && \
+		docker rm test-custom > /dev/null && \
+		echo '✓ Container cleaned up'"
+	$(Q)$(HELPER) complete "Custom image test completed"
