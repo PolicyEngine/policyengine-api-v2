@@ -788,6 +788,7 @@ dependencies = [
     { name = "pyjwt" },
     { name = "python-json-logger" },
     { name = "sqlmodel" },
+    { name = "uvicorn" },
 ]
 
 [package.optional-dependencies]
@@ -818,6 +819,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=6.1.1" },
     { name = "python-json-logger", specifier = ">=3.2.1,<4.0.0" },
     { name = "sqlmodel", specifier = ">=0.0.22,<0.0.23" },
+    { name = "uvicorn", specifier = ">=0.35.0" },
 ]
 provides-extras = ["test", "build"]
 
