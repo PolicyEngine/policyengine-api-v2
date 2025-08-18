@@ -31,3 +31,6 @@ jobs:
       run: |
         . .venv/bin/activate
         make test
+    - name: Check docker images build and run OK
+      run: |
+        make docker-check
