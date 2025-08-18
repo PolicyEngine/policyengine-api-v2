@@ -163,17 +163,20 @@ docker-test-custom:
 			-p $$PORT:8080 \
 			--platform linux/amd64 \
 			$(IMAGE) && \
-		echo '→ Waiting for service to start (15s)...' && \
-		sleep 15 && \
-		echo '→ Testing endpoint...' && \
-		if curl -s http://127.0.0.1:$$PORT/docs > /dev/null 2>&1; then \
-			echo '✓ $(IMAGE) responding on port '$$PORT; \
-			echo '→ Recent logs:'; \
-			docker logs test-custom --tail 20; \
-		else \
-			echo '✗ Service not responding. Logs:'; \
-			docker logs test-custom --tail 50; \
-		fi && \
+		echo '→ Waiting for service to start...' && \
+		for i in \$$(seq 1 6); do \
+			sleep 5; \
+			echo \"  Checking (attempt \$$i/6)...\" && \
+			if curl -s http://127.0.0.1:$$PORT/docs > /dev/null 2>&1; then \
+				echo '✓ $(IMAGE) responding on port '$$PORT; \
+				echo '→ Recent logs:'; \
+				docker logs test-custom --tail 20; \
+				break; \
+			elif [ \"\$$i\" = \"6\" ]; then \
+				echo '✗ Service not responding after 30s. Logs:'; \
+				docker logs test-custom --tail 50; \
+			fi; \
+		done && \
 		echo '→ Cleaning up...' && \
 		docker stop test-custom > /dev/null && \
 		docker rm test-custom > /dev/null && \
