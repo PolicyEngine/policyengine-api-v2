@@ -18,7 +18,7 @@ dependencies = [
     "policyengine-fastapi",
     "policyengine>=0.6.0",
     "policyengine-uk>=2.22.8",
-    "policyengine-us (>=1.250.0)",
+    "policyengine-us>=1.370.2",
 ]
 
 [tool.hatch.build.targets.wheel]

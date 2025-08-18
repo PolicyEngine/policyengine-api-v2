@@ -111,7 +111,7 @@ docker-test:
 	$(Q)docker run -d --name test-api-full \
 		-v $$HOME/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro \
 		-e GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json \
-		-e GOOGLE_CLOUD_PROJECT=policyengine-research \
+		-e GOOGLE_CLOUD_PROJECT=beta-api-v2 \
 		-p 8081:8080 policyengine-api-full:test > /dev/null
 	$(Q)sleep 15
 	$(Q)curl -s http://127.0.0.1:8081/docs > /dev/null 2>&1; echo "✓ policyengine-api-full responding"
@@ -120,7 +120,7 @@ docker-test:
 	$(Q)docker run -d --name test-api-sim \
 		-v $$HOME/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro \
 		-e GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json \
-		-e GOOGLE_CLOUD_PROJECT=policyengine-research \
+		-e GOOGLE_CLOUD_PROJECT=beta-api-v2 \
 		-p 8082:8080 policyengine-api-simulation:test > /dev/null
 	$(Q)sleep 15
 	$(Q)curl -s http://127.0.0.1:8082/docs > /dev/null 2>&1; echo "✓ policyengine-api-simulation responding"
@@ -129,7 +129,7 @@ docker-test:
 	$(Q)docker run -d --name test-api-tag \
 		-v $$HOME/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro \
 		-e GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json \
-		-e GOOGLE_CLOUD_PROJECT=policyengine-research \
+		-e GOOGLE_CLOUD_PROJECT=beta-api-v2 \
 		-p 8083:8080 policyengine-api-tagger:test > /dev/null
 	$(Q)sleep 15
 	$(Q)curl -s http://127.0.0.1:8083/docs > /dev/null 2>&1; echo "✓ policyengine-api-tagger responding"
@@ -138,3 +138,65 @@ docker-test:
 
 docker-check: docker-build docker-test
 	$(Q)$(HELPER) complete "Docker build and test completed"
+
+docker-debug:
+	$(Q)$(HELPER) section "Docker container diagnostics"
+	@echo "Active containers:"
+	@docker ps --format "table {{.Names}}\t{{.Ports}}\t{{.Status}}"
+	@echo ""
+	@if [ -n "$$(docker ps -q -f name=test-custom)" ]; then \
+		echo "test-custom container logs:"; \
+		docker logs test-custom --tail 30; \
+		echo ""; \
+		echo "Test endpoints:"; \
+		echo "  curl http://localhost:8090/docs"; \
+		curl -s -o /dev/null -w "  Response: %{http_code}\n" http://localhost:8090/docs || true; \
+	else \
+		echo "No test-custom container running"; \
+	fi
+
+docker-test-custom:
+	$(Q)$(HELPER) section "Testing custom Docker image"
+	@if [ -z "$(IMAGE)" ]; then \
+		echo "Error: IMAGE variable not set"; \
+		echo "Usage: make docker-test-custom IMAGE=<image:tag> [PORT=8090]"; \
+		echo "Examples:"; \
+		echo "  make docker-test-custom IMAGE=my-image:latest"; \
+		echo "  make docker-test-custom IMAGE=gcr.io/project/image:tag PORT=8091"; \
+		exit 1; \
+	fi
+	@# Clean up any existing container
+	@docker rm -f test-custom 2>/dev/null || true
+	@# Set default port if not provided
+	$(eval PORT ?= 8090)
+	$(Q)$(HELPER) stream "Testing $(IMAGE) on port $(PORT)" "\
+		trap 'echo \"\" && echo \"→ Stopping container...\" && docker stop test-custom > /dev/null && docker rm test-custom > /dev/null && echo \"✓ Container stopped and removed\" && exit 0' INT && \
+		echo '→ Pulling image...' && \
+		docker pull $(IMAGE) && \
+		echo '→ Starting container mapping localhost:$(PORT) -> container:8080...' && \
+		docker run -d --name test-custom \
+			-v $$HOME/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro \
+			-e GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json \
+			-e GOOGLE_CLOUD_PROJECT=beta-api-v2 \
+			-p $(PORT):8080 \
+			--platform linux/amd64 \
+			$(IMAGE) && \
+		echo '→ Container started. Access at http://localhost:$(PORT)' && \
+		echo '→ Waiting for service to start...' && \
+		for i in 1 2 3 4 5 6; do \
+			sleep 5; \
+			echo '  Checking http://localhost:$(PORT)/docs (attempt' \$$i'/6)...' && \
+			if curl -s http://127.0.0.1:$(PORT)/docs > /dev/null 2>&1; then \
+				echo '✓ Service responding on port $(PORT)'; \
+				echo '→ Access at: http://localhost:$(PORT)/docs'; \
+				echo '→ Press Ctrl+C to stop the container'; \
+				echo ''; \
+				docker logs -f test-custom; \
+				break; \
+			elif [ \$$i = 6 ]; then \
+				echo '✗ Service not responding after 30s on port $(PORT). Showing logs:'; \
+				echo '→ Press Ctrl+C to stop the container'; \
+				docker logs -f test-custom; \
+			fi; \
+		done"
+	$(Q)$(HELPER) complete "Custom image test completed"
