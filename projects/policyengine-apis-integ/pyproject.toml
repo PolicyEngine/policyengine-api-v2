@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = [ "pytest>=8.3.4", "pytest-xdist>=3.7.0", "backoff>=2.2.1"]
+test = [ "pytest>=8.3.4", "pytest-xdist>=3.7.0", "backoff>=2.2.1", "httpx>=0.23.0"]
 build = [ "pyright>=1.1.401", "black>=25.1.0",]
 
 [tool.pytest.ini_options]
@@ -32,3 +32,8 @@ policyengine_api_simulation_client = { path = "../policyengine-api-simulation/ar
 [tool.pyright]
 #The generated clients do not do the "public export" convention
 reportPrivateImportUsage = "none"
+
+[dependency-groups]
+test = [
+    "backoff>=2.2.1",
+]

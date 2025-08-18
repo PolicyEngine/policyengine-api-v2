@@ -96,7 +96,7 @@ deploy:
 	$(Q)$(HELPER) complete "Deployment completed"
 
 integ-test: 
-	$(Q)$(HELPER) task "Running integration tests" "$(MAKE) -C projects/policyengine-apis-integ"
+	$(Q)$(HELPER) stream "Running integration tests" "$(MAKE) -C projects/policyengine-apis-integ"
 
 docker-build:
 	$(Q)$(HELPER) section "Building Docker images"
