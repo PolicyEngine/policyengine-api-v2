@@ -1,4 +1,4 @@
-import policyengine_full_api_client
+import policyengine_api_full_client
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import pytest
 
@@ -15,9 +15,9 @@ settings = Settings()
 
 
 @pytest.fixture()
-def client() -> policyengine_full_api_client.DefaultApi:
-    config = policyengine_full_api_client.Configuration(host=settings.base_url)
-    client = policyengine_full_api_client.ApiClient(config)
+def client() -> policyengine_api_full_client.DefaultApi:
+    config = policyengine_api_full_client.Configuration(host=settings.base_url)
+    client = policyengine_api_full_client.ApiClient(config)
     if settings.access_token:
         client.default_headers["Authorization"] = f"Bearer {settings.access_token}"
-    return policyengine_full_api_client.DefaultApi(client)
+    return policyengine_api_full_client.DefaultApi(client)
