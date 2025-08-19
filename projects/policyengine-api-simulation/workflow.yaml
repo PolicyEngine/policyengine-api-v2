@@ -15,8 +15,7 @@ main:
     
     - checkForTagging:
         switch:
-          - condition: ${"country" in input and "model_version" in input}
-            next: callTaggerService
+            - condition: ${"country" in input and "model_version" in input and input.model_version != null}           next: callTaggerService
         next: callCloudRun
     
     - callTaggerService:
