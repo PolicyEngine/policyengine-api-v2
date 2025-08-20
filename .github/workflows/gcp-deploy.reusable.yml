@@ -137,6 +137,29 @@ jobs:
         echo "simulation_api_url=${SIMULATION_API_URL}" >> "$GITHUB_OUTPUT"
         echo "us_model_version=${US_MODEL_VERSION}" >> "$GITHUB_OUTPUT"
         echo "uk_model_version=${UK_MODEL_VERSION}" >> "$GITHUB_OUTPUT"
+    
+    - name: Tag API versions in metadata bucket
+      working-directory: deployment/terraform/infra
+      run: |
+        # Get the metadata bucket name from terraform output
+        METADATA_BUCKET=$(terraform output -raw metadata_bucket_name)
+        
+        # Get the release metadata JSON
+        RELEASE_METADATA=$(terraform output -json release_metadata)
+        
+        # Upload metadata files to GCS bucket
+        # Upload live.json
+        echo "$RELEASE_METADATA" | gcloud storage cp - "gs://${METADATA_BUCKET}/live.json"
+        
+        # Upload version-tagged metadata for US model
+        US_VERSION="${{ steps.versions.outputs.us_version }}"
+        echo "$RELEASE_METADATA" | gcloud storage cp - "gs://${METADATA_BUCKET}/us.${US_VERSION}.json"
+        
+        # Upload version-tagged metadata for UK model
+        UK_VERSION="${{ steps.versions.outputs.uk_version }}"
+        echo "$RELEASE_METADATA" | gcloud storage cp - "gs://${METADATA_BUCKET}/uk.${UK_VERSION}.json"
+        
+        echo "Tagged API versions: US=${US_VERSION}, UK=${UK_VERSION}"
 
   integ_test:
     name: Run integration test
