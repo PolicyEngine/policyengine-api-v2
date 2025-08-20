@@ -299,6 +299,18 @@ terraform-destroy:
 	cd deployment/terraform/project && terraform destroy -auto-approve
 	@echo "✅ All terraform resources destroyed"
 
+# Update dependencies
+update:
+	@echo "Updating dependencies for all packages..."
+	@for pyproject in libs/*/pyproject.toml projects/*/pyproject.toml; do \
+		if [ -f "$$pyproject" ]; then \
+			dir=$$(dirname "$$pyproject"); \
+			echo "Updating $$dir..."; \
+			(cd "$$dir" && uv lock --upgrade); \
+		fi \
+	done
+	@echo "✅ All dependencies updated"
+
 # Code quality
 format:
 	@echo "Formatting code with ruff..."
