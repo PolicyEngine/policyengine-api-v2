@@ -24,6 +24,9 @@ pythonpath = [
   "src",
 ]
 testpaths = ["tests"]
+markers = [
+    "requires_gcp: mark test as requiring GCP credentials and workflow access",
+]
 
 [tool.uv.sources]
 policyengine_api_full_client = { path = "../policyengine-api-full/artifacts/clients/python" }

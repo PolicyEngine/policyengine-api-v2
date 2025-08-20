@@ -78,7 +78,7 @@ class RevisionTagger:
 
         revision_name = revision_path.split("/")[-1]
         cloudrun_service_name = revision_path.rsplit("/revisions/", 1)[0]
-        tag_string = f"country-{country}-model-{model_version.replace('.','-')}"
+        tag_string = f"country-{country}-model-{model_version.replace('.', '-')}"
 
         log.info(
             f"Getting tagged url for service {cloudrun_service_name}, revision {revision_name}, tag {tag_string}"

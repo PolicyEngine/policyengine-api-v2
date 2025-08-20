@@ -11,7 +11,6 @@ log = logging.getLogger(__file__)
 
 
 class CloudrunClient:
-
     async def tag_revision(
         self, cloudrun_service_name: str, revision_name: str, tag: str
     ) -> str:

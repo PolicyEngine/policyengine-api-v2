@@ -1,5 +1,5 @@
 from unittest.mock import Mock, call
-from policyengine_api.fastapi.exit import exit
+from policyengine_fastapi.exit import exit
 import pytest
 
 

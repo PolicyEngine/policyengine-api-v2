@@ -1,35 +1,145 @@
-name: Pull request
+name: PR checks
 
 on:
   pull_request:
+    branches: [main]
 
 jobs:
-  build:
+  test:
     name: Test
-    # Any runner supporting Node 20 or newer
     runs-on: ubuntu-latest
-
-    # Add "id-token" with the intended permissions.
-    permissions:
-      contents: "read"
-
+    strategy:
+      matrix:
+        service: [api-full, api-simulation, api-tagger]
+    
     steps:
-    - name: checkout repo
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+    
     - name: Install uv
-      uses: astral-sh/setup-uv@v5
-      # Then create a uv venv 3.13 and activate it
-    - name: Create and activate uv venv
+      uses: astral-sh/setup-uv@v3
+      with:
+        enable-cache: true
+    
+    - name: Install dependencies
       run: |
-        uv venv -p 3.13
-    - name: Build application
-      run: |
-        . .venv/bin/activate
-        make build
+        cd projects/policyengine-${{ matrix.service }}
+        uv sync --extra test
+    
     - name: Run tests
       run: |
-        . .venv/bin/activate
-        make test
-    - name: Check docker images
+        cd projects/policyengine-${{ matrix.service }}
+        uv run pytest tests/ -v
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+    
+    - name: Install ruff
+      run: uv tool install ruff
+    
+    - name: Run ruff format check
       run: |
-        make docker-check
+        for dir in projects/*/src libs/*/src; do
+          if [ -d "$dir" ]; then
+            echo "Checking format in $dir..."
+            uv run ruff format --check $dir
+          fi
+        done
+
+  docker-build:
+    name: Docker build
+    needs: [test, lint]  # Only run if tests and linting pass
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api-full, api-simulation, api-tagger]
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: projects/policyengine-${{ matrix.service }}/Dockerfile
+        push: false
+        tags: policyengine-${{ matrix.service }}:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
+  
+  test-integration:
+    name: Test integration
+    needs: docker-build  # Only run if docker builds succeed
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        enable-cache: true
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Generate API clients
+      run: |
+        ./scripts/generate-clients.sh
+    
+    - name: Start services
+      run: |
+        docker compose -f deployment/docker-compose.yml up -d
+        # Wait for services to be ready
+        sleep 10
+        # Check services are responding
+        for i in {1..30}; do
+          if curl -f http://localhost:8081/ping/alive && curl -f http://localhost:8082/ping/alive; then
+            echo "Services are ready!"
+            break
+          fi
+          echo "Waiting for services... (attempt $i/30)"
+          sleep 2
+        done
+    
+    - name: Run integration tests
+      run: |
+        cd projects/policyengine-apis-integ
+        uv sync --extra test
+        # Run tests that don't require GCP credentials
+        uv run pytest tests/ -v -m "not requires_gcp"
+    
+    - name: Show service logs on failure
+      if: failure()
+      run: |
+        docker compose -f deployment/docker-compose.yml logs
+    
+    - name: Stop services
+      if: always()
+      run: |
+        docker compose -f deployment/docker-compose.yml down

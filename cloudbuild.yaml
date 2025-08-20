@@ -1,9 +1,0 @@
-steps:
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', '${_IMAGE_TAG}', '--build-arg', 'SERVICE_NAME=${_SERVICE_NAME}', '--build-arg', 'MODULE_NAME=${_MODULE_NAME}', '--build-arg', 'WORKER_COUNT=${_WORKER_COUNT}', '.']
-  
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', '${_IMAGE_TAG}']
-
-images:
-  - '${_IMAGE_TAG}'

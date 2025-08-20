@@ -1,7 +1,9 @@
+import pytest
 from .simplified_workflow_client import SimplifiedWorkflowClient
 from google.cloud.workflows.executions_v1.types import executions
 
 
+@pytest.mark.requires_gcp
 def test_calculate_default_model(client: SimplifiedWorkflowClient):
     execution = client.execute(
         argument={
@@ -19,6 +21,7 @@ def test_calculate_default_model(client: SimplifiedWorkflowClient):
     assert execution.state == executions.Execution.State.SUCCEEDED
 
 
+@pytest.mark.requires_gcp
 def test_calculate_specific_model(
     client: SimplifiedWorkflowClient, us_model_version: str
 ):

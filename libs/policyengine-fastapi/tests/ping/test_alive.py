@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-from policyengine_api.fastapi.health import (
+from policyengine_fastapi.health import (
     HealthRegistry,
     HealthSystemReporter,
     ProbeStatus,
