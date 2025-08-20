@@ -1,25 +1,32 @@
-FROM python:3.13-slim
+# Multi-stage build inheriting from base
+# Use explicit platform for consistency across builds
+FROM --platform=linux/amd64 python:3.13-slim AS base
+
+# Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Set environment variables
-ENV ENVIRONMENT="production" \
-    JWT_ISSUER=https://your_production_issuer/ \
-    JWT_AUDIENCE=https://your_production_api/ \
-    OT_SERVICE_NAME=policyengine_full_api \
-    OT_SERVICE_INSTANCE_ID=instance
+# Set common environment variables
+ENV ENVIRONMENT="production"
 
 WORKDIR /app
 
-# Copy LICENSE file to the root where it's expected
+# Copy shared libraries and LICENSE
 COPY LICENSE ./LICENSE
+COPY libs ./libs/
 
-# Copy the entire project structure for dependencies
-COPY libs/policyengine-fastapi ./libs/policyengine-fastapi/
+# Final stage
+FROM base AS final
+
+# Service-specific environment
+ENV OT_SERVICE_NAME=policyengine_full_api \
+    OT_SERVICE_INSTANCE_ID=instance
+
+# Copy service-specific code
 COPY projects/policyengine-api-full ./projects/policyengine-api-full/
 
 WORKDIR /app/projects/policyengine-api-full
 
-# Install dependencies using uv
+# Install dependencies
 RUN uv sync --frozen --no-dev
 
 EXPOSE 8080

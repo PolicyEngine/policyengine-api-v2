@@ -1,9 +1,9 @@
 from sqlmodel import SQLModel
 
-from policyengine_api.fastapi.database import create_session_dep
+from policyengine_fastapi.database import create_session_dep
 from ...common.fixtures import createApi, engine
 from fastapi.testclient import TestClient
-from policyengine_api.api.household import create_household_router
+from policyengine_api_full.api.household import create_household_router
 import pytest
 
 

@@ -1,38 +1,126 @@
-name: Deploy
+name: Deploy to GCP
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
 
 concurrency:
-  group: deploy-main
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  REPO: api-v2
 
 jobs:
-  build_beta:
-    name: Build beta
-    uses: ./.github/workflows/gcp-build.reusable.yml
-    with:
-      environment: beta
-    secrets: inherit
-  build_prod:
-    name: Build production
-    needs: [build_beta]
-    uses: ./.github/workflows/gcp-build.reusable.yml
-    with:
-      environment: prod
-    secrets: inherit
-  deploy_beta:
-    name: Deploy beta
-    needs: [build_beta]
-    uses: ./.github/workflows/gcp-deploy.reusable.yml
-    with:
-      environment: beta
-    secrets: inherit
-  deploy_prod:
-    name: Deploy production
-    needs: [build_prod, deploy_beta]
-    uses: ./.github/workflows/gcp-deploy.reusable.yml
-    with:
-      environment: prod
-    secrets: inherit
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    
+    strategy:
+      matrix:
+        service: [api-full, api-simulation, api-tagger]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+        service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+    
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+    
+    - name: Configure Docker for Artifact Registry
+      run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: projects/policyengine-${{ matrix.service }}/Dockerfile
+        push: true
+        tags: |
+          ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/policyengine-${{ matrix.service }}:${{ github.sha }}
+          ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/policyengine-${{ matrix.service }}:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
+
+  deploy-terraform:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Authenticate to Google Cloud
+      uses: "google-github-actions/auth@v2"
+      with:
+        workload_identity_provider: "${{ vars._GITHUB_IDENTITY_POOL_PROVIDER_NAME }}"
+        service_account: "deploy@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com"
+    
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.12.2
+    
+    - name: Extract package versions
+      id: versions
+      run: |
+        US_VERSION=$(grep -A1 'name = "policyengine-us"' projects/policyengine-api-simulation/uv.lock | grep version | head -1 | sed 's/.*"\(.*\)".*/\1/')
+        UK_VERSION=$(grep -A1 'name = "policyengine-uk"' projects/policyengine-api-simulation/uv.lock | grep version | head -1 | sed 's/.*"\(.*\)".*/\1/')
+        echo "us_version=$US_VERSION" >> $GITHUB_OUTPUT
+        echo "uk_version=$UK_VERSION" >> $GITHUB_OUTPUT
+    
+    - name: Create terraform variables
+      run: |
+        cat > deployment/terraform/infra/auto.tfvars <<EOF
+        project_id = "${{ env.PROJECT_ID }}"
+        commit_url = "https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
+        policyengine-us-package-version = "${{ steps.versions.outputs.us_version }}"
+        policyengine-uk-package-version = "${{ steps.versions.outputs.uk_version }}"
+        is_prod = ${{ github.event.inputs.environment == 'prod' && 'true' || 'false' }}
+        full_container_tag = "${{ github.sha }}"
+        simulation_container_tag = "${{ github.sha }}"
+        tagger_container_tag = "${{ github.sha }}"
+        region = "${{ env.REGION }}"
+        EOF
+    
+    - name: Terraform Init
+      working-directory: deployment/terraform/infra
+      run: terraform init
+    
+    - name: Terraform Plan
+      working-directory: deployment/terraform/infra
+      run: terraform plan -var-file=auto.tfvars -out=tfplan
+    
+    - name: Terraform Apply
+      if: github.ref == 'refs/heads/main'
+      working-directory: deployment/terraform/infra
+      run: terraform apply tfplan

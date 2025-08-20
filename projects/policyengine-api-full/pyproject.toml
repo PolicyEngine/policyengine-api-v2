@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/policyengine_api_full", "src/policyengine_api"]
+packages = ["src/policyengine_api_full"]
 
 [tool.uv.sources]
 policyengine-fastapi = { path = "../../libs/policyengine-fastapi", editable = true }
@@ -34,4 +34,4 @@ pythonpath = [
   "src",
 ]
 testpaths = ["tests"]
-addopts = "--cov=policyengine_api --cov-report=term-missing --cov-fail-under=80"
+addopts = "--cov=policyengine_api_full --cov-report=term-missing --cov-fail-under=80"

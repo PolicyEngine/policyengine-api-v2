@@ -2,8 +2,8 @@ from fastapi.testclient import TestClient
 import pytest
 
 from fastapi import FastAPI
-from policyengine_api.fastapi import ping
-from policyengine_api.fastapi.health import HealthRegistry
+from policyengine_fastapi import ping
+from policyengine_fastapi.health import HealthRegistry
 
 
 @pytest.fixture
