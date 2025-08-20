@@ -11,8 +11,8 @@ class Environment(Enum):
 
 class AppSettings(BaseSettings):
     environment: Environment = Environment.DESKTOP
-    
-    @field_validator('environment', mode='before')
+
+    @field_validator("environment", mode="before")
     @classmethod
     def strip_environment(cls, v):
         if isinstance(v, str):
