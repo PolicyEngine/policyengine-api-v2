@@ -19,8 +19,8 @@ env:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
     name: Deploy
+    runs-on: ubuntu-latest
     outputs:
       full_api_url: ${{ steps.deploy_infra.outputs.full_api_url }}
       simulation_api_url: ${{ steps.deploy_infra.outputs.simulation_api_url }}
@@ -116,8 +116,8 @@ jobs:
         echo "simulation_api_url=${SIMULATION_API_URL}" >> "$GITHUB_OUTPUT"
 
   integ_test:
-    needs: [deploy]
     name: Run integration test
+    needs: [deploy]
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
 

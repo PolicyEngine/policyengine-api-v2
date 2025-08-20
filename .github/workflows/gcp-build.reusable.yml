@@ -15,9 +15,9 @@ env:
 
 jobs:
   build_simulation_api_image:
+    name: Build simulation API image
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
-    name: Build simulation API image
 
     permissions:
       contents: "read"
@@ -55,9 +55,9 @@ jobs:
         platforms: linux/amd64
 
   build_full_api_image:
+    name: Build full API image
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
-    name: Build full API image
 
     permissions:
       contents: "read"
@@ -95,9 +95,9 @@ jobs:
         platforms: linux/amd64
 
   build_tagger_api_image:
+    name: Build tagger API image
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
-    name: Build tagger API image
 
     permissions:
       contents: "read"
