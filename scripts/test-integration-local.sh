@@ -37,8 +37,11 @@ check_service "api-simulation" 8082
 check_service "api-tagger" 8083
 
 echo ""
-echo "Running integration tests..."
-make test-integration
+echo "Running integration tests (excluding GCP workflow tests)..."
+cd projects/policyengine-apis-integ
+uv sync --extra test
+uv run pytest tests/ -v -m "not requires_gcp"
+cd ../..
 
 echo ""
 echo "Stopping services..."

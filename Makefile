@@ -113,11 +113,12 @@ test-integration: generate-clients
 	@echo "Make sure services are running with 'make up' first!"
 	@cd projects/policyengine-apis-integ && \
 		uv sync --extra test && \
-		uv run pytest tests/full/test_ping.py tests/simulation/test_ping.py -v
+		uv run pytest tests/ -v -m "not requires_gcp"
 
 test-integration-all: generate-clients
 	@echo "Running all integration tests against local services..."
 	@echo "Make sure services are running with 'make up' first!"
+	@echo "Note: Workflow tests will be skipped without GCP credentials"
 	@cd projects/policyengine-apis-integ && \
 		uv sync --extra test && \
 		uv run pytest tests/ -v

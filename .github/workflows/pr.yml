@@ -131,8 +131,8 @@ jobs:
       run: |
         cd projects/policyengine-apis-integ
         uv sync --extra test
-        # Run tests that don't require authentication
-        uv run pytest tests/full/test_ping.py tests/simulation/test_ping.py -v
+        # Run tests that don't require GCP credentials
+        uv run pytest tests/ -v -m "not requires_gcp"
     
     - name: Show service logs on failure
       if: failure()

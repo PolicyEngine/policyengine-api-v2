@@ -189,3 +189,5 @@ jobs:
         full_integ_test_base_url: ${{ needs.deploy.outputs.full_api_url }}
         simulation_integ_test_access_token: ${{ steps.get-simulation-id-token.outputs.id_token }}
         simulation_integ_test_base_url: ${{ needs.deploy.outputs.simulation_api_url }}
+        workflow_integ_test_project_id: ${{ vars.PROJECT_ID }}
+        workflow_integ_test_us_model_version: ${{ steps.versions.outputs.us_version }}
