@@ -1,0 +1,180 @@
+name: Reusable deploy workflow
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+        description: 'The environment to deploy to (e.g., beta, prod)'
+
+env:
+  TF_BACKEND_bucket: ${{ vars.PROJECT_ID }}-state
+  TF_VAR_project_id: ${{ vars.PROJECT_ID }}
+  TF_VAR_region: ${{ vars.REGION }}
+  TF_VAR_full_container_tag: ${{ github.sha }}
+  TF_VAR_simulation_container_tag: ${{ github.sha }}
+  TF_VAR_tagger_container_tag: ${{ github.sha }}
+  TF_VAR_commit_url: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy
+    outputs:
+      full_api_url: ${{ steps.deploy_infra.outputs.full_api_url }}
+      simulation_api_url: ${{ steps.deploy_infra.outputs.simulation_api_url }}
+    environment: ${{ inputs.environment }}
+    env:
+      TF_VAR_stage: ${{ inputs.environment }}
+      TF_VAR_is_prod: ${{ inputs.environment == 'prod' }}
+    
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+    
+    - name: Authenticate as deploy SA in GCP
+      uses: "google-github-actions/auth@v2"
+      with:
+        workload_identity_provider: "${{ vars._GITHUB_IDENTITY_POOL_PROVIDER_NAME }}"
+        service_account: "deploy@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com"
+    
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+    
+    - uses: hashicorp/setup-terraform@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+    
+    - name: Extract package versions
+      id: versions
+      run: |
+        US_VERSION=$(grep -A1 'name = "policyengine-us"' projects/policyengine-api-simulation/uv.lock | grep version | head -1 | sed 's/.*"\(.*\)".*/\1/')
+        UK_VERSION=$(grep -A1 'name = "policyengine-uk"' projects/policyengine-api-simulation/uv.lock | grep version | head -1 | sed 's/.*"\(.*\)".*/\1/')
+        echo "us_version=$US_VERSION" >> $GITHUB_OUTPUT
+        echo "uk_version=$UK_VERSION" >> $GITHUB_OUTPUT
+        echo "TF_VAR_policyengine_us_package_version=$US_VERSION" >> $GITHUB_ENV
+        echo "TF_VAR_policyengine_uk_package_version=$UK_VERSION" >> $GITHUB_ENV
+    
+    - name: Create terraform backend config
+      run: |
+        cat > deployment/terraform/infra/backend.tf <<EOF
+        terraform {
+          backend "gcs" {
+            bucket = "${{ env.TF_BACKEND_bucket }}"
+            prefix = "infra"
+          }
+        }
+        EOF
+    
+    - name: Create terraform variables file
+      run: |
+        cat > deployment/terraform/infra/terraform.tfvars <<EOF
+        project_id = "${{ vars.PROJECT_ID }}"
+        region = "${{ vars.REGION }}"
+        commit_url = "https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
+        policyengine-us-package-version = "${{ steps.versions.outputs.us_version }}"
+        policyengine-uk-package-version = "${{ steps.versions.outputs.uk_version }}"
+        is_prod = ${{ env.TF_VAR_is_prod }}
+        full_container_tag = "${{ github.sha }}"
+        simulation_container_tag = "${{ github.sha }}"
+        tagger_container_tag = "${{ github.sha }}"
+        EOF
+    
+    - name: Deploy infrastructure
+      id: deploy_infra
+      working-directory: deployment/terraform/infra
+      run: |
+        terraform init
+        terraform plan -out=tfplan
+        terraform apply tfplan
+        
+        # Export outputs for integration tests
+        terraform output -json > terraform_output.json
+        FULL_API_URL=$(cat terraform_output.json | jq -r '.full_api_url.value // empty')
+        SIMULATION_API_URL=$(cat terraform_output.json | jq -r '.simulation_api_url.value // empty')
+        
+        # If outputs are not available from terraform, construct them
+        if [ -z "$FULL_API_URL" ]; then
+          FULL_API_URL="https://full-api-${{ vars.REGION }}-uc.a.run.app"
+        fi
+        if [ -z "$SIMULATION_API_URL" ]; then
+          SIMULATION_API_URL="https://api-simulation-${{ vars.REGION }}-uc.a.run.app"
+        fi
+        
+        echo "full_api_url=${FULL_API_URL}" >> "$GITHUB_OUTPUT"
+        echo "simulation_api_url=${SIMULATION_API_URL}" >> "$GITHUB_OUTPUT"
+
+  integ_test:
+    needs: [deploy]
+    name: Run integration test
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+    
+    - name: Authenticate as tester SA in GCP
+      uses: "google-github-actions/auth@v2"
+      with:
+        workload_identity_provider: "${{ vars._GITHUB_IDENTITY_POOL_PROVIDER_NAME }}"
+        service_account: "tester@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com"
+    
+    - name: Auth as tester SA for full API
+      id: get-full-id-token
+      uses: "google-github-actions/auth@v2"
+      with: 
+        workload_identity_provider: "${{ vars._GITHUB_IDENTITY_POOL_PROVIDER_NAME }}"
+        service_account: "tester@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com"
+        token_format: "id_token"
+        id_token_audience: ${{ needs.deploy.outputs.full_api_url }}
+        id_token_include_email: true
+    
+    - name: Auth as tester SA for simulation API
+      id: get-simulation-id-token
+      uses: "google-github-actions/auth@v2"
+      with:
+        workload_identity_provider: "${{ vars._GITHUB_IDENTITY_POOL_PROVIDER_NAME }}"
+        service_account: "tester@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com"
+        token_format: "id_token"
+        id_token_audience: ${{ needs.deploy.outputs.simulation_api_url }}
+        id_token_include_email: true
+    
+    - name: Mask ID tokens
+      run: |
+        echo "::add-mask::${{steps.get-full-id-token.outputs.id_token}}"
+        echo "::add-mask::${{steps.get-simulation-id-token.outputs.id_token}}"
+    
+    - name: Run integration tests
+      run: |
+        cd projects/policyengine-apis-integ
+        uv sync --extra test
+        uv run pytest tests/ -v
+      env:
+        FULL_API_ACCESS_TOKEN: ${{ steps.get-full-id-token.outputs.id_token }}
+        FULL_API_URL: ${{ needs.deploy.outputs.full_api_url }}
+        SIMULATION_API_ACCESS_TOKEN: ${{ steps.get-simulation-id-token.outputs.id_token }}
+        SIMULATION_API_URL: ${{ needs.deploy.outputs.simulation_api_url }}
