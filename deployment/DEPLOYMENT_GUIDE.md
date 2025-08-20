@@ -19,6 +19,11 @@ cp deployment/.env.example deployment/.env
 ```bash
 # If you get "already exists" errors, run:
 make terraform-import
+
+# For workflow errors specifically (workflows can't be imported):
+./deployment/terraform/handle-existing-workflows.sh $PROJECT_ID
+# To auto-delete existing workflows, add --delete flag:
+# ./deployment/terraform/handle-existing-workflows.sh $PROJECT_ID us-central1 --delete
 ```
 
 3. Deploy:

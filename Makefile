@@ -244,6 +244,10 @@ terraform-import:
 	@echo "Importing existing resources into terraform state..."
 	@cd deployment/terraform && ./import-existing.sh
 
+terraform-handle-workflows:
+	@echo "Checking and handling existing workflows..."
+	@cd deployment/terraform && ./handle-existing-workflows.sh $(PROJECT_ID) $(TF_VAR_region)
+
 terraform-destroy:
 	@echo "⚠️  WARNING: This will destroy all terraform-managed resources!"
 	@echo "Press Ctrl+C to cancel, or Enter to continue..."

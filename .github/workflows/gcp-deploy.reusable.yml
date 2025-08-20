@@ -91,6 +91,13 @@ jobs:
         tagger_container_tag = "${{ github.sha }}"
         EOF
     
+    - name: Handle existing workflows
+      run: |
+        # Check for existing workflows and delete them if they exist
+        # This is necessary because workflows can't be imported into terraform state
+        chmod +x deployment/terraform/handle-existing-workflows.sh
+        ./deployment/terraform/handle-existing-workflows.sh "${{ vars.PROJECT_ID }}" "${{ vars.REGION }}" --delete || true
+    
     - name: Deploy infrastructure
       id: deploy_infra
       working-directory: deployment/terraform/infra
