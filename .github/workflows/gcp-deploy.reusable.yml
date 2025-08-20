@@ -24,6 +24,8 @@ jobs:
     outputs:
       full_api_url: ${{ steps.deploy_infra.outputs.full_api_url }}
       simulation_api_url: ${{ steps.deploy_infra.outputs.simulation_api_url }}
+      us_model_version: ${{ steps.deploy_infra.outputs.us_model_version }}
+      uk_model_version: ${{ steps.deploy_infra.outputs.uk_model_version }}
     environment: ${{ inputs.environment }}
     env:
       TF_VAR_stage: ${{ inputs.environment }}
@@ -111,6 +113,10 @@ jobs:
         FULL_API_URL=$(cat terraform_output.json | jq -r '.full_api_url.value // empty')
         SIMULATION_API_URL=$(cat terraform_output.json | jq -r '.simulation_api_url.value // empty')
         
+        # Extract model versions from release_metadata
+        US_MODEL_VERSION=$(cat terraform_output.json | jq -r '.release_metadata.value.models.us // empty')
+        UK_MODEL_VERSION=$(cat terraform_output.json | jq -r '.release_metadata.value.models.uk // empty')
+        
         # If outputs are not available from terraform, construct them
         if [ -z "$FULL_API_URL" ]; then
           FULL_API_URL="https://full-api-${{ vars.REGION }}-uc.a.run.app"
@@ -119,8 +125,18 @@ jobs:
           SIMULATION_API_URL="https://api-simulation-${{ vars.REGION }}-uc.a.run.app"
         fi
         
+        # If model versions are not available from terraform, use the ones from package extraction
+        if [ -z "$US_MODEL_VERSION" ]; then
+          US_MODEL_VERSION="${{ steps.versions.outputs.us_version }}"
+        fi
+        if [ -z "$UK_MODEL_VERSION" ]; then
+          UK_MODEL_VERSION="${{ steps.versions.outputs.uk_version }}"
+        fi
+        
         echo "full_api_url=${FULL_API_URL}" >> "$GITHUB_OUTPUT"
         echo "simulation_api_url=${SIMULATION_API_URL}" >> "$GITHUB_OUTPUT"
+        echo "us_model_version=${US_MODEL_VERSION}" >> "$GITHUB_OUTPUT"
+        echo "uk_model_version=${UK_MODEL_VERSION}" >> "$GITHUB_OUTPUT"
 
   integ_test:
     name: Run integration test
@@ -190,4 +206,4 @@ jobs:
         simulation_integ_test_access_token: ${{ steps.get-simulation-id-token.outputs.id_token }}
         simulation_integ_test_base_url: ${{ needs.deploy.outputs.simulation_api_url }}
         workflow_integ_test_project_id: ${{ vars.PROJECT_ID }}
-        workflow_integ_test_us_model_version: ${{ needs.deploy.outputs.release_metadata.models.us }}
+        workflow_integ_test_us_model_version: ${{ needs.deploy.outputs.us_model_version }}
