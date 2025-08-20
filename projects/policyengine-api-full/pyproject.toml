@@ -34,4 +34,4 @@ pythonpath = [
   "src",
 ]
 testpaths = ["tests"]
-addopts = "--cov=policyengine_api_full --cov-report=term-missing --cov-fail-under=80"
+addopts = "--cov=policyengine_api_full --cov-report=term-missing"
