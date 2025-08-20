@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  PROJECT_ID: ${{ vars.PROJECT_ID }}
   REGION: us-central1
   REPO: api-v2
 
@@ -39,10 +39,10 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
+      uses: "google-github-actions/auth@v2"
       with:
-        workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-        service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+        workload_identity_provider: "${{ vars._GITHUB_IDENTITY_POOL_PROVIDER_NAME }}"
+        service_account: "deploy@${{ env.PROJECT_ID }}.iam.gserviceaccount.com"
     
     - name: Set up Cloud SDK
       uses: google-github-actions/setup-gcloud@v2
@@ -80,7 +80,7 @@ jobs:
       uses: "google-github-actions/auth@v2"
       with:
         workload_identity_provider: "${{ vars._GITHUB_IDENTITY_POOL_PROVIDER_NAME }}"
-        service_account: "deploy@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com"
+        service_account: "deploy@${{ env.PROJECT_ID }}.iam.gserviceaccount.com"
     
     - name: Set up Cloud SDK
       uses: google-github-actions/setup-gcloud@v2
@@ -112,15 +112,15 @@ jobs:
         region = "${{ env.REGION }}"
         EOF
     
-    - name: Terraform Init
+    - name: Terraform init
       working-directory: deployment/terraform/infra
       run: terraform init
     
-    - name: Terraform Plan
+    - name: Terraform plan
       working-directory: deployment/terraform/infra
       run: terraform plan -var-file=auto.tfvars -out=tfplan
     
-    - name: Terraform Apply
+    - name: Terraform apply
       if: github.ref == 'refs/heads/main'
       working-directory: deployment/terraform/infra
       run: terraform apply tfplan
