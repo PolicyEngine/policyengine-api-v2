@@ -34,7 +34,7 @@ jobs:
     - name: Run tests
       run: |
         cd projects/policyengine-${{ matrix.service }}
-        uv run pytest tests/ -v --cov=src --cov-report=xml
+        uv run pytest tests/ -v
     
     - name: Upload coverage
       uses: codecov/codecov-action@v4
