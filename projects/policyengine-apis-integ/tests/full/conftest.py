@@ -5,7 +5,7 @@ import httpx
 
 
 class Settings(BaseSettings):
-    base_url: str = "http://localhost:8080"
+    base_url: str = "http://localhost:8081"
     access_token: str | None = None
     timeout_in_millis: int = 2_000
 

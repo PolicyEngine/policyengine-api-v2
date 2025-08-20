@@ -1,41 +1,174 @@
-Monorepo containing all the libraries, applications, terraform and github actions required to build/test/deploy/release the PolicyEngine api V2. 
+# PolicyEngine API v2
 
-# Local Development Quick Start
-* [install poetry](https://python-poetry.org/docs/#installation)
-* ``make build`` - install and pytest all libraries and projects.
+Monorepo for PolicyEngine's API infrastructure, containing all services, libraries, and deployment configuration.
 
-# Cloud Development Quick Start
-__NOTE: MOST development should be possible locally. Deployment is slow and hard to debug. Change with caution__
+## Quick start
 
-* One time setup - this will create a new project in your GCP account you can deploy the api to.
-  * Create a gcp account _with organization_
-  * authenticate with gcloud as a user with permission to create projects.
-    * ``gcloud auth application-default login``
-  * Have your organization ID and billing account number handy.
-  * ``cd terraform/infra-policyengine-api && make bootstrap``
-  * You should now have a terraform/.bootstrap_settings folder containing your project settings.
-* build the api docker image
-  * ``cd projects/policyengine-api-full && make deploy``
-  * There should now be a new hash under the tag "desktop" in the project artifact repository.
-* deploy to the cloud
-  * ``cd terraform/project-policyengine-api-full && make deploy``
-  * The cloudrun service should now be running using the latest image version of the tag "desksop" from your project artifact respository
+### Prerequisites
 
-# Github Deploy to Cloud Quick Start
+- Docker and Docker Compose
+- Python 3.13+
+- [uv](https://docs.astral.sh/uv/) package manager
+- gcloud CLI (for deployment)
+- Terraform 1.5+ (for deployment)
 
-__checkout a clean version of the repository__ you cannot bootstrap more than one project 
-in a workspace at a time.
+### Local development
 
-* bootstrap the beta project
-  * have your github repo owner id and repo (i.e. org/repo) ready
-  * have your GCP organization id and billing account number ready
-  * log into your gcp account via gcloud as a user able to create projects.
-  * ``cd terraform/project-poicyengine-api && make bootstrap_beta``
-* WAIT FOR AT LEAST AN HOUR (permissions configuration sometimes takes up to an hour for the github federation.) You may get errors about lack of permission (or possibly resource) for thinkgs like the deployment state bucket.
-* configure github
-  * create a new environment in your github repo settings called "beta" and, using the ouput of the bootstrap, configure the following values
-    * REGION (generally us-central1)
-    * PROJECT_ID (in the output of the bootstrap target)
-    * _GITHUB_IDENTITY_POOL_PROVIDER_NAME (in the output of the bootstrap build target)
-    * ORG_ID
-    * BILLING_ACCOUNT
+Start all services:
+```bash
+make up        # Start services on ports 8081-8083
+make logs      # View logs
+make down      # Stop services
+```
+
+Run the test suite:
+```bash
+make test                          # Unit tests only
+make test-integration-with-services # Full integration tests (manages services automatically)
+make test-complete                 # Everything: unit + integration tests
+```
+
+## Architecture
+
+The repository contains three main API services:
+
+- **api-full** (port 8081): Main PolicyEngine API with household calculations
+- **api-simulation** (port 8082): Economic simulation engine  
+- **api-tagger** (port 8083): Cloud Run revision management
+
+Each service generates OpenAPI specs and Python client libraries for integration testing.
+
+## Development workflow
+
+### Making changes
+
+1. Edit code locally - services hot-reload automatically when running via `make up`
+2. Run tests: `make test-complete`
+3. Commit changes to a feature branch
+4. Open a PR - GitHub Actions will run tests automatically
+
+### Testing
+
+Unit tests run in isolated containers:
+```bash
+make test                    # All services
+make test-service service=api-full  # Single service
+```
+
+Integration tests use generated client libraries:
+```bash
+make generate-clients        # Generate OpenAPI clients (done automatically by test commands)
+make test-integration        # Run integration tests (requires services running)
+```
+
+### Project structure
+
+```
+/
+├── projects/               # Service applications
+│   ├── policyengine-api-full/
+│   ├── policyengine-api-simulation/
+│   ├── policyengine-api-tagger/
+│   └── policyengine-apis-integ/    # Integration tests
+├── libs/                   # Shared libraries
+│   └── policyengine-fastapi/       # Common FastAPI utilities
+├── deployment/             # Deployment configuration
+│   ├── docker-compose.yml          # Local development
+│   ├── docker-compose.prod.yml     # Production builds
+│   └── terraform/                  # Infrastructure as code
+├── scripts/                # Utility scripts
+└── .github/workflows/      # CI/CD pipelines
+```
+
+## Deployment
+
+### Setting up a new GCP project
+
+**Important**: Most development should be done locally. Cloud deployment is slow and harder to debug.
+
+1. Configure environment:
+```bash
+cp deployment/.env.example deployment/.env
+# Edit deployment/.env with your GCP project details
+```
+
+2. Deploy infrastructure:
+```bash
+make deploy  # Builds images, pushes to registry, runs terraform
+```
+
+For existing GCP projects with resources:
+```bash
+make terraform-import  # Import existing resources
+./deployment/terraform/handle-existing-workflows.sh $PROJECT_ID --delete  # Handle workflows
+```
+
+See [deployment guide](deployment/DEPLOYMENT_GUIDE.md) for detailed instructions.
+
+### GitHub Actions deployment
+
+The repository includes automated deployment pipelines:
+
+1. **Pull requests**: Runs tests and builds
+2. **Merge to main**: 
+   - Deploys to beta environment
+   - Runs integration tests
+   - Deploys to production
+
+Configure GitHub environments with these variables:
+- `PROJECT_ID`: GCP project ID
+- `REGION`: GCP region (usually us-central1)
+- `_GITHUB_IDENTITY_POOL_PROVIDER_NAME`: Workload identity provider
+
+### Important notes from experience
+
+- **Wait after bootstrap**: GCP permission propagation can take up to an hour
+- **Workflows can't be imported**: Use the provided script to handle existing workflows
+- **Always test locally first**: Cloud debugging is painful
+- **Check terraform state**: If deployments fail, check if resources already exist
+
+## Commands reference
+
+### Development
+- `make up` - Start services locally
+- `make down` - Stop services
+- `make logs` - View service logs
+- `make build` - Build Docker images
+
+### Testing
+- `make test` - Run unit tests
+- `make test-integration` - Run integration tests
+- `make test-complete` - Run all tests with service management
+- `make generate-clients` - Generate API client libraries
+
+### Deployment
+- `make deploy` - Full deployment to GCP
+- `make terraform-plan` - Preview infrastructure changes
+- `make terraform-import` - Import existing resources
+- `make terraform-destroy` - Remove all infrastructure
+
+## Troubleshooting
+
+### Services won't start
+- Check Docker is running
+- Ensure ports 8081-8083 are free
+- Run `make build` to rebuild images
+
+### Integration tests fail
+- Regenerate clients: `make generate-clients`
+- Check services are healthy: `make logs`
+- Verify port configuration matches docker-compose.yml
+
+### Deployment issues
+- Check deployment/.env configuration
+- Verify GCP authentication: `gcloud auth list`
+- For "already exists" errors: `make terraform-import`
+- For workflow errors: `./deployment/terraform/handle-existing-workflows.sh`
+
+## Contributing
+
+1. Create a feature branch
+2. Make changes and test locally
+3. Ensure `make test-complete` passes
+4. Open a PR with a clear description
+5. Wait for CI checks to pass

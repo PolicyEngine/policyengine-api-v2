@@ -175,13 +175,17 @@ jobs:
         echo "::add-mask::${{steps.get-full-id-token.outputs.id_token}}"
         echo "::add-mask::${{steps.get-simulation-id-token.outputs.id_token}}"
     
+    - name: Generate API clients
+      run: |
+        ./scripts/generate-clients.sh
+    
     - name: Run integration tests
       run: |
         cd projects/policyengine-apis-integ
         uv sync --extra test
         uv run pytest tests/ -v
       env:
-        FULL_API_ACCESS_TOKEN: ${{ steps.get-full-id-token.outputs.id_token }}
-        FULL_API_URL: ${{ needs.deploy.outputs.full_api_url }}
-        SIMULATION_API_ACCESS_TOKEN: ${{ steps.get-simulation-id-token.outputs.id_token }}
-        SIMULATION_API_URL: ${{ needs.deploy.outputs.simulation_api_url }}
+        full_integ_test_access_token: ${{ steps.get-full-id-token.outputs.id_token }}
+        full_integ_test_base_url: ${{ needs.deploy.outputs.full_api_url }}
+        simulation_integ_test_access_token: ${{ steps.get-simulation-id-token.outputs.id_token }}
+        simulation_integ_test_base_url: ${{ needs.deploy.outputs.simulation_api_url }}

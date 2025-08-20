@@ -87,6 +87,11 @@ build:
 build-prod:
 	docker-compose -f deployment/docker-compose.prod.yml build --parallel
 
+# Client generation
+generate-clients:
+	@echo "Generating API clients..."
+	@./scripts/generate-clients.sh
+
 # Testing
 test:
 	@echo "Running tests for all services..."
@@ -101,6 +106,33 @@ ifndef service
 else
 	docker-compose -f deployment/docker-compose.yml run --rm $(service) sh -c "cd /app/projects/policyengine-$(service) && uv run --extra test pytest"
 endif
+
+# Integration testing
+test-integration: generate-clients
+	@echo "Running integration tests against local services..."
+	@echo "Make sure services are running with 'make up' first!"
+	@cd projects/policyengine-apis-integ && \
+		uv sync --extra test && \
+		uv run pytest tests/full/test_ping.py tests/simulation/test_ping.py -v
+
+test-integration-all: generate-clients
+	@echo "Running all integration tests against local services..."
+	@echo "Make sure services are running with 'make up' first!"
+	@cd projects/policyengine-apis-integ && \
+		uv sync --extra test && \
+		uv run pytest tests/ -v
+
+test-integration-with-services:
+	@echo "Starting services and running integration tests..."
+	@./scripts/test-integration-local.sh
+
+# Full test suite including integration
+test-all: test test-integration
+	@echo "✅ All tests passed!"
+
+# Complete test suite with services startup/shutdown
+test-complete: test test-integration-with-services
+	@echo "✅ All tests including integration passed!"
 
 # Deployment
 deploy: check-deploy-env build-prod push-images terraform-ensure-init terraform-deploy-all
