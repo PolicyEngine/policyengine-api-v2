@@ -39,12 +39,3 @@ jobs:
     with:
       environment: prod
     secrets: inherit
-  
-  publish_clients:
-    name: Publish API clients
-    needs: [deploy_prod]
-    uses: ./.github/workflows/publish-clients.reusable.yml
-    with:
-      environment: prod
-    secrets:
-      PYPI_TOKEN: ${{ secrets.PYPI }}
