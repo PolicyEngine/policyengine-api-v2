@@ -92,6 +92,14 @@ generate-clients:
 	@echo "Generating API clients..."
 	@./scripts/generate-clients.sh
 
+publish-clients: generate-clients
+	@echo "Publishing API clients to PyPI..."
+	@if [ -z "$(PYPI_TOKEN)" ]; then \
+		echo "Please set PYPI_TOKEN environment variable"; \
+		exit 1; \
+	fi
+	@PYPI_TOKEN=$(PYPI_TOKEN) ./scripts/publish-clients.sh
+
 # Testing
 test:
 	@echo "Running tests for all services..."

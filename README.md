@@ -114,6 +114,7 @@ The repository includes automated deployment pipelines:
    - Deploys to beta environment
    - Runs integration tests
    - Deploys to production
+   - Publishes API client packages to PyPI
 
 Configure GitHub environments with these variables:
 - `PROJECT_ID`: GCP project ID
@@ -146,6 +147,7 @@ Configure GitHub environments with these variables:
 - `make terraform-plan` - Preview infrastructure changes
 - `make terraform-import` - Import existing resources
 - `make terraform-destroy` - Remove all infrastructure
+- `make publish-clients` - Publish API clients to PyPI (requires PYPI_TOKEN)
 
 ## Troubleshooting
 
