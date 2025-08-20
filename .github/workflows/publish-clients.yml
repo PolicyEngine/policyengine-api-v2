@@ -42,7 +42,7 @@ jobs:
         # Update version
         DATE=$(date +%Y%m%d)
         SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-        NEW_VERSION="0.${DATE}.${SHORT_SHA}"
+        NEW_VERSION="0.${DATE}+${SHORT_SHA}"
         sed -i "s/^version = .*/version = \"${NEW_VERSION}\"/" pyproject.toml
         uv build
     
@@ -52,7 +52,7 @@ jobs:
         # Update version
         DATE=$(date +%Y%m%d)
         SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-        NEW_VERSION="0.${DATE}.${SHORT_SHA}"
+        NEW_VERSION="0.${DATE}+${SHORT_SHA}"
         sed -i "s/^version = .*/version = \"${NEW_VERSION}\"/" pyproject.toml
         uv build
     
