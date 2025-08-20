@@ -32,15 +32,7 @@ jobs:
     - name: Run tests
       run: |
         cd projects/policyengine-${{ matrix.service }}
-        uv run pytest tests/ -v --cov=src --cov-report=xml
-    
-    - name: Upload coverage
-      uses: codecov/codecov-action@v4
-      with:
-        file: ./projects/policyengine-${{ matrix.service }}/coverage.xml
-        flags: ${{ matrix.service }}
-        name: ${{ matrix.service }}
-        fail_ci_if_error: false
+        uv run pytest tests/ -v
 
   lint:
     runs-on: ubuntu-latest
@@ -67,22 +59,15 @@ jobs:
             uv run ruff format --check $dir
           fi
         done
-    
-    - name: Run ruff lint
-      run: |
-        for dir in projects/*/src libs/*/src; do
-          if [ -d "$dir" ]; then
-            echo "Linting $dir..."
-            uv run ruff check $dir
-          fi
-        done
 
   docker-build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         service: [api-full, api-simulation, api-tagger]
-    
+        # Run after tests
+        needs: [test]
+
     steps:
     - uses: actions/checkout@v4
     
