@@ -34,34 +34,6 @@ jobs:
       run: |
         cd projects/policyengine-${{ matrix.service }}
         uv run pytest tests/ -v
-  
-  test-integration:
-    name: Test integration
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.13'
-    
-    - name: Install uv
-      uses: astral-sh/setup-uv@v3
-      with:
-        enable-cache: true
-    
-    - name: Generate API clients
-      run: |
-        ./scripts/generate-clients.sh
-    
-    - name: Run integration tests
-      run: |
-        cd projects/policyengine-apis-integ
-        uv sync --extra test
-        # Run tests that don't require authentication
-        uv run pytest tests/full/test_ping.py tests/simulation/test_ping.py -v || true
 
   lint:
     name: Lint
@@ -92,6 +64,7 @@ jobs:
 
   docker-build:
     name: Docker build
+    needs: [test, lint]  # Only run if tests and linting pass
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -113,3 +86,57 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         platforms: linux/amd64
+  
+  test-integration:
+    name: Test integration
+    needs: docker-build  # Only run if docker builds succeed
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        enable-cache: true
+    
+    - name: Generate API clients
+      run: |
+        ./scripts/generate-clients.sh
+    
+    - name: Start services
+      run: |
+        docker-compose -f deployment/docker-compose.yml up -d
+        # Wait for services to be ready
+        sleep 10
+        # Check services are responding
+        for i in {1..30}; do
+          if curl -f http://localhost:8081/ping/alive && curl -f http://localhost:8082/ping/alive; then
+            echo "Services are ready!"
+            break
+          fi
+          echo "Waiting for services... (attempt $i/30)"
+          sleep 2
+        done
+    
+    - name: Run integration tests
+      run: |
+        cd projects/policyengine-apis-integ
+        uv sync --extra test
+        # Run tests that don't require authentication
+        uv run pytest tests/full/test_ping.py tests/simulation/test_ping.py -v
+    
+    - name: Show service logs on failure
+      if: failure()
+      run: |
+        docker-compose -f deployment/docker-compose.yml logs
+    
+    - name: Stop services
+      if: always()
+      run: |
+        docker-compose -f deployment/docker-compose.yml down
