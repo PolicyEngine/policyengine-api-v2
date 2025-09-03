@@ -2,12 +2,15 @@ from contextlib import asynccontextmanager
 from typing import Any
 from fastapi import FastAPI
 from sqlmodel import SQLModel
-from policyengine_api.fastapi.database import create_sqlite_engine
-from policyengine_api.fastapi import ping
-from policyengine_api.fastapi.health import HealthRegistry, HealthSystemReporter
-from policyengine_api.fastapi.exit import exit
+from policyengine_fastapi.database import create_sqlite_engine
+from policyengine_fastapi import ping
+from policyengine_fastapi.health import (
+    HealthRegistry,
+    HealthSystemReporter,
+)
+from policyengine_fastapi.exit import exit
 from .settings import get_settings, Environment
-from policyengine_api.fastapi.opentelemetry import (
+from policyengine_fastapi.opentelemetry import (
     GCPLoggingInstrumentor,
     FastAPIEnhancedInstrumenter,
     export_ot_to_console,
@@ -19,7 +22,7 @@ from opentelemetry.sdk.resources import (
     Resource,
 )
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from policyengine_api.api import initialize
+from policyengine_api_full.api import initialize
 import logging
 
 """
@@ -78,9 +81,9 @@ resource = Resource.create(
     }
 )
 
-match (get_settings().environment):
+match get_settings().environment:
     case Environment.DESKTOP:
-        export_ot_to_console(resource)
+        pass  # export_ot_to_console(resource)
     case Environment.PRODUCTION:
         export_ot_to_gcp(resource)
     case value:

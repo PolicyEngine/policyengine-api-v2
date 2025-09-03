@@ -13,3 +13,4 @@ apply.tfvars
 backend.tfvars
 CLAUDE.md
 .vscode
+deployment/terraform/*/auto.tfvars

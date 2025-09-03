@@ -1,6 +1,7 @@
 from enum import Enum
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 
 
 class Environment(Enum):
@@ -10,6 +11,13 @@ class Environment(Enum):
 
 class AppSettings(BaseSettings):
     environment: Environment = Environment.DESKTOP
+
+    @field_validator("environment", mode="before")
+    @classmethod
+    def strip_environment(cls, v):
+        if isinstance(v, str):
+            return v.strip()
+        return v
 
     jwt_issuer: str = "https://your_issuer/"
     """

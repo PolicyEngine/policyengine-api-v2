@@ -17,6 +17,8 @@ dependencies = [
     "opentelemetry-exporter-gcp-trace >=1.9.0,<2.0.0",
     "opentelemetry-exporter-gcp-monitoring >=1.9.0a0,<2.0.0",
     "opentelemetry-instrumentation-fastapi >=0.51b0,<0.52",
+    "opentelemetry-instrumentation-sqlalchemy>=0.51b0",
+    "uvicorn>=0.35.0",
 ]
 
 [project.optional-dependencies]
@@ -29,11 +31,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 sources = ["src"]
-only-include = ["src/policyengine_api/fastapi"]
-packages = ["src/policyengine_api"]
+only-include = ["src/policyengine_fastapi"]
+packages = ["src/policyengine_fastapi"]
 
 [tool.pytest.ini_options]
 pythonpath = [
   "src"
 ]
-addopts = "--cov=policyengine_api.fastapi --cov-report=term-missing --cov-fail-under=30"
+addopts = "--cov=policyengine_fastapi --cov-report=term-missing --cov-fail-under=30"

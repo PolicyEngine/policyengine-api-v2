@@ -1,31 +1,35 @@
-FROM python:3.13-slim
+# Multi-stage build inheriting from base
+# Use explicit platform for consistency across builds
+FROM --platform=linux/amd64 python:3.13-slim AS base
 
-RUN pip install poetry==2.0.1
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-ENV POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_IN_PROJECT=1 \
-    POETRY_VIRTUALENVS_CREATE=1 \
-    POETRY_CACHE_DIR=/tmp/poetry_cache \
-    ENVIRONMENT="production" \
-    JWT_ISSUER=https://your_production_issuer/ \
-    JWT_AUDIENCE=https://your_production_api/ \
-    OT_SERVICE_NAME=policyengine_full_api \
+# Set common environment variables
+ENV ENVIRONMENT="production"
+
+WORKDIR /app
+
+# Copy shared libraries and LICENSE
+COPY LICENSE ./LICENSE
+COPY libs ./libs/
+
+# Final stage
+FROM base AS final
+
+# Service-specific environment
+ENV OT_SERVICE_NAME=policyengine_full_api \
     OT_SERVICE_INSTANCE_ID=instance
 
-WORKDIR app
-# This may copy some dependencies this app doesn't need, but source should
-# not be very large
-#.dockerignore will exclude .venv and .git
-COPY artifacts/staging .
-COPY pyproject.toml poetry.lock projects/app/
-RUN touch README.md
+# Copy service-specific code
+COPY projects/policyengine-api-full ./projects/policyengine-api-full/
 
-WORKDIR projects/app
-RUN poetry install --with main --no-root && rm -rf $POETRY_CACHE_DIR
+WORKDIR /app/projects/policyengine-api-full
 
-COPY src ./src/
-
-RUN poetry install --with main --no-root
+# Install dependencies
+RUN uv sync --frozen --no-dev
 
 EXPOSE 8080
-CMD ["poetry", "run", "fastapi", "run", "src/policyengine_api_full/main.py", "--port", "8080"]
+
+# Run with uvicorn
+CMD ["uv", "run", "uvicorn", "policyengine_api_full.main:app", "--host", "0.0.0.0", "--port", "8080"]

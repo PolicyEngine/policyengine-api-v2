@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "policyengine-simulation-api-project"
 version = "0.1.0"
@@ -14,15 +18,19 @@ dependencies = [
     "policyengine-fastapi",
     "policyengine>=0.6.0",
     "policyengine-uk>=2.22.8",
-    "policyengine-us (>=1.250.0)",
+    "policyengine-us>=1.370.2",
+    "tables>=3.10.2",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/policyengine_api_simulation", "src/policyengine_api"]
 
 [tool.uv.sources]
 policyengine-fastapi = { path = "../../libs/policyengine-fastapi", editable = true }
 
 [project.optional-dependencies]
 test = [ "pytest>=8.3.4", "pytest-asyncio>=0.25.3", "pytest-cov>=6.1.1",]
-build = [ "pyright>=1.1.401", "black>=25.1.0",]
+build = [ "pyright>=1.1.401", "black>=25.1.0", "openapi-python-client>=0.21.6",]
 
 [tool.pytest.ini_options]
 pythonpath = [

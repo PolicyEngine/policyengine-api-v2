@@ -1,12 +1,13 @@
-import policyengine_full_api_client
+from policyengine_api_full_client import Client, AuthenticatedClient
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import pytest
+import httpx
 
 
 class Settings(BaseSettings):
-    base_url: str = "http://localhost:8080"
+    base_url: str = "http://localhost:8081"
     access_token: str | None = None
-    timeout_in_millis: int = 200
+    timeout_in_millis: int = 2_000
 
     model_config = SettingsConfigDict(env_prefix="full_integ_test_")
 
@@ -15,9 +16,10 @@ settings = Settings()
 
 
 @pytest.fixture()
-def client() -> policyengine_full_api_client.DefaultApi:
-    config = policyengine_full_api_client.Configuration(host=settings.base_url)
-    client = policyengine_full_api_client.ApiClient(config)
+def client() -> Client | AuthenticatedClient:
+    timeout = httpx.Timeout(timeout=settings.timeout_in_millis / 1000)
     if settings.access_token:
-        client.default_headers["Authorization"] = f"Bearer {settings.access_token}"
-    return policyengine_full_api_client.DefaultApi(client)
+        return AuthenticatedClient(
+            base_url=settings.base_url, token=settings.access_token, timeout=timeout
+        )
+    return Client(base_url=settings.base_url, timeout=timeout)

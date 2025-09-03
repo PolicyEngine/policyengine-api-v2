@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import pytest
 from .simplified_workflow_client import SimplifiedWorkflowClient
+import os
 
 
 class Settings(BaseSettings):
@@ -13,6 +14,15 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+# Skip all workflow tests if we don't have proper GCP configuration
+pytestmark = pytest.mark.skipif(
+    settings.project_id == "UNKNOWN_PROJECT_ID" or 
+    settings.us_model_version == "UNKNOWN_US_MODEL_VERSION" or
+    not os.getenv("GOOGLE_APPLICATION_CREDENTIALS", ""),
+    reason="Workflow tests require GCP credentials and configuration"
+)
 
 
 @pytest.fixture()

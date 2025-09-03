@@ -2,21 +2,24 @@ from contextlib import asynccontextmanager
 from typing import Any
 from fastapi import FastAPI
 from .settings import get_settings, Environment
-from policyengine_api.fastapi.opentelemetry import (
+from policyengine_fastapi.opentelemetry import (
     GCPLoggingInstrumentor,
     FastAPIEnhancedInstrumenter,
     export_ot_to_console,
     export_ot_to_gcp,
 )
-from policyengine_api.fastapi.exit import exit
+from policyengine_fastapi.exit import exit
 from opentelemetry.sdk.resources import (
     SERVICE_NAME,
     SERVICE_INSTANCE_ID,
     Resource,
 )
-from policyengine_api.simulation_api import initialize
-from policyengine_api.fastapi import ping
-from policyengine_api.fastapi.health import HealthRegistry, HealthSystemReporter
+from policyengine_api_simulation import initialize
+from policyengine_fastapi import ping
+from policyengine_fastapi.health import (
+    HealthRegistry,
+    HealthSystemReporter,
+)
 import logging
 
 """
@@ -60,7 +63,7 @@ resource = Resource.create(
     }
 )
 
-match (get_settings().environment):
+match get_settings().environment:
     case Environment.DESKTOP:
         pass  # Don't print opentelemetry to console- this makes it impossible to read the logs. Alternatively, do by uncommenting this line.
         # export_ot_to_console(resource)

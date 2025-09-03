@@ -1,4 +1,4 @@
-name: Reusable deploy to gcp workflow
+name: Reusable build workflow
 
 on:
   workflow_call:
@@ -6,100 +6,130 @@ on:
       environment:
         required: true
         type: string
-        description: 'The environment to deploy to (e.g., beta, prod)'
+        description: 'The environment to build for (e.g., beta, prod)'
 
 env:
-  TF_BACKEND_bucket: ${{ vars.PROJECT_ID }}-state
-  #TF_VAR_whatever will be picked up as terraform variables.
-  TF_VAR_org_id: ${{ secrets.ORG_ID }}
-  TF_VAR_billing_account: ${{ secrets.BILLING_ACCOUNT }}
-  TF_VAR_github_repo_owner_id: ${{ github.repository_owner_id }}
-  TF_VAR_github_repo: ${{ github.repository }}
-  TF_VAR_project_id: ${{ vars.PROJECT_ID }}
-  TF_VAR_region: ${{ vars.REGION }}
-  TF_VAR_full_container_tag: ${{ github.sha }}
-  TF_VAR_simulation_container_tag: ${{ github.sha }}
-  TF_VAR_container_tag: ${{ github.sha }}
-  BUILD_TAG: ${{ github.run_id }}.${{ github.run_number }}.${{ github.run_attempt }}
-  COMMIT_TAG: ${{ github.sha }}
+  PROJECT_ID: ${{ vars.PROJECT_ID }}
+  REGION: ${{ vars.REGION }}
+  REPO: api-v2
+
 jobs:
-  #api build steps are separated so they can run in parallel.
   build_simulation_api_image:
-    # Any runner supporting Node 20 or newer
+    name: Build simulation API image
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
 
     permissions:
       contents: "read"
-      # Required to auth against gcp
       id-token: "write"
 
     steps:
-    - name: checkout repo
+    - name: Checkout repo
       uses: actions/checkout@v4
+    
     - uses: "google-github-actions/auth@v2"
       with:
         workload_identity_provider: "${{ vars._GITHUB_IDENTITY_POOL_PROVIDER_NAME }}"
         service_account: "builder@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com"
-    - name: Set up JDK 11 for x64
-      uses: actions/setup-java@v4
-      with:
-        java-version: '11'
-        distribution: 'temurin'
-        architecture: x64
-    - name: "Set up Cloud SDK"
+    
+    - name: Set up Cloud SDK
       uses: "google-github-actions/setup-gcloud@v2"
+    
+    - name: Configure Docker for Artifact Registry
+      run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build and push simulation API
+      uses: docker/build-push-action@v5
       with:
-        version: ">= 363.0.0"
-    - name: Build application
-      run: make -f Makefile.deploy publish-simulation-api-docker TAG=${{ github.sha }} PROJECT_ID=${{ vars.PROJECT_ID }} LOG_DIR=gs://${{ vars.PROJECT_ID }}-buildlogs
+        context: .
+        file: projects/policyengine-api-simulation/Dockerfile
+        push: true
+        tags: |
+          ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/policyengine-api-simulation:${{ github.sha }}
+          ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/policyengine-api-simulation:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
 
   build_full_api_image:
-    # Any runner supporting Node 20 or newer
+    name: Build full API image
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
 
-    # Add "id-token" with the intended permissions.
     permissions:
       contents: "read"
-      #required to auth against GCP
       id-token: "write"
 
     steps:
-    - name: checkout repo
+    - name: Checkout repo
       uses: actions/checkout@v4
+    
     - uses: "google-github-actions/auth@v2"
       with:
         workload_identity_provider: "${{ vars._GITHUB_IDENTITY_POOL_PROVIDER_NAME }}"
         service_account: "builder@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com"
-    - name: "Set up Cloud SDK"
+    
+    - name: Set up Cloud SDK
       uses: "google-github-actions/setup-gcloud@v2"
+    
+    - name: Configure Docker for Artifact Registry
+      run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build and push full API
+      uses: docker/build-push-action@v5
       with:
-        version: ">= 363.0.0"
-    - name: Build application
-      run: make -f Makefile.deploy publish-full-api-docker TAG=${{ github.sha }} PROJECT_ID=${{ vars.PROJECT_ID }} LOG_DIR=gs://${{ vars.PROJECT_ID }}-buildlogs
+        context: .
+        file: projects/policyengine-api-full/Dockerfile
+        push: true
+        tags: |
+          ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/policyengine-api-full:${{ github.sha }}
+          ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/policyengine-api-full:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
 
   build_tagger_api_image:
-    # Any runner supporting Node 20 or newer
+    name: Build tagger API image
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
 
-    # Add "id-token" with the intended permissions.
     permissions:
       contents: "read"
-      #required to auth against GCP
       id-token: "write"
 
     steps:
-    - name: checkout repo
+    - name: Checkout repo
       uses: actions/checkout@v4
+    
     - uses: "google-github-actions/auth@v2"
       with:
         workload_identity_provider: "${{ vars._GITHUB_IDENTITY_POOL_PROVIDER_NAME }}"
         service_account: "builder@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com"
-    - name: "Set up Cloud SDK"
+    
+    - name: Set up Cloud SDK
       uses: "google-github-actions/setup-gcloud@v2"
+    
+    - name: Configure Docker for Artifact Registry
+      run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build and push tagger API
+      uses: docker/build-push-action@v5
       with:
-        version: ">= 363.0.0"
-    - name: Build application
-      run: make -f Makefile.deploy publish-tagger-api-docker TAG=${{ github.sha }} PROJECT_ID=${{ vars.PROJECT_ID }} LOG_DIR=gs://${{ vars.PROJECT_ID }}-buildlogs
+        context: .
+        file: projects/policyengine-api-tagger/Dockerfile
+        push: true
+        tags: |
+          ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/policyengine-api-tagger:${{ github.sha }}
+          ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/policyengine-api-tagger:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64

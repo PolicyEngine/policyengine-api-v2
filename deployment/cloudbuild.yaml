@@ -1,0 +1,11 @@
+# Cloud Build configuration for building Docker images
+# Used when deploying via GCP Cloud Build instead of local docker-compose
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '${_IMAGE_TAG}', '-f', 'projects/${_SERVICE_NAME}/Dockerfile', '.']
+  
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_IMAGE_TAG}']
+
+images:
+  - '${_IMAGE_TAG}'

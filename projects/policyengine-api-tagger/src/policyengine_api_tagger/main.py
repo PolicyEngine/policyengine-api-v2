@@ -1,17 +1,17 @@
 from contextlib import asynccontextmanager
 from typing import Any
 from fastapi import FastAPI
-from policyengine_api.fastapi import ping
-from policyengine_api.fastapi.health import (
+from policyengine_fastapi import ping
+from policyengine_fastapi.health import (
     HealthRegistry,
     HealthSystemReporter,
 )
-from policyengine_api.fastapi.exit import exit
+from policyengine_fastapi.exit import exit
 
 from .api.revision_tagger import RevisionTagger
 from .api.routes import add_all_routes
 from .api.settings import get_settings, Environment
-from policyengine_api.fastapi.opentelemetry import (
+from policyengine_fastapi.opentelemetry import (
     GCPLoggingInstrumentor,
     FastAPIEnhancedInstrumenter,
     export_ot_to_console,
@@ -61,9 +61,9 @@ resource = Resource.create(
     }
 )
 
-match (get_settings().environment):
+match get_settings().environment:
     case Environment.DESKTOP:
-        export_ot_to_console(resource)
+        pass  # export_ot_to_console(resource)
     case Environment.PRODUCTION:
         export_ot_to_gcp(resource)
     case value:

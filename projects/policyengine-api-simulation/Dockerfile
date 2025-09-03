@@ -1,29 +1,35 @@
-FROM python:3.13
+# Multi-stage build inheriting from base
+# Use explicit platform for consistency across builds
+FROM --platform=linux/amd64 python:3.13-slim AS base
 
-RUN pip install poetry==2.0.1
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-ENV POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_IN_PROJECT=1 \
-    POETRY_VIRTUALENVS_CREATE=1 \
-    POETRY_CACHE_DIR=/tmp/poetry_cache
+# Set common environment variables
+ENV ENVIRONMENT="production"
 
-WORKDIR app
-# This may copy some dependencies this app doesn't need, but source should
-# not be very large
-#.dockerignore will exclude .venv and .git
-COPY artifacts/staging .
-COPY pyproject.toml poetry.lock projects/app/
-RUN touch README.md
+WORKDIR /app
 
-WORKDIR projects/app
-RUN poetry install --with main --no-root && rm -rf $POETRY_CACHE_DIR
+# Copy shared libraries and LICENSE
+COPY LICENSE ./LICENSE
+COPY libs ./libs/
 
-COPY src ./src/
+# Final stage
+FROM base AS final
 
-RUN poetry install --with main --no-root
+# Service-specific environment
+ENV OT_SERVICE_NAME=policyengine_simulation_api \
+    OT_SERVICE_INSTANCE_ID=instance
+
+# Copy service-specific code
+COPY projects/policyengine-api-simulation ./projects/policyengine-api-simulation/
+
+WORKDIR /app/projects/policyengine-api-simulation
+
+# Install dependencies
+RUN uv sync --frozen --no-dev
 
 EXPOSE 8080
-# bottlenck is memory
-# one worker to handle external reuqests (max allowed = 1)
-# one worker to do the liveness check
-CMD ["poetry", "run", "uvicorn", "src.policyengine_api_simulation.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "2"]
+
+# Run with uvicorn (with 2 workers for simulation API)
+CMD ["uv", "run", "uvicorn", "policyengine_api_simulation.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "2"]
