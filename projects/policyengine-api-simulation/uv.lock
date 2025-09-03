@@ -1405,7 +1405,7 @@ dependencies = [
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d9/62/e9aa51662a71eae82be6bb2ef1bd4f92e8cfee0a9c182531f9fbc726ce85/policyengine_uk-2.47.4.tar.gz", hash = "sha256:28b324a3da198fef7e1c8440599e9a2edee786b98524dacf6302bd2eb5e80276", size = 1045333, upload-time = "2025-08-14T16:31:55.82Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/78/9e/e2a3089864d636a7c1344b06d72219f66b02791272f86bbdfca23c511f6e/policyengine_uk-2.50.0-py3-none-any.whl", hash = "sha256:d099d14eda66ea8872a6e2a41110e8da298818dbe9e573a75ab5cdd65d85bf03", size = 1605337, upload-time = "2025-09-03T09:16:52.616Z" },
+    { url = "https://files.pythonhosted.org/packages/99/2f/8788e25b7b94514ab469e0b8c29a0299c56eef0ff9dcf7af0bf894c3cc80/policyengine_uk-2.47.4-py3-none-any.whl", hash = "sha256:63f23b131f44bb52311b239ee0db6a9818dcccab59c3b30917e8546b5a015134", size = 1601794, upload-time = "2025-08-14T16:31:54.111Z" },
 ]
 
 [[package]]
