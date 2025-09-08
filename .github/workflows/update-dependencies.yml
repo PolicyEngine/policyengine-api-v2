@@ -32,6 +32,11 @@ jobs:
         with:
           python-version: "3.13"
       
+      - name: Generate API clients
+        run: |
+          # Generate clients with correct naming before updating dependencies
+          ./scripts/generate-clients.sh
+      
       - name: Update dependencies
         id: update
         run: |
