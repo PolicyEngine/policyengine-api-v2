@@ -9,17 +9,38 @@ Monorepo for PolicyEngine's API infrastructure, containing all services, librari
 - Docker and Docker Compose
 - Python 3.13+
 - [uv](https://docs.astral.sh/uv/) package manager
+- [Supabase CLI](https://supabase.com/docs/guides/cli) (optional, for database features)
 - gcloud CLI (for deployment)
 - Terraform 1.5+ (for deployment)
 
+#### Installing Supabase CLI (macOS)
+```bash
+brew install supabase/tap/supabase
+```
+
 ### Local development
 
-Start all services:
+Start all services including Supabase:
 ```bash
-make up        # Start services on ports 8081-8083
-make logs      # View logs
-make down      # Stop services
+make dev       # Start PolicyEngine services + Supabase (if installed)
+make down      # Stop all services
 ```
+
+Or run PolicyEngine services only:
+```bash
+make dev-no-supabase  # Start only PolicyEngine services
+make up               # Start services detached on ports 8081-8083
+make logs             # View logs
+make down             # Stop services
+```
+
+When running with `make dev`, services are available at:
+- PolicyEngine API Full: http://localhost:8081
+- PolicyEngine API Simulation: http://localhost:8082
+- PolicyEngine API Tagger: http://localhost:8083
+- Supabase API: http://localhost:54321 (if Supabase CLI installed)
+- PostgreSQL: localhost:54322 (if Supabase CLI installed)
+- Email testing (Inbucket): http://localhost:54324 (if Supabase CLI installed)
 
 Run the test suite:
 ```bash

@@ -61,6 +61,29 @@ setup:
 
 # Development commands
 dev:
+	@echo "Starting PolicyEngine services..."
+	docker-compose -f deployment/docker-compose.yml up --build -d
+	@echo ""
+	@echo "Starting Supabase (requires Supabase CLI installed locally)..."
+	@if command -v supabase >/dev/null 2>&1; then \
+		cd projects/supabase && supabase start; \
+		echo ""; \
+		echo "✅ Services are running:"; \
+		echo "   PolicyEngine API Full: http://localhost:8081"; \
+		echo "   PolicyEngine API Simulation: http://localhost:8082"; \
+		echo "   PolicyEngine API Tagger: http://localhost:8083"; \
+		echo "   Supabase Studio: http://localhost:54323"; \
+		echo "   Supabase API: http://localhost:54321"; \
+		echo "   PostgreSQL: localhost:54322"; \
+	else \
+		echo "⚠️  Supabase CLI not found. Install with: brew install supabase/tap/supabase"; \
+		echo "   PolicyEngine services are still running."; \
+	fi
+	@echo ""
+	@echo "Following logs from PolicyEngine services..."
+	docker-compose -f deployment/docker-compose.yml logs -f
+
+dev-no-supabase:
 	docker-compose -f deployment/docker-compose.yml up --build
 
 up:
@@ -71,7 +94,13 @@ else
 endif
 
 down:
+	@echo "Stopping PolicyEngine services..."
 	docker-compose -f deployment/docker-compose.yml down
+	@echo "Stopping Supabase..."
+	@if command -v supabase >/dev/null 2>&1; then \
+		cd projects/supabase && supabase stop; \
+	fi
+	@echo "✅ All services stopped"
 
 logs:
 ifdef service
@@ -373,3 +402,24 @@ dev-sim:
 
 dev-tagger:
 	docker-compose -f deployment/docker-compose.yml up api-tagger
+
+
+clean:
+	@echo "Removing Python cache files..."
+	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name "*.pyc" -delete 2>/dev/null || true
+	find . -type f -name "*.pyo" -delete 2>/dev/null || true
+	find . -type f -name "*.pyd" -delete 2>/dev/null || true
+	find . -type f -name ".coverage" -delete 2>/dev/null || true
+	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name "*.egg" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name "htmlcov" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name "dist" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name "build" -exec rm -rf {} + 2>/dev/null || true
+	find . -name ".DS_Store" -delete 2>/dev/null || true
+	@echo "Removing empty directories..."
+	find . -type d -empty -delete 2>/dev/null || true
+	@echo "Clean complete."
