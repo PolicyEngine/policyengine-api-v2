@@ -1367,7 +1367,7 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "3.0.0"
+version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "alembic" },
@@ -1385,9 +1385,9 @@ dependencies = [
     { name = "sqlmodel" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6e/39/5cf9b8135f38d994b7da48f13639d3f1b4853b1d6b95ca858eaecfb152c4/policyengine-3.0.0.tar.gz", hash = "sha256:ba7ce61b7a82f8835b6768e5f7aea90f335a18119bab516b72305fc950b38eaa", size = 149539, upload-time = "2025-09-23T09:36:58.36Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/24/b6/efc76e203b40c8e9c5feca80aebf644e4df90d370f6f67d50ee4c616cdf5/policyengine-1.0.0.tar.gz", hash = "sha256:7cc55cc6146dfac1b908a333de47fe0f6111bb25254ded9aea92907a4dba69b5", size = 149477, upload-time = "2025-09-20T14:00:25.759Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/37/8e/458a1283f69b2ecb4c76e9acf288fff4d25f87b526bc2553ad65f68964cc/policyengine-3.0.0-py3-none-any.whl", hash = "sha256:55d7be28e9888329be84fc7e1a74d6d880c70f62852c1c3e80830464a3f9b88e", size = 54609, upload-time = "2025-09-23T09:36:56.872Z" },
+    { url = "https://files.pythonhosted.org/packages/39/13/bc958e4a0243fa890a6eb479e9eeebcd2e501d39564d925d148e9ea8f7ef/policyengine-1.0.0-py3-none-any.whl", hash = "sha256:22abc377ac4b1cfa6f6abdbdf465f0129fa46ec5eeb24f8ddf122d64b479b116", size = 54609, upload-time = "2025-09-20T14:00:24.615Z" },
 ]
 
 [[package]]
@@ -1489,7 +1489,7 @@ requires-dist = [
     { name = "openapi-python-client", marker = "extra == 'build'", specifier = ">=0.21.6" },
     { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.51b0,<0.52" },
     { name = "opentelemetry-instrumentation-sqlalchemy", specifier = ">=0.51b0,<0.52" },
-    { name = "policyengine", specifier = ">=0.6.0" },
+    { name = "policyengine", specifier = ">=0.6.0,<3.0.0" },
     { name = "policyengine-fastapi", editable = "../../libs/policyengine-fastapi" },
     { name = "policyengine-uk", specifier = ">=2.22.8" },
     { name = "policyengine-us", specifier = ">=1.370.2" },
