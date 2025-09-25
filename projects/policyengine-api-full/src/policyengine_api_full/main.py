@@ -2,7 +2,6 @@ from contextlib import asynccontextmanager
 from typing import Any
 from fastapi import FastAPI
 from sqlmodel import SQLModel
-from policyengine_fastapi.database import create_sqlite_engine
 from policyengine_fastapi import ping
 from policyengine_fastapi.health import (
     HealthRegistry,
@@ -23,20 +22,37 @@ from opentelemetry.sdk.resources import (
 )
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from policyengine_api_full.api import initialize
+from policyengine_api_full.database import create_supabase_engine
 import logging
 
 """
 specific example instantiation of the app configured by a .env file
-* in all environments we use sqlite
+* Uses Supabase PostgreSQL database
 * on desktop we print opentelemetry instrumentation to the console.
 * in "production" we use GCP trace/metrics bindings.
 """
 
 logger = logging.getLogger(__name__)
 
+# Import all tables to ensure they're registered with SQLModel
+from policyengine.database import (
+    UserTable,
+    ModelTable,
+    ModelVersionTable,
+    DatasetTable,
+    VersionedDatasetTable,
+    PolicyTable,
+    SimulationTable,
+    ParameterTable,
+    ParameterValueTable,
+    BaselineParameterValueTable,
+    BaselineVariableTable,
+    DynamicTable,
+)
+
 # configure database
-# manage tables directly from defined models.
-engine = create_sqlite_engine()
+# Use Supabase PostgreSQL instead of SQLite
+engine = create_supabase_engine()
 
 
 @asynccontextmanager

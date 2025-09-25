@@ -4,6 +4,7 @@ from sqlalchemy import Engine
 from policyengine_fastapi.auth.jwt_decoder import JWTDecoder
 from policyengine_fastapi.database import create_session_dep
 from .household import include_all_routers
+from .database_router import create_database_router
 
 """
 Application defined as routers completely indipendent of environment allowing it
@@ -24,3 +25,7 @@ def initialize(app: FastAPI, engine: Engine, jwt_issuer: str, jwt_audience: str)
         optional_auth=optional_auth,
         auth=auth,
     )
+
+    # Add the database router for PolicyEngine tables
+    database_router = create_database_router()
+    app.include_router(database_router)
