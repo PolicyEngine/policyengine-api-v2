@@ -17,7 +17,7 @@ dependencies = [
     "pydantic-settings (>=2.7.1,<3.0.0)",
     "opentelemetry-instrumentation-fastapi (>=0.51b0,<0.52)",
     "policyengine-fastapi",
-    "policyengine[full]>=3.0.0",
+    "policyengine[uk,us]>=3.0.0",
     "psycopg2-binary>=2.9.0"
 ]
 
