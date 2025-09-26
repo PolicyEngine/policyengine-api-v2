@@ -1,7 +1,6 @@
 from contextlib import asynccontextmanager
 from typing import Any
 from fastapi import FastAPI
-from .settings import get_settings, Environment
 from policyengine_fastapi.opentelemetry import (
     GCPLoggingInstrumentor,
     FastAPIEnhancedInstrumenter,
@@ -46,28 +45,3 @@ app = FastAPI(
 
 # attach the api defined in the app package
 initialize(app=app)
-
-# attach ping routes
-health_registry = HealthRegistry()
-health_registry.register(HealthSystemReporter("general", {}))
-ping.include_all_routers(app, health_registry)
-
-# configure tracing and metrics
-GCPLoggingInstrumentor().instrument()
-FastAPIEnhancedInstrumenter().instrument(app)
-
-resource = Resource.create(
-    attributes={
-        SERVICE_NAME: get_settings().ot_service_name,
-        SERVICE_INSTANCE_ID: get_settings().ot_service_instance_id,
-    }
-)
-
-match get_settings().environment:
-    case Environment.DESKTOP:
-        pass  # Don't print opentelemetry to console- this makes it impossible to read the logs. Alternatively, do by uncommenting this line.
-        # export_ot_to_console(resource)
-    case Environment.PRODUCTION:
-        export_ot_to_gcp(resource)
-    case value:
-        raise Exception(f"Forgot to handle environment value {value}")
