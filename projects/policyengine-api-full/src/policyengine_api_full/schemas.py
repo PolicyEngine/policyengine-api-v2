@@ -104,6 +104,36 @@ class PolicyUpdate(BaseModel):
 
 # Simulation schemas
 class SimulationResponse(BaseModel):
+    """Basic simulation response without large binary data"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    created_at: datetime
+    updated_at: datetime
+    policy_id: Optional[str] = None
+    dynamic_id: Optional[str] = None
+    dataset_id: str
+    model_id: str
+    model_version_id: Optional[str] = None
+    has_result: bool = Field(description="Whether simulation has completed and has results")
+
+    @staticmethod
+    def from_orm(obj):
+        return SimulationResponse(
+            id=obj.id,
+            created_at=obj.created_at,
+            updated_at=obj.updated_at,
+            policy_id=obj.policy_id,
+            dynamic_id=obj.dynamic_id,
+            dataset_id=obj.dataset_id,
+            model_id=obj.model_id,
+            model_version_id=obj.model_version_id,
+            has_result=obj.result is not None
+        )
+
+
+class SimulationDetailResponse(BaseModel):
+    """Detailed simulation response including result data"""
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -118,7 +148,7 @@ class SimulationResponse(BaseModel):
 
     @staticmethod
     def from_orm(obj):
-        return SimulationResponse(
+        return SimulationDetailResponse(
             id=obj.id,
             created_at=obj.created_at,
             updated_at=obj.updated_at,
@@ -152,19 +182,78 @@ class SimulationCreate(BaseModel):
 
 # Dataset schemas
 class DatasetResponse(BaseModel):
+    """Basic dataset response without large binary data"""
     model_config = ConfigDict(from_attributes=True)
 
     id: str
     name: str
     description: Optional[str] = None
-    created_at: datetime
-    updated_at: datetime
+    version: Optional[str] = None
+    versioned_dataset_id: Optional[str] = None
+    year: Optional[int] = None
+    model_id: Optional[str] = None
+    has_data: bool = Field(description="Whether dataset has data")
+
+    @staticmethod
+    def from_orm(obj):
+        return DatasetResponse(
+            id=obj.id,
+            name=obj.name,
+            description=obj.description,
+            version=obj.version,
+            versioned_dataset_id=obj.versioned_dataset_id,
+            year=obj.year,
+            model_id=obj.model_id,
+            has_data=obj.data is not None
+        )
+
+
+class DatasetDetailResponse(BaseModel):
+    """Detailed dataset response including data"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    description: Optional[str] = None
+    version: Optional[str] = None
+    versioned_dataset_id: Optional[str] = None
+    year: Optional[int] = None
+    data: Optional[str] = Field(None, description="Base64 encoded data")
+    model_id: Optional[str] = None
+
+    @staticmethod
+    def from_orm(obj):
+        return DatasetDetailResponse(
+            id=obj.id,
+            name=obj.name,
+            description=obj.description,
+            version=obj.version,
+            versioned_dataset_id=obj.versioned_dataset_id,
+            year=obj.year,
+            data=encode_bytes(obj.data) if obj.data else None,
+            model_id=obj.model_id
+        )
 
 
 class DatasetCreate(BaseModel):
     id: str
     name: str
     description: Optional[str] = None
+    version: Optional[str] = None
+    year: Optional[int] = None
+    data: Optional[str] = None  # Base64 encoded
+    model_id: Optional[str] = None
+
+    def to_orm_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "version": self.version,
+            "year": self.year,
+            "data": decode_bytes(self.data) if self.data else None,
+            "model_id": self.model_id
+        }
 
 
 # Versioned Dataset schemas

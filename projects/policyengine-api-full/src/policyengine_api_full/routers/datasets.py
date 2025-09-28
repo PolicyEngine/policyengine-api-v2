@@ -3,7 +3,7 @@ from sqlmodel import Session, select
 from policyengine.database import DatasetTable, VersionedDatasetTable
 from policyengine_api_full.database import get_session
 from policyengine_api_full.schemas import (
-    DatasetResponse, DatasetCreate,
+    DatasetResponse, DatasetCreate, DatasetDetailResponse,
     VersionedDatasetResponse, VersionedDatasetCreate
 )
 from typing import Optional
@@ -24,7 +24,7 @@ def list_datasets(
     """List all datasets with pagination."""
     statement = select(DatasetTable).offset(skip).limit(limit)
     datasets = session.exec(statement).all()
-    return datasets
+    return [DatasetResponse.from_orm(d) for d in datasets]
 
 
 @datasets_router.post("/", response_model=DatasetResponse, status_code=201)
@@ -33,15 +33,11 @@ def create_dataset(
     session: Session = Depends(get_session),
 ):
     """Create a new dataset."""
-    db_dataset = DatasetTable(
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
-        **dataset.model_dump()
-    )
+    db_dataset = DatasetTable(**dataset.to_orm_dict())
     session.add(db_dataset)
     session.commit()
     session.refresh(db_dataset)
-    return db_dataset
+    return DatasetResponse.from_orm(db_dataset)
 
 
 @datasets_router.get("/{dataset_id}", response_model=DatasetResponse)
@@ -49,11 +45,23 @@ def get_dataset(
     dataset_id: str,
     session: Session = Depends(get_session),
 ):
-    """Get a single dataset by ID."""
+    """Get a single dataset by ID (without data field)."""
     dataset = session.get(DatasetTable, dataset_id)
     if not dataset:
         raise HTTPException(status_code=404, detail="Dataset not found")
-    return dataset
+    return DatasetResponse.from_orm(dataset)
+
+
+@datasets_router.get("/{dataset_id}/detail", response_model=DatasetDetailResponse)
+def get_dataset_detail(
+    dataset_id: str,
+    session: Session = Depends(get_session),
+):
+    """Get a single dataset by ID with full data."""
+    dataset = session.get(DatasetTable, dataset_id)
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return DatasetDetailResponse.from_orm(dataset)
 
 
 @datasets_router.patch("/{dataset_id}", response_model=DatasetResponse)
@@ -73,12 +81,10 @@ def update_dataset(
     if description is not None:
         db_dataset.description = description
 
-    db_dataset.updated_at = datetime.utcnow()
-
     session.add(db_dataset)
     session.commit()
     session.refresh(db_dataset)
-    return db_dataset
+    return DatasetResponse.from_orm(db_dataset)
 
 
 @datasets_router.delete("/{dataset_id}", status_code=204)

@@ -3,7 +3,7 @@ from sqlmodel import Session, select
 from policyengine.database import SimulationTable, Database
 from policyengine.models import Simulation
 from policyengine_api_full.database import get_session
-from policyengine_api_full.schemas import SimulationResponse, SimulationCreate, decode_bytes
+from policyengine_api_full.schemas import SimulationResponse, SimulationCreate, SimulationDetailResponse, decode_bytes
 from typing import Optional
 from datetime import datetime
 from uuid import uuid4
@@ -80,11 +80,23 @@ def get_simulation(
     simulation_id: str,
     session: Session = Depends(get_session),
 ):
-    """Get a single simulation by ID."""
+    """Get a single simulation by ID (without result data)."""
     simulation = session.get(SimulationTable, simulation_id)
     if not simulation:
         raise HTTPException(status_code=404, detail="Simulation not found")
     return SimulationResponse.from_orm(simulation)
+
+
+@router.get("/{simulation_id}/result", response_model=SimulationDetailResponse)
+def get_simulation_result(
+    simulation_id: str,
+    session: Session = Depends(get_session),
+):
+    """Get a single simulation by ID with full result data."""
+    simulation = session.get(SimulationTable, simulation_id)
+    if not simulation:
+        raise HTTPException(status_code=404, detail="Simulation not found")
+    return SimulationDetailResponse.from_orm(simulation)
 
 
 @router.patch("/{simulation_id}", response_model=SimulationResponse)

@@ -7,7 +7,7 @@ from policyengine.database import (
 )
 from policyengine_api_full.database import get_session
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 parameters_router = APIRouter(prefix="/parameters", tags=["parameters"])
 parameter_values_router = APIRouter(prefix="/parameter-values", tags=["parameter values"])
@@ -19,10 +19,16 @@ baseline_parameter_values_router = APIRouter(prefix="/baseline-parameter-values"
 def list_parameters(
     session: Session = Depends(get_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(100, ge=1, le=10_000),
+    model_id: Optional[str] = Query(None, description="Filter by model ID"),
 ):
-    """List all parameters with pagination."""
-    statement = select(ParameterTable).offset(skip).limit(limit)
+    """List all parameters with pagination and optional filters."""
+    statement = select(ParameterTable)
+
+    if model_id:
+        statement = statement.where(ParameterTable.model_id == model_id)
+
+    statement = statement.offset(skip).limit(limit)
     parameters = session.exec(statement).all()
     return parameters
 
@@ -39,25 +45,27 @@ def create_parameter(
     return parameter
 
 
-@parameters_router.get("/{parameter_id}", response_model=ParameterTable)
+@parameters_router.get("/{parameter_id}/{model_id}", response_model=ParameterTable)
 def get_parameter(
     parameter_id: str,
+    model_id: str,
     session: Session = Depends(get_session),
 ):
-    """Get a single parameter by ID."""
-    parameter = session.get(ParameterTable, parameter_id)
+    """Get a single parameter by ID and model ID (composite key)."""
+    parameter = session.get(ParameterTable, (parameter_id, model_id))
     if not parameter:
         raise HTTPException(status_code=404, detail="Parameter not found")
     return parameter
 
 
-@parameters_router.delete("/{parameter_id}", status_code=204)
+@parameters_router.delete("/{parameter_id}/{model_id}", status_code=204)
 def delete_parameter(
     parameter_id: str,
+    model_id: str,
     session: Session = Depends(get_session),
 ):
     """Delete a parameter."""
-    parameter = session.get(ParameterTable, parameter_id)
+    parameter = session.get(ParameterTable, (parameter_id, model_id))
     if not parameter:
         raise HTTPException(status_code=404, detail="Parameter not found")
 
@@ -71,7 +79,7 @@ def delete_parameter(
 def list_parameter_values(
     session: Session = Depends(get_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(100, ge=1, le=10_000),
     parameter_id: Optional[str] = Query(None, description="Filter by parameter ID"),
     policy_id: Optional[str] = Query(None, description="Filter by policy ID"),
 ):
@@ -126,7 +134,7 @@ def update_parameter_value(
     if value is not None:
         db_parameter_value.value = value
 
-    db_parameter_value.updated_at = datetime.utcnow()
+    db_parameter_value.updated_at = datetime.now(timezone.utc)
 
     session.add(db_parameter_value)
     session.commit()
@@ -154,7 +162,7 @@ def delete_parameter_value(
 def list_baseline_parameter_values(
     session: Session = Depends(get_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(100, ge=1, le=10_000),
     parameter_id: Optional[str] = Query(None, description="Filter by parameter ID"),
     model_id: Optional[str] = Query(None, description="Filter by model ID"),
 ):
