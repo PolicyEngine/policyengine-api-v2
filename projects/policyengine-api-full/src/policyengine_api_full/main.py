@@ -15,7 +15,10 @@ from .routers import (
     parameters,
     dynamics,
     model_versions,
-    baseline_variables
+    baseline_variables,
+    reports,
+    report_elements,
+    aggregates
 )
 
 # Import database setup
@@ -33,7 +36,10 @@ from policyengine.database import (
     BaselineParameterValueTable,
     BaselineVariableTable,
     DynamicTable,
-    ModelVersionTable
+    ModelVersionTable,
+    ReportTable,
+    ReportElementTable,
+    AggregateTable
 )
 
 """
@@ -80,6 +86,9 @@ app.include_router(parameters.baseline_parameter_values_router)
 app.include_router(dynamics.router)
 app.include_router(model_versions.router)
 app.include_router(baseline_variables.router)
+app.include_router(reports.reports_router)
+app.include_router(report_elements.report_elements_router)
+app.include_router(aggregates.aggregates_router)
 
 # Health check endpoint
 @app.get("/health")
