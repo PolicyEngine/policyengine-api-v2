@@ -136,3 +136,16 @@ def create_bulk_aggregates(
         session.refresh(aggregate)
 
     return created_aggregates
+
+
+@aggregates_router.get("/by-report-element/{reportelement_id}", response_model=list[AggregateTable])
+def get_aggregates_by_report_element(
+    reportelement_id: str,
+    session: Session = Depends(get_session),
+):
+    """Get all aggregates for a specific report element."""
+    statement = select(AggregateTable).where(
+        AggregateTable.reportelement_id == reportelement_id
+    )
+    aggregates = session.exec(statement).all()
+    return aggregates

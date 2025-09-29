@@ -17,10 +17,14 @@ router = APIRouter(prefix="/data-requests", tags=["data requests"])
 class DataRequest(BaseModel):
     description: str
     report_id: str
+    simulation_ids: Optional[List[str]] = None
+    is_comparison: Optional[bool] = False
 
 
 class ParsedAggregate(BaseModel):
-    simulation_id: str
+    simulation_id: Optional[str] = None
+    baseline_simulation_id: Optional[str] = None
+    comparison_simulation_id: Optional[str] = None
     entity: str
     variable_name: str
     aggregate_function: str
@@ -29,6 +33,9 @@ class ParsedAggregate(BaseModel):
     filter_variable_value: Optional[str] = None
     filter_variable_leq: Optional[float] = None
     filter_variable_geq: Optional[float] = None
+    filter_variable_quantile_leq: Optional[float] = None
+    filter_variable_quantile_geq: Optional[float] = None
+    filter_variable_quantile_value: Optional[str] = None
 
 
 class DataRequestResponse(BaseModel):
@@ -95,23 +102,56 @@ CRITICAL RULES:
 You have access to:
 - Variables (metrics that can be aggregated)
 - Simulations (different policy scenarios to compare)
-- Aggregation functions: mean, sum, median, count, min, max
+- Aggregation functions: mean, sum, median, count
 
-Create ONE aggregate object for EACH combination of simulation and variable.
-Example: comparing 2 simulations for 1 variable = 2 aggregate objects.
+QUANTILE FILTERING RULES:
+When users ask for deciles, quintiles, vigintiles, or percentiles:
+
+1. DECILES (10 groups): Create 10 separate aggregates with quantile filters
+   - 1st decile: filter_variable_quantile_geq: 0.0, filter_variable_quantile_leq: 0.1
+   - 2nd decile: filter_variable_quantile_geq: 0.1, filter_variable_quantile_leq: 0.2
+   - 3rd decile: filter_variable_quantile_geq: 0.2, filter_variable_quantile_leq: 0.3
+   - ... and so on up to 10th decile: filter_variable_quantile_geq: 0.9, filter_variable_quantile_leq: 1.0
+
+2. QUINTILES (5 groups): Create 5 separate aggregates
+   - 1st quintile: filter_variable_quantile_geq: 0.0, filter_variable_quantile_leq: 0.2
+   - 2nd quintile: filter_variable_quantile_geq: 0.2, filter_variable_quantile_leq: 0.4
+   - 3rd quintile: filter_variable_quantile_geq: 0.4, filter_variable_quantile_leq: 0.6
+   - 4th quintile: filter_variable_quantile_geq: 0.6, filter_variable_quantile_leq: 0.8
+   - 5th quintile: filter_variable_quantile_geq: 0.8, filter_variable_quantile_leq: 1.0
+
+3. VIGINTILES (20 groups): Create 20 separate aggregates
+   - 1st vigintile: filter_variable_quantile_geq: 0.00, filter_variable_quantile_leq: 0.05
+   - 2nd vigintile: filter_variable_quantile_geq: 0.05, filter_variable_quantile_leq: 0.10
+   - ... and so on with 0.05 increments
+
+4. TOP/BOTTOM percentages: Use filter_variable_quantile_value
+   - "top 10%": filter_variable_quantile_value: "top_10%"
+   - "bottom 20%": filter_variable_quantile_value: "bottom_20%"
+
+IMPORTANT: When creating quantile groups, you must:
+- Set filter_variable_name to the variable you want to group by (usually income)
+- Create multiple aggregate objects, one for each quantile group
+- Use the quantile filter fields (filter_variable_quantile_leq, filter_variable_quantile_geq)
+
+Create ONE aggregate object for EACH combination of simulation, variable, and quantile group.
+Example: 2 simulations × 1 variable × 10 deciles = 20 aggregate objects.
 
 Required JSON structure (return EXACTLY this format):
 {
     "aggregates": [
         {
-            "simulation_id": "string",
             "entity": "string",
             "variable_name": "string",
             "aggregate_function": "string",
             "year": null,
             "filter_variable_name": null,
+            "filter_variable_value": null,
             "filter_variable_leq": null,
-            "filter_variable_geq": null
+            "filter_variable_geq": null,
+            "filter_variable_quantile_leq": null,
+            "filter_variable_quantile_geq": null,
+            "filter_variable_quantile_value": null
         }
     ],
     "chart_type": "table",
@@ -120,17 +160,33 @@ Required JSON structure (return EXACTLY this format):
     "explanation": "string"
 }
 
+Note: Do NOT include simulation_id in the aggregates - simulations are handled separately.
+
 Remember: Return ONLY the JSON object. No text before or after."""
+
+    # Customize prompt based on whether simulations are provided
+    if request.simulation_ids:
+        sim_context = f"Using simulation IDs: {request.simulation_ids}"
+        if request.is_comparison and len(request.simulation_ids) == 2:
+            sim_context = f"Comparing baseline simulation {request.simulation_ids[0]} with reform simulation {request.simulation_ids[1]}"
+    else:
+        sim_context = f"Available simulations:\n{json.dumps(simulations_context, indent=2)}"
 
     user_prompt = f"""User request: {request.description}
 
 Available variables (first 100):
 {json.dumps(variables_context, indent=2)}
 
-Available simulations:
-{json.dumps(simulations_context, indent=2)}
+{sim_context}
 
-Parse this request into aggregate queries. If the user mentions comparing policies or simulations, include multiple simulation_ids. If they mention income bands or other ranges, use filter variables.
+Parse this request into aggregate queries. {"The simulations have already been selected, so just focus on parsing what variables and aggregations are needed." if request.simulation_ids else "If the user mentions comparing policies or simulations, include multiple simulation_ids."}
+
+If they mention:
+- Income bands or ranges: use filter_variable_leq and filter_variable_geq
+- Deciles: create 10 aggregates with filter_variable_quantile_leq and filter_variable_quantile_geq (0.0-0.1, 0.1-0.2, etc)
+- Quintiles: create 5 aggregates with quantile filters (0.0-0.2, 0.2-0.4, etc)
+- Vigintiles: create 20 aggregates with quantile filters (0.0-0.05, 0.05-0.10, etc)
+- Top/bottom X%: use filter_variable_quantile_value (e.g., "top_10%" or "bottom_20%")
 
 REMINDER: Return ONLY valid JSON. No text before or after. Ensure all JSON syntax is correct:
 - No trailing commas
@@ -188,29 +244,42 @@ REMINDER: Return ONLY valid JSON. No text before or after. Ensure all JSON synta
 
         # Convert to response model - validate each aggregate
         aggregates = []
-        for agg_data in parsed_response.get("aggregates", []):
-            # Handle cases where LLM returns lists instead of individual items
-            sim_ids = agg_data.get("simulation_id", [])
-            if not isinstance(sim_ids, list):
-                sim_ids = [sim_ids]
 
+        # If this is a comparison and we have simulation_ids from the request, use them
+        is_comparison = request.is_comparison and request.simulation_ids and len(request.simulation_ids) == 2
+
+        for agg_data in parsed_response.get("aggregates", []):
             var_names = agg_data.get("variable_name", [])
             if not isinstance(var_names, list):
                 var_names = [var_names]
 
-            # Create one aggregate for each combination
-            for sim_id in sim_ids:
-                for var_name in var_names:
-                    agg_copy = agg_data.copy()
-                    agg_copy["simulation_id"] = sim_id
-                    agg_copy["variable_name"] = var_name
-                    # Ensure entity has a default
-                    if not agg_copy.get("entity"):
-                        agg_copy["entity"] = "person"
-                    # Ensure aggregate_function has a default
-                    if not agg_copy.get("aggregate_function"):
-                        agg_copy["aggregate_function"] = "mean"
-                    aggregates.append(ParsedAggregate(**agg_copy))
+            # Create one aggregate for each variable
+            for var_name in var_names:
+                agg_copy = agg_data.copy()
+                agg_copy["variable_name"] = var_name
+
+                # If it's a comparison, set baseline and comparison IDs
+                if is_comparison:
+                    # Use the provided simulation_ids for comparison
+                    agg_copy["baseline_simulation_id"] = request.simulation_ids[0]
+                    agg_copy["comparison_simulation_id"] = request.simulation_ids[1]
+                    # Don't set simulation_id for comparisons
+                    agg_copy.pop("simulation_id", None)
+                else:
+                    # For single simulation, use the first simulation_id
+                    if request.simulation_ids and len(request.simulation_ids) > 0:
+                        agg_copy["simulation_id"] = request.simulation_ids[0]
+                    else:
+                        # Fallback if no simulation_ids provided (shouldn't happen in new flow)
+                        agg_copy["simulation_id"] = agg_data.get("simulation_id", "default")
+
+                # Ensure entity has a default
+                if not agg_copy.get("entity"):
+                    agg_copy["entity"] = "person"
+                # Ensure aggregate_function has a default
+                if not agg_copy.get("aggregate_function"):
+                    agg_copy["aggregate_function"] = "mean"
+                aggregates.append(ParsedAggregate(**agg_copy))
 
         return DataRequestResponse(
             aggregates=aggregates,

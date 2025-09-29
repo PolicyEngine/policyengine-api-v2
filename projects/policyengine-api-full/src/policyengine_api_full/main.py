@@ -21,6 +21,7 @@ from .routers import (
     reports,
     report_elements,
     aggregates,
+    aggregate_changes,
     data_requests
 )
 
@@ -42,7 +43,8 @@ from policyengine.database import (
     ModelVersionTable,
     ReportTable,
     ReportElementTable,
-    AggregateTable
+    AggregateTable,
+    AggregateChangeTable
 )
 
 """
@@ -92,6 +94,7 @@ app.include_router(baseline_variables.router)
 app.include_router(reports.reports_router)
 app.include_router(report_elements.report_elements_router)
 app.include_router(aggregates.aggregates_router)
+app.include_router(aggregate_changes.aggregate_changes_router)
 app.include_router(data_requests.router)
 
 # Health check endpoint

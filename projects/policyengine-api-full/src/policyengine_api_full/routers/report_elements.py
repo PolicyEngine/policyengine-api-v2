@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, Body
 from sqlmodel import Session, select
-from policyengine.database import ReportElementTable, AggregateTable
-from policyengine.models import Aggregate
+from policyengine.database import ReportElementTable, AggregateTable, AggregateChangeTable
+from policyengine.models import Aggregate, AggregateChange
 from policyengine_api_full.database import get_session, database
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
@@ -23,12 +23,27 @@ class AggregateInput(BaseModel):
     filter_variable_geq: Optional[float] = None
 
 
+class AggregateChangeInput(BaseModel):
+    """Input model for aggregate change data."""
+    entity: str
+    variable_name: str
+    aggregate_function: str  # "sum", "mean", or "count"
+    baseline_simulation_id: str
+    comparison_simulation_id: str
+    year: Optional[int] = None
+    filter_variable_name: Optional[str] = None
+    filter_variable_value: Optional[str] = None
+    filter_variable_leq: Optional[float] = None
+    filter_variable_geq: Optional[float] = None
+
+
 class ReportElementCreateRequest(BaseModel):
     """Request model for creating a report element with associated data."""
     label: str
     type: str  # "chart", "markdown", or "aggregates"
-    data_type: Optional[str] = None  # "Aggregate" when creating aggregates
-    data: Optional[List[AggregateInput]] = None  # List of aggregates to compute
+    data_type: Optional[str] = None  # "Aggregate" or "AggregateChange"
+    data: Optional[List[Any]] = None  # List of aggregates or aggregate changes to compute
+    data_table: Optional[str] = None  # "aggregates" or "aggregate_changes"
     chart_type: Optional[str] = None
     x_axis_variable: Optional[str] = None
     y_axis_variable: Optional[str] = None
@@ -108,7 +123,7 @@ def create_report_element(
         id=str(uuid.uuid4()),
         label=request.label,
         type=request.type,
-        data_table="aggregates" if request.data_type == "Aggregate" else None,
+        data_table=request.data_table or ("aggregates" if request.data_type == "Aggregate" else "aggregate_changes" if request.data_type == "AggregateChange" else None),
         chart_type=request.chart_type,
         x_axis_variable=request.x_axis_variable,
         y_axis_variable=request.y_axis_variable,
@@ -138,13 +153,36 @@ def create_report_element(
         aggregate_models = []
 
         for i, agg_input in enumerate(request.data):
-            print(f"Processing aggregate {i+1}/{len(request.data)}: {agg_input.variable_name} for simulation {agg_input.simulation_id}")
+            # Handle dict or object input
+            if isinstance(agg_input, dict):
+                simulation_id = agg_input.get('simulation_id')
+                entity = agg_input.get('entity')
+                variable_name = agg_input.get('variable_name')
+                year = agg_input.get('year')
+                filter_variable_name = agg_input.get('filter_variable_name')
+                filter_variable_value = agg_input.get('filter_variable_value')
+                filter_variable_leq = agg_input.get('filter_variable_leq')
+                filter_variable_geq = agg_input.get('filter_variable_geq')
+                aggregate_function = agg_input.get('aggregate_function')
+            else:
+                simulation_id = agg_input.simulation_id
+                entity = agg_input.entity
+                variable_name = agg_input.variable_name
+                year = agg_input.year
+                filter_variable_name = agg_input.filter_variable_name
+                filter_variable_value = agg_input.filter_variable_value
+                filter_variable_leq = agg_input.filter_variable_leq
+                filter_variable_geq = agg_input.filter_variable_geq
+                aggregate_function = agg_input.aggregate_function
+
+            print(f"Processing aggregate {i+1}/{len(request.data)}: {variable_name} for simulation {simulation_id}")
+
             # Get the simulation
-            simulation_table = session.get(SimulationTable, agg_input.simulation_id)
+            simulation_table = session.get(SimulationTable, simulation_id)
             if not simulation_table:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Simulation {agg_input.simulation_id} not found"
+                    detail=f"Simulation {simulation_id} not found"
                 )
 
             # Convert simulation table to model (we need the full simulation object)
@@ -158,14 +196,14 @@ def create_report_element(
             # Create the Aggregate model instance
             agg = Aggregate(
                 simulation=simulation,
-                entity=agg_input.entity,
-                variable_name=agg_input.variable_name,
-                year=agg_input.year,
-                filter_variable_name=agg_input.filter_variable_name,
-                filter_variable_value=agg_input.filter_variable_value,
-                filter_variable_leq=agg_input.filter_variable_leq,
-                filter_variable_geq=agg_input.filter_variable_geq,
-                aggregate_function=agg_input.aggregate_function,
+                entity=entity,
+                variable_name=variable_name,
+                year=year,
+                filter_variable_name=filter_variable_name,
+                filter_variable_value=filter_variable_value,
+                filter_variable_leq=filter_variable_leq,
+                filter_variable_geq=filter_variable_geq,
+                aggregate_function=aggregate_function,
                 reportelement_id=report_element.id
             )
             aggregate_models.append(agg)
@@ -206,38 +244,153 @@ def create_report_element(
                 "filter_variable_geq": agg_table.filter_variable_geq,
             })
 
+    # Process aggregate changes if provided
+    elif request.data_type == "AggregateChange" and request.data:
+        print(f"Processing {len(request.data)} aggregate changes for report element {report_element.id}")
+        # Convert input aggregate changes to AggregateChange model instances
+        aggregate_change_models = []
+
+        for i, agg_change_input in enumerate(request.data):
+            # Parse the input data - it could be dict or AggregateChangeInput
+            if isinstance(agg_change_input, dict):
+                baseline_simulation_id = agg_change_input.get('baseline_simulation_id')
+                comparison_simulation_id = agg_change_input.get('comparison_simulation_id')
+                entity = agg_change_input.get('entity')
+                variable_name = agg_change_input.get('variable_name')
+                year = agg_change_input.get('year')
+                filter_variable_name = agg_change_input.get('filter_variable_name')
+                filter_variable_value = agg_change_input.get('filter_variable_value')
+                filter_variable_leq = agg_change_input.get('filter_variable_leq')
+                filter_variable_geq = agg_change_input.get('filter_variable_geq')
+                aggregate_function = agg_change_input.get('aggregate_function')
+            else:
+                baseline_simulation_id = agg_change_input.baseline_simulation_id
+                comparison_simulation_id = agg_change_input.comparison_simulation_id
+                entity = agg_change_input.entity
+                variable_name = agg_change_input.variable_name
+                year = agg_change_input.year
+                filter_variable_name = agg_change_input.filter_variable_name
+                filter_variable_value = agg_change_input.filter_variable_value
+                filter_variable_leq = agg_change_input.filter_variable_leq
+                filter_variable_geq = agg_change_input.filter_variable_geq
+                aggregate_function = agg_change_input.aggregate_function
+
+            print(f"Processing aggregate change {i+1}/{len(request.data)}: {variable_name} for simulations {baseline_simulation_id} vs {comparison_simulation_id}")
+
+            # Get the baseline simulation
+            baseline_simulation_table = session.get(SimulationTable, baseline_simulation_id)
+            if not baseline_simulation_table:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Baseline simulation {baseline_simulation_id} not found"
+                )
+
+            # Get the comparison simulation
+            comparison_simulation_table = session.get(SimulationTable, comparison_simulation_id)
+            if not comparison_simulation_table:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Comparison simulation {comparison_simulation_id} not found"
+                )
+
+            # Convert simulation tables to models
+            from policyengine.database import Database
+            from policyengine_api_full.database import engine
+
+            # Create a database instance to handle the conversion
+            db = database
+            baseline_simulation = baseline_simulation_table.convert_to_model(db)
+            comparison_simulation = comparison_simulation_table.convert_to_model(db)
+
+            # Create the AggregateChange model instance
+            agg_change = AggregateChange(
+                baseline_simulation=baseline_simulation,
+                comparison_simulation=comparison_simulation,
+                entity=entity,
+                variable_name=variable_name,
+                year=year,
+                filter_variable_name=filter_variable_name,
+                filter_variable_value=filter_variable_value,
+                filter_variable_leq=filter_variable_leq,
+                filter_variable_geq=filter_variable_geq,
+                aggregate_function=aggregate_function,
+                reportelement_id=report_element.id
+            )
+            aggregate_change_models.append(agg_change)
+
+        # Run AggregateChange.run to compute values
+        print(f"Running AggregateChange.run on {len(aggregate_change_models)} models")
+        computed_change_models = AggregateChange.run(aggregate_change_models)
+        print(f"AggregateChange.run returned {len(computed_change_models)} computed models")
+
+        # Save the computed aggregate changes to the database
+        for j, agg_change_model in enumerate(computed_change_models):
+            print(f"Saving aggregate change {j+1}/{len(computed_change_models)}: {agg_change_model.variable_name}")
+            print(f"  Baseline value: {agg_change_model.baseline_value}")
+            print(f"  Comparison value: {agg_change_model.comparison_value}")
+            print(f"  Change: {agg_change_model.change}")
+            print(f"  Relative change: {agg_change_model.relative_change}")
+
+            agg_change_table = AggregateChangeTable(
+                id=agg_change_model.id,
+                baseline_simulation_id=agg_change_model.baseline_simulation.id if agg_change_model.baseline_simulation else None,
+                comparison_simulation_id=agg_change_model.comparison_simulation.id if agg_change_model.comparison_simulation else None,
+                entity=agg_change_model.entity,
+                variable_name=agg_change_model.variable_name,
+                year=agg_change_model.year,
+                filter_variable_name=agg_change_model.filter_variable_name,
+                filter_variable_value=agg_change_model.filter_variable_value,
+                filter_variable_leq=agg_change_model.filter_variable_leq,
+                filter_variable_geq=agg_change_model.filter_variable_geq,
+                aggregate_function=agg_change_model.aggregate_function,
+                reportelement_id=report_element.id,
+                baseline_value=agg_change_model.baseline_value,
+                comparison_value=agg_change_model.comparison_value,
+                change=agg_change_model.change,
+                relative_change=agg_change_model.relative_change
+            )
+            session.add(agg_change_table)
+            computed_aggregates.append({
+                "id": agg_change_table.id,
+                "entity": agg_change_table.entity,
+                "variable_name": agg_change_table.variable_name,
+                "aggregate_function": agg_change_table.aggregate_function,
+                "baseline_value": agg_change_table.baseline_value,
+                "comparison_value": agg_change_table.comparison_value,
+                "change": agg_change_table.change,
+                "relative_change": agg_change_table.relative_change,
+                "year": agg_change_table.year,
+                "filter_variable_name": agg_change_table.filter_variable_name,
+                "filter_variable_value": agg_change_table.filter_variable_value,
+                "filter_variable_leq": agg_change_table.filter_variable_leq,
+                "filter_variable_geq": agg_change_table.filter_variable_geq,
+            })
+
     session.commit()
     session.refresh(report_element)
 
-    # Return the report element with computed aggregates
-    response = {
-        "report_element": {
-            "id": report_element.id,
-            "label": report_element.label,
-            "type": report_element.type,
-            "data_table": report_element.data_table,
-            "chart_type": report_element.chart_type,
-            "x_axis_variable": report_element.x_axis_variable,
-            "y_axis_variable": report_element.y_axis_variable,
-            "group_by": report_element.group_by,
-            "color_by": report_element.color_by,
-            "size_by": report_element.size_by,
-            "markdown_content": report_element.markdown_content,
-            "report_id": report_element.report_id,
-            "user_id": report_element.user_id,
-            "position": report_element.position,
-            "visible": report_element.visible,
-            "model_version_id": report_element.model_version_id,
-            "report_element_metadata": report_element.report_element_metadata,
-            "created_at": report_element.created_at.isoformat(),
-            "updated_at": report_element.updated_at.isoformat(),
-        }
+    # Convert to dict for JSON serialization
+    return {
+        "id": report_element.id,
+        "label": report_element.label,
+        "type": report_element.type,
+        "data_table": report_element.data_table,
+        "chart_type": report_element.chart_type,
+        "x_axis_variable": report_element.x_axis_variable,
+        "y_axis_variable": report_element.y_axis_variable,
+        "group_by": report_element.group_by,
+        "color_by": report_element.color_by,
+        "size_by": report_element.size_by,
+        "markdown_content": report_element.markdown_content,
+        "report_id": report_element.report_id,
+        "user_id": report_element.user_id,
+        "position": report_element.position,
+        "visible": report_element.visible,
+        "model_version_id": report_element.model_version_id,
+        "report_element_metadata": report_element.report_element_metadata,
+        "created_at": report_element.created_at.isoformat() if report_element.created_at else None,
+        "updated_at": report_element.updated_at.isoformat() if report_element.updated_at else None,
     }
-
-    if computed_aggregates:
-        response["aggregates"] = computed_aggregates
-
-    return response
 
 
 @report_elements_router.get("/{report_element_id}", response_model=ReportElementTable)
@@ -322,7 +475,7 @@ def delete_report_element(
     report_element_id: str,
     session: Session = Depends(get_session),
 ):
-    """Delete a report element and its associated aggregates."""
+    """Delete a report element and its associated aggregates or aggregate changes."""
     report_element = session.get(ReportElementTable, report_element_id)
     if not report_element:
         raise HTTPException(status_code=404, detail="Report element not found")
@@ -334,6 +487,14 @@ def delete_report_element(
     aggregates = session.exec(statement).all()
     for aggregate in aggregates:
         session.delete(aggregate)
+
+    # Delete associated aggregate changes
+    statement_changes = select(AggregateChangeTable).where(
+        AggregateChangeTable.reportelement_id == report_element_id
+    )
+    aggregate_changes = session.exec(statement_changes).all()
+    for aggregate_change in aggregate_changes:
+        session.delete(aggregate_change)
 
     session.delete(report_element)
     session.commit()
