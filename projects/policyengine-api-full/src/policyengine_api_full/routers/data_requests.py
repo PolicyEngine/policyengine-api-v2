@@ -107,7 +107,6 @@ JSON schema:
     user_prompt = f"""Request: {request.description}
 
 Variables: {json.dumps(variables_context)}
-{"Simulations already selected." if request.simulation_ids else ""}
 
 Return JSON:"""
 
