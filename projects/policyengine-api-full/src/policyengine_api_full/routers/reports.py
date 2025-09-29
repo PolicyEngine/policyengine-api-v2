@@ -1,11 +1,17 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlmodel import Session, select
-from policyengine.database import ReportTable
+from policyengine.database import ReportTable, ReportElementTable, AggregateTable
 from policyengine_api_full.database import get_session
 from typing import Optional
 from datetime import datetime, timezone
+from pydantic import BaseModel
 
 reports_router = APIRouter(prefix="/reports", tags=["reports"])
+
+
+class ReportUpdateRequest(BaseModel):
+    """Request model for updating a report."""
+    label: Optional[str] = None
 
 
 @reports_router.get("/", response_model=list[ReportTable])
@@ -50,10 +56,30 @@ def get_report(
     return report
 
 
+@reports_router.get("/{report_id}/elements", response_model=list[ReportElementTable])
+def get_report_elements(
+    report_id: str,
+    session: Session = Depends(get_session),
+):
+    """Get all report elements for a specific report."""
+    # First check if the report exists
+    report = session.get(ReportTable, report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    # Get all report elements for this report, ordered by position
+    statement = select(ReportElementTable).where(
+        ReportElementTable.report_id == report_id
+    ).order_by(ReportElementTable.position)
+
+    report_elements = session.exec(statement).all()
+    return report_elements
+
+
 @reports_router.patch("/{report_id}", response_model=ReportTable)
 def update_report(
     report_id: str,
-    label: Optional[str] = None,
+    update_request: ReportUpdateRequest,
     session: Session = Depends(get_session),
 ):
     """Update a report."""
@@ -61,8 +87,8 @@ def update_report(
     if not db_report:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    if label is not None:
-        db_report.label = label
+    if update_request.label is not None:
+        db_report.label = update_request.label
 
     session.add(db_report)
     session.commit()
@@ -80,6 +106,25 @@ def delete_report(
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
+    # First delete all associated report elements
+    statement = select(ReportElementTable).where(
+        ReportElementTable.report_id == report_id
+    )
+    report_elements = session.exec(statement).all()
+
+    # Delete each report element (this will also handle their aggregates)
+    for element in report_elements:
+        # Delete associated aggregates first
+        agg_statement = select(AggregateTable).where(
+            AggregateTable.reportelement_id == element.id
+        )
+        aggregates = session.exec(agg_statement).all()
+        for aggregate in aggregates:
+            session.delete(aggregate)
+
+        session.delete(element)
+
+    # Now delete the report itself
     session.delete(report)
     session.commit()
     return None

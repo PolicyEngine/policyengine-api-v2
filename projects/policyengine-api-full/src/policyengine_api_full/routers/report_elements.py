@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query, Body
 from sqlmodel import Session, select
 from policyengine.database import ReportElementTable, AggregateTable
 from policyengine.models import Aggregate
-from policyengine_api_full.database import get_session
+from policyengine_api_full.database import get_session, database
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 from pydantic import BaseModel
@@ -40,6 +40,25 @@ class ReportElementCreateRequest(BaseModel):
     user_id: Optional[str] = None
     position: Optional[int] = None
     visible: Optional[bool] = True
+    model_version_id: Optional[str] = None
+    report_element_metadata: Optional[Dict[str, Any]] = None
+
+
+class ReportElementUpdateRequest(BaseModel):
+    """Request model for updating a report element."""
+    label: Optional[str] = None
+    type: Optional[str] = None
+    chart_type: Optional[str] = None
+    x_axis_variable: Optional[str] = None
+    y_axis_variable: Optional[str] = None
+    group_by: Optional[str] = None
+    color_by: Optional[str] = None
+    size_by: Optional[str] = None
+    markdown_content: Optional[str] = None
+    position: Optional[int] = None
+    visible: Optional[bool] = None
+    model_version_id: Optional[str] = None
+    report_element_metadata: Optional[Dict[str, Any]] = None
 
 
 @report_elements_router.get("/", response_model=list[ReportElementTable])
@@ -101,6 +120,8 @@ def create_report_element(
         user_id=request.user_id,
         position=request.position,
         visible=request.visible,
+        model_version_id=request.model_version_id,
+        report_element_metadata=request.report_element_metadata,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc)
     )
@@ -129,7 +150,7 @@ def create_report_element(
             from policyengine_api_full.database import engine
 
             # Create a database instance to handle the conversion
-            db = Database.from_engine(engine)
+            db = database
             simulation = simulation_table.convert_to_model(db)
 
             # Create the Aggregate model instance
@@ -201,6 +222,8 @@ def create_report_element(
             "user_id": report_element.user_id,
             "position": report_element.position,
             "visible": report_element.visible,
+            "model_version_id": report_element.model_version_id,
+            "report_element_metadata": report_element.report_element_metadata,
             "created_at": report_element.created_at.isoformat(),
             "updated_at": report_element.updated_at.isoformat(),
         }
@@ -246,17 +269,7 @@ def get_report_element_aggregates(
 @report_elements_router.patch("/{report_element_id}", response_model=ReportElementTable)
 def update_report_element(
     report_element_id: str,
-    label: Optional[str] = None,
-    type: Optional[str] = None,
-    chart_type: Optional[str] = None,
-    x_axis_variable: Optional[str] = None,
-    y_axis_variable: Optional[str] = None,
-    group_by: Optional[str] = None,
-    color_by: Optional[str] = None,
-    size_by: Optional[str] = None,
-    markdown_content: Optional[str] = None,
-    position: Optional[int] = None,
-    visible: Optional[bool] = None,
+    update_request: ReportElementUpdateRequest,
     session: Session = Depends(get_session),
 ):
     """Update a report element."""
@@ -264,28 +277,32 @@ def update_report_element(
     if not db_report_element:
         raise HTTPException(status_code=404, detail="Report element not found")
 
-    if label is not None:
-        db_report_element.label = label
-    if type is not None:
-        db_report_element.type = type
-    if chart_type is not None:
-        db_report_element.chart_type = chart_type
-    if x_axis_variable is not None:
-        db_report_element.x_axis_variable = x_axis_variable
-    if y_axis_variable is not None:
-        db_report_element.y_axis_variable = y_axis_variable
-    if group_by is not None:
-        db_report_element.group_by = group_by
-    if color_by is not None:
-        db_report_element.color_by = color_by
-    if size_by is not None:
-        db_report_element.size_by = size_by
-    if markdown_content is not None:
-        db_report_element.markdown_content = markdown_content
-    if position is not None:
-        db_report_element.position = position
-    if visible is not None:
-        db_report_element.visible = visible
+    if update_request.label is not None:
+        db_report_element.label = update_request.label
+    if update_request.type is not None:
+        db_report_element.type = update_request.type
+    if update_request.chart_type is not None:
+        db_report_element.chart_type = update_request.chart_type
+    if update_request.x_axis_variable is not None:
+        db_report_element.x_axis_variable = update_request.x_axis_variable
+    if update_request.y_axis_variable is not None:
+        db_report_element.y_axis_variable = update_request.y_axis_variable
+    if update_request.group_by is not None:
+        db_report_element.group_by = update_request.group_by
+    if update_request.color_by is not None:
+        db_report_element.color_by = update_request.color_by
+    if update_request.size_by is not None:
+        db_report_element.size_by = update_request.size_by
+    if update_request.markdown_content is not None:
+        db_report_element.markdown_content = update_request.markdown_content
+    if update_request.position is not None:
+        db_report_element.position = update_request.position
+    if update_request.visible is not None:
+        db_report_element.visible = update_request.visible
+    if update_request.model_version_id is not None:
+        db_report_element.model_version_id = update_request.model_version_id
+    if update_request.report_element_metadata is not None:
+        db_report_element.report_element_metadata = update_request.report_element_metadata
 
     db_report_element.updated_at = datetime.now(timezone.utc)
 

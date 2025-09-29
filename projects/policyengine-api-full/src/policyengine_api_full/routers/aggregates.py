@@ -6,8 +6,14 @@ from policyengine.models import Aggregate
 from policyengine_api_full.database import get_session
 from typing import Optional
 from datetime import datetime, timezone
+from pydantic import BaseModel
 
 aggregates_router = APIRouter(prefix="/aggregates", tags=["aggregates"])
+
+
+class AggregateUpdateRequest(BaseModel):
+    """Request model for updating an aggregate."""
+    value: Optional[float] = None
 
 
 @aggregates_router.get("/", response_model=list[AggregateTable])
@@ -68,7 +74,7 @@ def get_aggregate(
 @aggregates_router.patch("/{aggregate_id}", response_model=AggregateTable)
 def update_aggregate(
     aggregate_id: str,
-    value: Optional[float] = None,
+    update_request: AggregateUpdateRequest,
     session: Session = Depends(get_session),
 ):
     """Update an aggregate's value."""
@@ -76,8 +82,8 @@ def update_aggregate(
     if not db_aggregate:
         raise HTTPException(status_code=404, detail="Aggregate not found")
 
-    if value is not None:
-        db_aggregate.value = value
+    if update_request.value is not None:
+        db_aggregate.value = update_request.value
 
     session.add(db_aggregate)
     session.commit()
@@ -116,7 +122,6 @@ def create_bulk_aggregates(
     
     for i in range(len(created_aggregates)):
         created_aggregates[i] = AggregateTable.convert_to_model(created_aggregates[i], database=database)
-        print(created_aggregates[i].simulation)
 
     created_aggregates = Aggregate.run(created_aggregates)
 
