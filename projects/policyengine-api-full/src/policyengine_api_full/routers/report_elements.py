@@ -6,13 +6,14 @@ from policyengine_api_full.database import get_session, database
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 from pydantic import BaseModel
+import time
 
 report_elements_router = APIRouter(prefix="/report-elements", tags=["report elements"])
 
 
 class AggregateInput(BaseModel):
     """Input model for aggregate data without the value field."""
-    entity: str
+    entity: Optional[str] = None
     variable_name: str
     aggregate_function: str  # "sum", "mean", or "count"
     simulation_id: str
@@ -25,7 +26,7 @@ class AggregateInput(BaseModel):
 
 class AggregateChangeInput(BaseModel):
     """Input model for aggregate change data."""
-    entity: str
+    entity: Optional[str] = None
     variable_name: str
     aggregate_function: str  # "sum", "mean", or "count"
     baseline_simulation_id: str
@@ -118,6 +119,9 @@ def create_report_element(
     import uuid
     from policyengine.database import SimulationTable
 
+    start_time = time.time()
+    print(f"[PERFORMANCE] Starting report element creation at {start_time}")
+
     # Create the report element
     report_element = ReportElementTable(
         id=str(uuid.uuid4()),
@@ -144,11 +148,15 @@ def create_report_element(
     session.add(report_element)
     session.flush()  # Get the ID before processing aggregates
 
+    element_creation_time = time.time()
+    print(f"[PERFORMANCE] Report element created in {element_creation_time - start_time:.2f} seconds")
+
     computed_aggregates = []
 
     # Process aggregates if provided
     if request.data_type == "Aggregate" and request.data:
-        print(f"Processing {len(request.data)} aggregates for report element {report_element.id}")
+        print(f"[PERFORMANCE] Processing {len(request.data)} aggregates for report element {report_element.id}")
+        aggregate_prep_start = time.time()
         # Convert input aggregates to Aggregate model instances
         aggregate_models = []
 
@@ -209,11 +217,17 @@ def create_report_element(
             aggregate_models.append(agg)
 
         # Run Aggregate.run to compute values
-        print(f"Running Aggregate.run on {len(aggregate_models)} models")
+        aggregate_prep_time = time.time()
+        print(f"[PERFORMANCE] Aggregate preparation took {aggregate_prep_time - aggregate_prep_start:.2f} seconds")
+        print(f"[PERFORMANCE] Running Aggregate.run on {len(aggregate_models)} models")
+        aggregate_run_start = time.time()
         computed_models = Aggregate.run(aggregate_models)
-        print(f"Aggregate.run returned {len(computed_models)} computed models")
+        aggregate_run_time = time.time()
+        print(f"[PERFORMANCE] Aggregate.run took {aggregate_run_time - aggregate_run_start:.2f} seconds")
+        print(f"[PERFORMANCE] Aggregate.run returned {len(computed_models)} computed models")
 
         # Save the computed aggregates to the database
+        save_start = time.time()
         for j, agg_model in enumerate(computed_models):
             print(f"Saving aggregate {j+1}/{len(computed_models)}: {agg_model.variable_name} = {agg_model.value}")
             agg_table = AggregateTable(
@@ -246,7 +260,42 @@ def create_report_element(
 
     # Process aggregate changes if provided
     elif request.data_type == "AggregateChange" and request.data:
-        print(f"Processing {len(request.data)} aggregate changes for report element {report_element.id}")
+        print(f"[PERFORMANCE] Processing {len(request.data)} aggregate changes for report element {report_element.id}")
+        aggregate_change_prep_start = time.time()
+
+        # Collect unique simulation IDs and fetch them once
+        sim_ids = set()
+        for agg_change_input in request.data:
+            if isinstance(agg_change_input, dict):
+                sim_ids.add(agg_change_input.get('baseline_simulation_id'))
+                sim_ids.add(agg_change_input.get('comparison_simulation_id'))
+            else:
+                sim_ids.add(agg_change_input.baseline_simulation_id)
+                sim_ids.add(agg_change_input.comparison_simulation_id)
+
+        # Fetch all simulations at once
+        sim_fetch_start = time.time()
+        sim_tables = {}
+        for sim_id in sim_ids:
+            sim_table = session.get(SimulationTable, sim_id)
+            if not sim_table:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Simulation {sim_id} not found"
+                )
+            sim_tables[sim_id] = sim_table
+        sim_fetch_time = time.time()
+        print(f"[PERFORMANCE] Fetched {len(sim_ids)} unique simulations in {sim_fetch_time - sim_fetch_start:.2f} seconds")
+
+        # Convert all simulations to models
+        sim_convert_start = time.time()
+        db = database
+        sim_models = {}
+        for sim_id, sim_table in sim_tables.items():
+            sim_models[sim_id] = sim_table.convert_to_model(db)
+        sim_convert_time = time.time()
+        print(f"[PERFORMANCE] Converted {len(sim_models)} simulations in {sim_convert_time - sim_convert_start:.2f} seconds")
+
         # Convert input aggregate changes to AggregateChange model instances
         aggregate_change_models = []
 
@@ -262,6 +311,9 @@ def create_report_element(
                 filter_variable_value = agg_change_input.get('filter_variable_value')
                 filter_variable_leq = agg_change_input.get('filter_variable_leq')
                 filter_variable_geq = agg_change_input.get('filter_variable_geq')
+                filter_variable_quantile_leq = agg_change_input.get('filter_variable_quantile_leq')
+                filter_variable_quantile_geq = agg_change_input.get('filter_variable_quantile_geq')
+                filter_variable_quantile_value = agg_change_input.get('filter_variable_quantile_value')
                 aggregate_function = agg_change_input.get('aggregate_function')
             else:
                 baseline_simulation_id = agg_change_input.baseline_simulation_id
@@ -273,34 +325,14 @@ def create_report_element(
                 filter_variable_value = agg_change_input.filter_variable_value
                 filter_variable_leq = agg_change_input.filter_variable_leq
                 filter_variable_geq = agg_change_input.filter_variable_geq
+                filter_variable_quantile_leq = getattr(agg_change_input, 'filter_variable_quantile_leq', None)
+                filter_variable_quantile_geq = getattr(agg_change_input, 'filter_variable_quantile_geq', None)
+                filter_variable_quantile_value = getattr(agg_change_input, 'filter_variable_quantile_value', None)
                 aggregate_function = agg_change_input.aggregate_function
 
-            print(f"Processing aggregate change {i+1}/{len(request.data)}: {variable_name} for simulations {baseline_simulation_id} vs {comparison_simulation_id}")
-
-            # Get the baseline simulation
-            baseline_simulation_table = session.get(SimulationTable, baseline_simulation_id)
-            if not baseline_simulation_table:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Baseline simulation {baseline_simulation_id} not found"
-                )
-
-            # Get the comparison simulation
-            comparison_simulation_table = session.get(SimulationTable, comparison_simulation_id)
-            if not comparison_simulation_table:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Comparison simulation {comparison_simulation_id} not found"
-                )
-
-            # Convert simulation tables to models
-            from policyengine.database import Database
-            from policyengine_api_full.database import engine
-
-            # Create a database instance to handle the conversion
-            db = database
-            baseline_simulation = baseline_simulation_table.convert_to_model(db)
-            comparison_simulation = comparison_simulation_table.convert_to_model(db)
+            # Get pre-fetched and converted simulations
+            baseline_simulation = sim_models[baseline_simulation_id]
+            comparison_simulation = sim_models[comparison_simulation_id]
 
             # Create the AggregateChange model instance
             agg_change = AggregateChange(
@@ -313,17 +345,26 @@ def create_report_element(
                 filter_variable_value=filter_variable_value,
                 filter_variable_leq=filter_variable_leq,
                 filter_variable_geq=filter_variable_geq,
+                filter_variable_quantile_leq=filter_variable_quantile_leq,
+                filter_variable_quantile_geq=filter_variable_quantile_geq,
+                filter_variable_quantile_value=filter_variable_quantile_value,
                 aggregate_function=aggregate_function,
                 reportelement_id=report_element.id
             )
             aggregate_change_models.append(agg_change)
 
         # Run AggregateChange.run to compute values
-        print(f"Running AggregateChange.run on {len(aggregate_change_models)} models")
+        aggregate_change_prep_time = time.time()
+        print(f"[PERFORMANCE] AggregateChange preparation took {aggregate_change_prep_time - aggregate_change_prep_start:.2f} seconds")
+        print(f"[PERFORMANCE] Running AggregateChange.run on {len(aggregate_change_models)} models")
+        aggregate_change_run_start = time.time()
         computed_change_models = AggregateChange.run(aggregate_change_models)
-        print(f"AggregateChange.run returned {len(computed_change_models)} computed models")
+        aggregate_change_run_time = time.time()
+        print(f"[PERFORMANCE] AggregateChange.run took {aggregate_change_run_time - aggregate_change_run_start:.2f} seconds")
+        print(f"[PERFORMANCE] AggregateChange.run returned {len(computed_change_models)} computed models")
 
         # Save the computed aggregate changes to the database
+        save_start = time.time()
         for j, agg_change_model in enumerate(computed_change_models):
             print(f"Saving aggregate change {j+1}/{len(computed_change_models)}: {agg_change_model.variable_name}")
             print(f"  Baseline value: {agg_change_model.baseline_value}")
@@ -342,6 +383,9 @@ def create_report_element(
                 filter_variable_value=agg_change_model.filter_variable_value,
                 filter_variable_leq=agg_change_model.filter_variable_leq,
                 filter_variable_geq=agg_change_model.filter_variable_geq,
+                filter_variable_quantile_leq=agg_change_model.filter_variable_quantile_leq,
+                filter_variable_quantile_geq=agg_change_model.filter_variable_quantile_geq,
+                filter_variable_quantile_value=agg_change_model.filter_variable_quantile_value,
                 aggregate_function=agg_change_model.aggregate_function,
                 reportelement_id=report_element.id,
                 baseline_value=agg_change_model.baseline_value,
@@ -364,10 +408,23 @@ def create_report_element(
                 "filter_variable_value": agg_change_table.filter_variable_value,
                 "filter_variable_leq": agg_change_table.filter_variable_leq,
                 "filter_variable_geq": agg_change_table.filter_variable_geq,
+                "filter_variable_quantile_leq": agg_change_table.filter_variable_quantile_leq,
+                "filter_variable_quantile_geq": agg_change_table.filter_variable_quantile_geq,
+                "filter_variable_quantile_value": agg_change_table.filter_variable_quantile_value,
             })
 
+    if request.data_type in ["Aggregate", "AggregateChange"] and request.data:
+        save_time = time.time()
+        print(f"[PERFORMANCE] Database save took {save_time - save_start:.2f} seconds")
+
+    commit_start = time.time()
     session.commit()
     session.refresh(report_element)
+    commit_time = time.time()
+    print(f"[PERFORMANCE] Database commit took {commit_time - commit_start:.2f} seconds")
+
+    total_time = time.time()
+    print(f"[PERFORMANCE] Total report element creation took {total_time - start_time:.2f} seconds")
 
     # Convert to dict for JSON serialization
     return {
