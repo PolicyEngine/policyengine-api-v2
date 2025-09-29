@@ -18,7 +18,8 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi (>=0.51b0,<0.52)",
     "policyengine-fastapi",
     "policyengine[uk,us]>=3.0.0",
-    "psycopg2-binary>=2.9.0"
+    "psycopg2-binary>=2.9.0",
+    "anthropic>=0.68.1",
 ]
 
 [tool.hatch.build.targets.wheel]

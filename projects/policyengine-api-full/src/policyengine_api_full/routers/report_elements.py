@@ -133,10 +133,12 @@ def create_report_element(
 
     # Process aggregates if provided
     if request.data_type == "Aggregate" and request.data:
+        print(f"Processing {len(request.data)} aggregates for report element {report_element.id}")
         # Convert input aggregates to Aggregate model instances
         aggregate_models = []
 
-        for agg_input in request.data:
+        for i, agg_input in enumerate(request.data):
+            print(f"Processing aggregate {i+1}/{len(request.data)}: {agg_input.variable_name} for simulation {agg_input.simulation_id}")
             # Get the simulation
             simulation_table = session.get(SimulationTable, agg_input.simulation_id)
             if not simulation_table:
@@ -169,10 +171,13 @@ def create_report_element(
             aggregate_models.append(agg)
 
         # Run Aggregate.run to compute values
+        print(f"Running Aggregate.run on {len(aggregate_models)} models")
         computed_models = Aggregate.run(aggregate_models)
+        print(f"Aggregate.run returned {len(computed_models)} computed models")
 
         # Save the computed aggregates to the database
-        for agg_model in computed_models:
+        for j, agg_model in enumerate(computed_models):
+            print(f"Saving aggregate {j+1}/{len(computed_models)}: {agg_model.variable_name} = {agg_model.value}")
             agg_table = AggregateTable(
                 id=agg_model.id,
                 simulation_id=agg_model.simulation.id if agg_model.simulation else None,

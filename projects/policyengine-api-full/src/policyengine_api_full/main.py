@@ -5,6 +5,8 @@ from sqlmodel import SQLModel
 from policyengine_fastapi.exit import exit
 from .settings import get_settings
 import logging
+import dotenv
+dotenv.load_dotenv()
 
 # Import routers
 from .routers import (
@@ -18,7 +20,8 @@ from .routers import (
     baseline_variables,
     reports,
     report_elements,
-    aggregates
+    aggregates,
+    data_requests
 )
 
 # Import database setup
@@ -89,6 +92,7 @@ app.include_router(baseline_variables.router)
 app.include_router(reports.reports_router)
 app.include_router(report_elements.report_elements_router)
 app.include_router(aggregates.aggregates_router)
+app.include_router(data_requests.router)
 
 # Health check endpoint
 @app.get("/health")
