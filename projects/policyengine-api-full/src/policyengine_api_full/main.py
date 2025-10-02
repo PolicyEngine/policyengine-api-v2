@@ -23,6 +23,7 @@ from .routers import (
     aggregates,
     aggregate_changes,
     data_requests,
+    users,
     user_simulations,
     user_policies,
     user_datasets,
@@ -105,6 +106,7 @@ app.include_router(report_elements.report_elements_router)
 app.include_router(aggregates.aggregates_router)
 app.include_router(aggregate_changes.aggregate_changes_router)
 app.include_router(data_requests.router)
+app.include_router(users.router)
 app.include_router(user_simulations.router)
 app.include_router(user_policies.router)
 app.include_router(user_datasets.router)
