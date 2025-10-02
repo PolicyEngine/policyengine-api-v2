@@ -16,7 +16,6 @@ help:
 	@echo ""
 	@echo "Development:"
 	@echo "  make dev              - Start all services in development mode (Docker)"
-	@echo "  make dev-local        - Start services using local venvs (no Docker)"
 	@echo "  make up [service=x]   - Start specific service or all services"
 	@echo "  make down             - Stop all services"
 	@echo "  make logs [service=x] - Show logs for service"

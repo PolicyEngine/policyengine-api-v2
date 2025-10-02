@@ -22,7 +22,10 @@ from .routers import (
     report_elements,
     aggregates,
     aggregate_changes,
-    data_requests
+    data_requests,
+    user_simulations,
+    user_policies,
+    user_datasets,
 )
 
 # Import database setup
@@ -44,7 +47,13 @@ from policyengine.database import (
     ReportTable,
     ReportElementTable,
     AggregateTable,
-    AggregateChangeTable
+    AggregateChangeTable,
+    UserTable,
+    UserPolicyTable,
+    UserDynamicTable,
+    UserDatasetTable,
+    UserSimulationTable,
+    UserReportTable,
 )
 
 """
@@ -96,6 +105,9 @@ app.include_router(report_elements.report_elements_router)
 app.include_router(aggregates.aggregates_router)
 app.include_router(aggregate_changes.aggregate_changes_router)
 app.include_router(data_requests.router)
+app.include_router(user_simulations.router)
+app.include_router(user_policies.router)
+app.include_router(user_datasets.router)
 
 # Health check endpoint
 @app.get("/health")

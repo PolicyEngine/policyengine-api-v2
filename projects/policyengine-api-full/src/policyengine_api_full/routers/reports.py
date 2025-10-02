@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlmodel import Session, select
-from policyengine.database import ReportTable, ReportElementTable, AggregateTable
+from policyengine.database import ReportTable, ReportElementTable, AggregateTable, UserReportTable
 from policyengine_api_full.database import get_session
 from typing import Optional
 from datetime import datetime, timezone
@@ -19,9 +19,23 @@ def list_reports(
     session: Session = Depends(get_session),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=10_000),
+    user_id: Optional[str] = Query(None),
 ):
-    """List all reports with pagination."""
-    statement = select(ReportTable).offset(skip).limit(limit)
+    """List all reports with pagination. Optionally filter by user_id."""
+    if user_id:
+        # Get report IDs for this user
+        user_reports = session.exec(
+            select(UserReportTable).where(UserReportTable.user_id == user_id)
+        ).all()
+        report_ids = [ur.report_id for ur in user_reports]
+
+        if not report_ids:
+            return []
+
+        statement = select(ReportTable).where(ReportTable.id.in_(report_ids)).offset(skip).limit(limit)
+    else:
+        statement = select(ReportTable).offset(skip).limit(limit)
+
     reports = session.exec(statement).all()
     return reports
 
