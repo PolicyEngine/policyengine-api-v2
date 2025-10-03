@@ -123,26 +123,23 @@ def create_bulk_aggregate_changes(
     aggregate_changes: list[AggregateChangeTable],
     session: Session = Depends(get_session),
 ):
-    """Create multiple aggregate changes at once, computing their values."""
+    """Create multiple aggregate changes at once and queue them for processing."""
     import uuid
 
     created_aggregate_changes = []
     for aggregate_change in aggregate_changes:
         if not aggregate_change.id:
             aggregate_change.id = str(uuid.uuid4())
+        # Don't set values - leave as None to indicate pending processing
+        aggregate_change.baseline_value = None
+        aggregate_change.comparison_value = None
+        aggregate_change.change = None
+        aggregate_change.relative_change = None
         created_aggregate_changes.append(aggregate_change)
 
-    # Convert to models for computation
-    for i in range(len(created_aggregate_changes)):
-        created_aggregate_changes[i] = AggregateChangeTable.convert_to_model(created_aggregate_changes[i], database=database)
-
-    # Run computation
-    created_aggregate_changes = AggregateChange.run(created_aggregate_changes)
-
-    # Convert back to tables and save
-    for i in range(len(created_aggregate_changes)):
-        created_aggregate_changes[i] = AggregateChangeTable.convert_from_model(created_aggregate_changes[i])
-        session.add(created_aggregate_changes[i])
+    # Save to database without computing (will be picked up by queue worker)
+    for aggregate_change in created_aggregate_changes:
+        session.add(aggregate_change)
 
     session.commit()
 

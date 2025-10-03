@@ -44,6 +44,7 @@ class SimulationRunResponse(BaseModel):
 
 def run_simulation_task(simulation_id: str):
     """Background task to run a simulation."""
+    simulation = None
     try:
         logger.info(f"Fetching simulation {simulation_id} from database")
         simulation = database.get(Simulation, id=simulation_id)
@@ -54,13 +55,29 @@ def run_simulation_task(simulation_id: str):
 
         logger.info(f"Running simulation {simulation_id}")
         simulation.run()
+        # Clear any previous error
+        simulation.error = None
 
         logger.info(f"Saving simulation results for {simulation_id}")
         database.set(simulation)
+        database.session.commit()
 
         logger.info(f"Successfully completed simulation {simulation_id}")
     except Exception as e:
         logger.error(f"Error running simulation {simulation_id}: {e}")
+        # Rollback the failed transaction
+        database.session.rollback()
+
+        # Save error to simulation if we have it
+        if simulation:
+            simulation.error = str(e)
+            simulation.result = None
+            try:
+                database.set(simulation)
+                database.session.commit()
+            except Exception as save_error:
+                logger.error(f"Failed to save error state: {save_error}")
+                database.session.rollback()
 
 
 def create_router():
@@ -211,18 +228,38 @@ def create_router():
         try:
             # Fetch simulation from database
             logger.info(f"Fetching simulation {simulation_id} from database")
-            simulation = database.get(Simulation, id=simulation_id)
+            try:
+                simulation = database.get(Simulation, id=simulation_id)
+            except Exception as e:
+                import traceback
+                logger.error(f"Error fetching simulation: {e}")
+                logger.error(traceback.format_exc())
+                raise
 
             if not simulation:
                 raise HTTPException(status_code=404, detail=f"Simulation {simulation_id} not found")
 
+            logger.info(f"Simulation loaded: model={simulation.model}, dataset={simulation.dataset}, model_version={simulation.model_version}")
+
             # Run the simulation
             logger.info(f"Running simulation {simulation_id}")
-            simulation.run()
+            try:
+                simulation.run()
+            except Exception as e:
+                import traceback
+                logger.error(f"Error in simulation.run(): {e}")
+                logger.error(traceback.format_exc())
+                raise
 
             # Save the results back to database
             logger.info(f"Saving simulation results for {simulation_id}")
-            database.set(simulation)
+            try:
+                database.set(simulation)
+            except Exception as e:
+                import traceback
+                logger.error(f"Error saving simulation: {e}")
+                logger.error(traceback.format_exc())
+                raise
 
             return {
                 "simulation_id": simulation_id,
@@ -259,5 +296,101 @@ def create_router():
         except Exception as e:
             logger.error(f"Error fetching simulation status for {simulation_id}: {e}")
             raise HTTPException(status_code=500, detail=f"Error fetching simulation status: {str(e)}")
+
+    @router.post("/process_aggregates", response_model=dict)
+    async def process_aggregates(
+        aggregate_ids: list[str]
+    ) -> dict:
+        """
+        Process a batch of aggregates synchronously.
+        Fetches from DB, runs computations, and saves results.
+        """
+        try:
+            from policyengine.database import AggregateTable
+            from policyengine.models import Aggregate
+
+            logger.info(f"Processing {len(aggregate_ids)} aggregates")
+
+            # Fetch aggregates from database
+            aggregates = []
+            for agg_id in aggregate_ids:
+                agg = database.get(Aggregate, id=agg_id)
+                if agg:
+                    aggregates.append(agg)
+                else:
+                    logger.warning(f"Aggregate {agg_id} not found")
+
+            if not aggregates:
+                raise HTTPException(status_code=404, detail="No aggregates found")
+
+            # Run computations
+            logger.info(f"Running computations for {len(aggregates)} aggregates")
+            computed_aggregates = Aggregate.run(aggregates)
+
+            # Save back to database
+            for agg in computed_aggregates:
+                database.set(agg)
+
+            logger.info(f"Successfully processed {len(computed_aggregates)} aggregates")
+
+            return {
+                "status": "completed",
+                "processed_count": len(computed_aggregates),
+                "aggregate_ids": [agg.id for agg in computed_aggregates]
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error processing aggregates: {e}")
+            raise HTTPException(status_code=500, detail=f"Error processing aggregates: {str(e)}")
+
+    @router.post("/process_aggregate_changes", response_model=dict)
+    async def process_aggregate_changes(
+        aggregate_change_ids: list[str]
+    ) -> dict:
+        """
+        Process a batch of aggregate changes synchronously.
+        Fetches from DB, runs computations, and saves results.
+        """
+        try:
+            from policyengine.database import AggregateChangeTable
+            from policyengine.models import AggregateChange
+
+            logger.info(f"Processing {len(aggregate_change_ids)} aggregate changes")
+
+            # Fetch aggregate changes from database
+            aggregate_changes = []
+            for ac_id in aggregate_change_ids:
+                ac = database.get(AggregateChange, id=ac_id)
+                if ac:
+                    aggregate_changes.append(ac)
+                else:
+                    logger.warning(f"Aggregate change {ac_id} not found")
+
+            if not aggregate_changes:
+                raise HTTPException(status_code=404, detail="No aggregate changes found")
+
+            # Run computations
+            logger.info(f"Running computations for {len(aggregate_changes)} aggregate changes")
+            computed_changes = AggregateChange.run(aggregate_changes)
+
+            # Save back to database
+            for ac in computed_changes:
+                database.set(ac)
+
+            logger.info(f"Successfully processed {len(computed_changes)} aggregate changes")
+
+            return {
+                "status": "completed",
+                "processed_count": len(computed_changes),
+                "aggregate_change_ids": [ac.id for ac in computed_changes]
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error processing aggregate changes: {e}")
+            raise HTTPException(status_code=500, detail=f"Error processing aggregate changes: {str(e)}")
 
     return router

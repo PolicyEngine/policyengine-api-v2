@@ -111,23 +111,20 @@ def create_bulk_aggregates(
     aggregates: list[AggregateTable],
     session: Session = Depends(get_session),
 ):
-    """Create multiple aggregates at once."""
+    """Create multiple aggregates at once and queue them for processing."""
     import uuid
 
     created_aggregates = []
     for aggregate in aggregates:
         if not aggregate.id:
             aggregate.id = str(uuid.uuid4())
+        # Don't set value - leave as None to indicate pending processing
+        aggregate.value = None
         created_aggregates.append(aggregate)
-    
-    for i in range(len(created_aggregates)):
-        created_aggregates[i] = AggregateTable.convert_to_model(created_aggregates[i], database=database)
 
-    created_aggregates = Aggregate.run(created_aggregates)
-
-    for i in range(len(created_aggregates)):
-        created_aggregates[i] = AggregateTable.convert_from_model(created_aggregates[i])
-        session.add(created_aggregates[i])
+    # Save to database without computing (will be picked up by queue worker)
+    for aggregate in created_aggregates:
+        session.add(aggregate)
 
     session.commit()
 

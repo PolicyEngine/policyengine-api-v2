@@ -15,6 +15,7 @@ class UserResponse(BaseModel):
     first_name: str | None
     last_name: str | None
     email: str | None
+    current_model_id: str
     created_at: str
     updated_at: str
 
@@ -30,6 +31,7 @@ class UserUpdate(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
     email: str | None = None
+    current_model_id: str | None = None
 
 
 @router.get("", response_model=List[UserResponse])
@@ -46,6 +48,7 @@ async def list_users(
             first_name=user.first_name,
             last_name=user.last_name,
             email=user.email,
+            current_model_id=user.current_model_id,
             created_at=user.created_at.isoformat(),
             updated_at=user.updated_at.isoformat(),
         )
@@ -69,6 +72,7 @@ async def get_user(
         first_name=user.first_name,
         last_name=user.last_name,
         email=user.email,
+        current_model_id=user.current_model_id,
         created_at=user.created_at.isoformat(),
         updated_at=user.updated_at.isoformat(),
     )
@@ -96,6 +100,7 @@ async def create_user(
         first_name=user.first_name,
         last_name=user.last_name,
         email=user.email,
+        current_model_id=user.current_model_id,
         created_at=user.created_at.isoformat(),
         updated_at=user.updated_at.isoformat(),
     )
@@ -118,6 +123,8 @@ async def update_user(
         user.last_name = data.last_name
     if data.email is not None:
         user.email = data.email
+    if data.current_model_id is not None:
+        user.current_model_id = data.current_model_id
 
     db.add(user)
     db.commit()
@@ -129,6 +136,7 @@ async def update_user(
         first_name=user.first_name,
         last_name=user.last_name,
         email=user.email,
+        current_model_id=user.current_model_id,
         created_at=user.created_at.isoformat(),
         updated_at=user.updated_at.isoformat(),
     )

@@ -72,6 +72,14 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # Create tables on startup
     SQLModel.metadata.create_all(engine)
+
+    # Ensure anonymous user exists for development
+    from policyengine.database import Database
+    import os
+    db_url = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres")
+    database = Database(url=db_url)
+    database.ensure_anonymous_user()
+
     yield
 
 

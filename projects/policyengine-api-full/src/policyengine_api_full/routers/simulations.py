@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlmodel import Session, select
 from policyengine.database import SimulationTable, Database
 from policyengine.models import Simulation
@@ -10,20 +10,6 @@ from uuid import uuid4
 import os
 
 router = APIRouter(prefix="/simulations", tags=["simulations"])
-
-# Initialize database connection for running simulations
-database = Database(url=os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres"))
-
-
-def run_simulation_task(simulation_id: str):
-    """Background task to run a simulation."""
-    try:
-        simulation = database.get(Simulation, id=simulation_id)
-        if simulation:
-            simulation.run()
-            database.set(simulation)
-    except Exception as e:
-        print(f"Error running simulation {simulation_id}: {e}")
 
 
 @router.get("/", response_model=list[SimulationResponse])
@@ -53,11 +39,9 @@ def list_simulations(
 @router.post("/", response_model=SimulationResponse, status_code=201)
 def create_simulation(
     simulation: SimulationCreate,
-    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
-    run_immediately: bool = Query(True, description="Whether to run the simulation immediately after creation"),
 ):
-    """Create a new simulation and optionally run it immediately."""
+    """Create a new simulation. It will be picked up by the queue worker for processing."""
     db_simulation = SimulationTable(
         id=str(uuid4()),
         created_at=datetime.utcnow(),
@@ -68,10 +52,7 @@ def create_simulation(
     session.commit()
     session.refresh(db_simulation)
 
-    # Run simulation in background if requested
-    if run_immediately:
-        background_tasks.add_task(run_simulation_task, db_simulation.id)
-
+    # Simulation will be picked up by queue worker (no background task)
     return SimulationResponse.from_orm(db_simulation)
 
 
@@ -139,16 +120,19 @@ def update_simulation(
 @router.post("/{simulation_id}/run", response_model=SimulationResponse)
 def run_simulation(
     simulation_id: str,
-    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ):
-    """Run an existing simulation."""
+    """Queue an existing simulation for processing by clearing its result."""
     simulation = session.get(SimulationTable, simulation_id)
     if not simulation:
         raise HTTPException(status_code=404, detail="Simulation not found")
 
-    # Run simulation in background
-    background_tasks.add_task(run_simulation_task, simulation_id)
+    # Clear result to queue it for reprocessing
+    simulation.result = None
+    simulation.updated_at = datetime.utcnow()
+    session.add(simulation)
+    session.commit()
+    session.refresh(simulation)
 
     return SimulationResponse.from_orm(simulation)
 
