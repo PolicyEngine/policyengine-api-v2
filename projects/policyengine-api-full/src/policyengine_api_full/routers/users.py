@@ -28,6 +28,7 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    username: str | None = None
     first_name: str | None = None
     last_name: str | None = None
     email: str | None = None
@@ -117,6 +118,8 @@ async def update_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    if data.username is not None:
+        user.username = data.username
     if data.first_name is not None:
         user.first_name = data.first_name
     if data.last_name is not None:
