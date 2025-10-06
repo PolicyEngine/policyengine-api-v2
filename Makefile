@@ -1,5 +1,5 @@
 # Simplified Makefile using docker-compose
-.PHONY: help dev up down build test deploy clean logs format check terraform-deploy
+.PHONY: help dev up down build test deploy clean logs format check terraform-deploy kill-ports
 
 # Load environment variables if .env exists
 ifneq (,$(wildcard deployment/.env))
@@ -22,6 +22,7 @@ help:
 	@echo "  make down             - Stop all services"
 	@echo "  make logs [service=x] - Show logs for service"
 	@echo "  make test             - Run tests for all services"
+	@echo "  make kill-ports       - Kill processes on ports 8000 and 8001"
 	@echo ""
 	@echo "Database:"
 	@echo "  make init-db          - Initialize database (core + API tables)"
@@ -434,4 +435,10 @@ dev-sim:
 
 dev-tagger:
 	docker-compose -f deployment/docker-compose.yml up api-tagger
+
+kill-ports:
+	@echo "Killing processes on ports 8000 and 8001..."
+	@lsof -ti:8001 | xargs kill -9 2>/dev/null || echo "No process on port 8001"
+	@lsof -ti:8000 | xargs kill -9 2>/dev/null || echo "No process on port 8000"
+	@echo "✅ Ports cleared"
 

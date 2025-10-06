@@ -3,7 +3,7 @@
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlmodel import Session, select
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 from policyengine_api_full.models import (
     UserTable,
@@ -16,8 +16,18 @@ from policyengine_api_full.models import (
 )
 from policyengine.database import PolicyTable, DatasetTable, SimulationTable, DynamicTable
 from policyengine_api_full.database import get_session
+from policyengine_api_full.auth import get_current_user_id
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+def verify_user_access(requested_user_id: str, auth_user_id: str) -> None:
+    """Verify that the authenticated user matches the requested user ID."""
+    if auth_user_id != requested_user_id:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Not authorized to access user {requested_user_id}",
+        )
 
 
 class UserResponse(BaseModel):
@@ -85,10 +95,20 @@ async def list_users(db: Session = Depends(get_session)):
 
 @router.get("/{user_id}", response_model=UserDetailResponse)
 async def get_user(user_id: str, db: Session = Depends(get_session)):
-    """Get a specific user with collated resource counts."""
+    """Get a specific user with collated resource counts. Auto-creates user if they don't exist."""
     user = db.get(UserTable, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        # Auto-create user if they don't exist (for Supabase auth users)
+        user = UserTable(
+            id=user_id,
+            username=f"user_{user_id[:8]}",
+            first_name=None,
+            last_name=None,
+            email=None,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
 
     # Get counts of associated resources
     reports_count = len(
