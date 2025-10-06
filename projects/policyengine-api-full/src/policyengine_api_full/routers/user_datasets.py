@@ -24,6 +24,7 @@ class UserDatasetResponse(BaseModel):
     user_id: str
     dataset_id: str
     custom_name: str | None
+    is_creator: bool
     created_at: str
     updated_at: str
 
@@ -48,6 +49,7 @@ async def create_user_dataset(
         user_id=user_dataset.user_id,
         dataset_id=user_dataset.dataset_id,
         custom_name=user_dataset.custom_name,
+        is_creator=user_dataset.is_creator,
         created_at=user_dataset.created_at.isoformat(),
         updated_at=user_dataset.updated_at.isoformat(),
     )
@@ -72,6 +74,7 @@ async def list_user_datasets(
             user_id=ud.user_id,
             dataset_id=ud.dataset_id,
             custom_name=ud.custom_name,
+            is_creator=ud.is_creator,
             created_at=ud.created_at.isoformat(),
             updated_at=ud.updated_at.isoformat(),
         )
@@ -94,6 +97,7 @@ async def get_user_dataset(
         user_id=user_dataset.user_id,
         dataset_id=user_dataset.dataset_id,
         custom_name=user_dataset.custom_name,
+        is_creator=user_dataset.is_creator,
         created_at=user_dataset.created_at.isoformat(),
         updated_at=user_dataset.updated_at.isoformat(),
     )
@@ -120,6 +124,7 @@ async def update_user_dataset(
         user_id=user_dataset.user_id,
         dataset_id=user_dataset.dataset_id,
         custom_name=user_dataset.custom_name,
+        is_creator=user_dataset.is_creator,
         created_at=user_dataset.created_at.isoformat(),
         updated_at=user_dataset.updated_at.isoformat(),
     )

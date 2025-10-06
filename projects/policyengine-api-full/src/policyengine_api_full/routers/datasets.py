@@ -31,12 +31,26 @@ def list_datasets(
 def create_dataset(
     dataset: DatasetCreate,
     session: Session = Depends(get_session),
+    user_id: Optional[str] = Query(None, description="User ID to automatically associate with this dataset"),
 ):
-    """Create a new dataset."""
+    """Create a new dataset. Optionally associate with a user by passing user_id query param."""
+    from policyengine_api_full.models import UserDatasetTable
+
     db_dataset = DatasetTable(**dataset.to_orm_dict())
     session.add(db_dataset)
     session.commit()
     session.refresh(db_dataset)
+
+    # Auto-create user association if user_id provided
+    if user_id:
+        user_dataset = UserDatasetTable(
+            user_id=user_id,
+            dataset_id=db_dataset.id,
+            is_creator=True,
+        )
+        session.add(user_dataset)
+        session.commit()
+
     return DatasetResponse.from_orm(db_dataset)
 
 

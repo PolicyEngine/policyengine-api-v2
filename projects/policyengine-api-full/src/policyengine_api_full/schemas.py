@@ -116,9 +116,25 @@ class SimulationResponse(BaseModel):
     model_id: str
     model_version_id: Optional[str] = None
     has_result: bool = Field(description="Whether simulation has completed and has results")
+    status: str = Field(description="Simulation status: pending, running, completed, or failed")
+    error: Optional[str] = Field(None, description="Error message if simulation failed")
 
     @staticmethod
     def from_orm(obj):
+        # Determine status based on result and error
+        if hasattr(obj, 'error') and obj.error:
+            status = "failed"
+        elif obj.result is not None:
+            status = "completed"
+        else:
+            # Check if simulation was recently created (within last 5 minutes) - assume running
+            # Otherwise assume pending
+            from datetime import datetime, timedelta
+            if datetime.utcnow() - obj.created_at < timedelta(minutes=5):
+                status = "running"
+            else:
+                status = "pending"
+
         return SimulationResponse(
             id=obj.id,
             created_at=obj.created_at,
@@ -128,7 +144,9 @@ class SimulationResponse(BaseModel):
             dataset_id=obj.dataset_id,
             model_id=obj.model_id,
             model_version_id=obj.model_version_id,
-            has_result=obj.result is not None
+            has_result=obj.result is not None,
+            status=status,
+            error=getattr(obj, 'error', None)
         )
 
 

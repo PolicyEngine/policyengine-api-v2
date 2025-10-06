@@ -40,8 +40,11 @@ def list_simulations(
 def create_simulation(
     simulation: SimulationCreate,
     session: Session = Depends(get_session),
+    user_id: Optional[str] = Query(None, description="User ID to automatically associate with this simulation"),
 ):
-    """Create a new simulation. It will be picked up by the queue worker for processing."""
+    """Create a new simulation. It will be picked up by the queue worker for processing. Optionally associate with a user by passing user_id query param."""
+    from policyengine_api_full.models import UserSimulationTable
+
     db_simulation = SimulationTable(
         id=str(uuid4()),
         created_at=datetime.utcnow(),
@@ -51,6 +54,16 @@ def create_simulation(
     session.add(db_simulation)
     session.commit()
     session.refresh(db_simulation)
+
+    # Auto-create user association if user_id provided
+    if user_id:
+        user_simulation = UserSimulationTable(
+            user_id=user_id,
+            simulation_id=db_simulation.id,
+            is_creator=True,
+        )
+        session.add(user_simulation)
+        session.commit()
 
     # Simulation will be picked up by queue worker (no background task)
     return SimulationResponse.from_orm(db_simulation)

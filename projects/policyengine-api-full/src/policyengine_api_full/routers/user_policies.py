@@ -24,6 +24,7 @@ class UserPolicyResponse(BaseModel):
     user_id: str
     policy_id: str
     custom_name: str | None
+    is_creator: bool
     created_at: str
     updated_at: str
 
@@ -48,6 +49,7 @@ async def create_user_policy(
         user_id=user_pol.user_id,
         policy_id=user_pol.policy_id,
         custom_name=user_pol.custom_name,
+        is_creator=user_pol.is_creator,
         created_at=user_pol.created_at.isoformat(),
         updated_at=user_pol.updated_at.isoformat(),
     )
@@ -97,6 +99,7 @@ async def update_user_policy(
         user_id=user_pol.user_id,
         policy_id=user_pol.policy_id,
         custom_name=user_pol.custom_name,
+        is_creator=user_pol.is_creator,
         created_at=user_pol.created_at.isoformat(),
         updated_at=user_pol.updated_at.isoformat(),
     )

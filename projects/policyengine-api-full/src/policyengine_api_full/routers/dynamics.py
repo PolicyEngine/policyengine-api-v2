@@ -23,11 +23,25 @@ def list_dynamics(
 def create_dynamic(
     dynamic: DynamicTable,
     session: Session = Depends(get_session),
+    user_id: Optional[str] = Query(None, description="User ID to automatically associate with this dynamic"),
 ):
-    """Create a new dynamic."""
+    """Create a new dynamic. Optionally associate with a user by passing user_id query param."""
+    from policyengine_api_full.models import UserDynamicTable
+
     session.add(dynamic)
     session.commit()
     session.refresh(dynamic)
+
+    # Auto-create user association if user_id provided
+    if user_id:
+        user_dynamic = UserDynamicTable(
+            user_id=user_id,
+            dynamic_id=dynamic.id,
+            is_creator=True,
+        )
+        session.add(user_dynamic)
+        session.commit()
+
     return dynamic
 
 

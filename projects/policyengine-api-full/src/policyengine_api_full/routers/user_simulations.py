@@ -24,6 +24,7 @@ class UserSimulationResponse(BaseModel):
     user_id: str
     simulation_id: str
     custom_name: str | None
+    is_creator: bool
     created_at: str
     updated_at: str
 
@@ -48,6 +49,7 @@ async def create_user_simulation(
         user_id=user_sim.user_id,
         simulation_id=user_sim.simulation_id,
         custom_name=user_sim.custom_name,
+        is_creator=user_sim.is_creator,
         created_at=user_sim.created_at.isoformat(),
         updated_at=user_sim.updated_at.isoformat(),
     )
@@ -69,6 +71,7 @@ async def list_user_simulations(
             user_id=us.user_id,
             simulation_id=us.simulation_id,
             custom_name=us.custom_name,
+            is_creator=us.is_creator,
             created_at=us.created_at.isoformat(),
             updated_at=us.updated_at.isoformat(),
         )
@@ -91,6 +94,7 @@ async def get_user_simulation(
         user_id=user_sim.user_id,
         simulation_id=user_sim.simulation_id,
         custom_name=user_sim.custom_name,
+        is_creator=user_sim.is_creator,
         created_at=user_sim.created_at.isoformat(),
         updated_at=user_sim.updated_at.isoformat(),
     )
@@ -117,6 +121,7 @@ async def update_user_simulation(
         user_id=user_sim.user_id,
         simulation_id=user_sim.simulation_id,
         custom_name=user_sim.custom_name,
+        is_creator=user_sim.is_creator,
         created_at=user_sim.created_at.isoformat(),
         updated_at=user_sim.updated_at.isoformat(),
     )

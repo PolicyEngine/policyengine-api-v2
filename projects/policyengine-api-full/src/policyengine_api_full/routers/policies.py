@@ -26,8 +26,11 @@ def list_policies(
 def create_policy(
     policy: PolicyCreate,
     session: Session = Depends(get_session),
+    user_id: Optional[str] = Query(None, description="User ID to automatically associate with this policy"),
 ):
-    """Create a new policy."""
+    """Create a new policy. Optionally associate with a user by passing user_id query param."""
+    from policyengine_api_full.models import UserPolicyTable
+
     db_policy = PolicyTable(
         id=str(uuid4()),
         created_at=datetime.utcnow(),
@@ -37,6 +40,17 @@ def create_policy(
     session.add(db_policy)
     session.commit()
     session.refresh(db_policy)
+
+    # Auto-create user association if user_id provided
+    if user_id:
+        user_policy = UserPolicyTable(
+            user_id=user_id,
+            policy_id=db_policy.id,
+            is_creator=True,
+        )
+        session.add(user_policy)
+        session.commit()
+
     return PolicyResponse.from_orm(db_policy)
 
 

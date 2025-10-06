@@ -32,11 +32,13 @@ def list_reports(
 def create_report(
     report: ReportTable,
     session: Session = Depends(get_session),
+    user_id: Optional[str] = Query(None, description="User ID to automatically associate with this report"),
 ):
-    """Create a new report."""
-    if not report.id:
-        import uuid
+    """Create a new report. Optionally associate with a user by passing user_id query param."""
+    from policyengine_api_full.models import UserReportTable
+    import uuid
 
+    if not report.id:
         report.id = str(uuid.uuid4())
 
     report.created_at = datetime.now(timezone.utc)
@@ -44,6 +46,17 @@ def create_report(
     session.add(report)
     session.commit()
     session.refresh(report)
+
+    # Auto-create user association if user_id provided
+    if user_id:
+        user_report = UserReportTable(
+            user_id=user_id,
+            report_id=report.id,
+            is_creator=True,
+        )
+        session.add(user_report)
+        session.commit()
+
     return report
 
 

@@ -11,5 +11,6 @@ class UserDatasetTable(SQLModel, table=True, extend_existing=True):
     user_id: str = Field(foreign_key="users.id", nullable=False)
     dataset_id: str = Field(foreign_key="datasets.id", nullable=False)
     custom_name: str | None = Field(default=None)
+    is_creator: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
