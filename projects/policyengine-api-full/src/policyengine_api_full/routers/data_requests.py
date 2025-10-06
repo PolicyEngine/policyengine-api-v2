@@ -61,31 +61,58 @@ async def parse_data_request(
     if not api_key:
         raise HTTPException(status_code=500, detail="Anthropic API key not configured")
 
-    # Only fetch minimal context - common variables that are likely to be used
-    common_variable_names = [
-        "household_net_income", "hbai_household_net_income", "equiv_hbai_household_net_income",
-        "household_benefits", "household_tax", "employment_income", "person_weight"
-    ]
+    # Determine model_id from simulations to filter variables appropriately
+    model_id = "policyengine_uk"  # Default
+    if request.simulation_ids and len(request.simulation_ids) > 0:
+        first_sim = db.get(SimulationTable, request.simulation_ids[0])
+        if first_sim and first_sim.model_id:
+            model_id = first_sim.model_id
+
+    # Fetch common variables for the specific model
+    if model_id == "policyengine_uk":
+        common_variable_names = [
+            "household_net_income", "hbai_household_net_income", "equiv_hbai_household_net_income",
+            "household_benefits", "household_tax", "employment_income", "person_weight",
+            "in_poverty_bhc", "in_poverty_ahc", "in_deep_poverty_bhc", "in_deep_poverty_ahc"
+        ]
+    else:  # policyengine_us
+        common_variable_names = [
+            "household_net_income", "household_benefits", "household_tax",
+            "employment_income", "person_weight", "spm_unit_net_income",
+            "snap", "medicaid", "wic", "tanf"
+        ]
 
     variables = db.exec(
-        select(BaselineVariableTable).where(BaselineVariableTable.id.in_(common_variable_names))
+        select(BaselineVariableTable)
+        .where(BaselineVariableTable.id.in_(common_variable_names))
+        .where(BaselineVariableTable.model_id == model_id)
     ).all()
 
     # Build minimal context
     variables_context = [{"name": v.id, "entity": v.entity} for v in variables]
 
     # Consolidated system prompt with examples
-    system_prompt = """Convert natural language to JSON aggregate queries. Return ONLY valid JSON.
+    model_context = f"PolicyEngine model: {model_id}\n"
+    if model_id == "policyengine_uk":
+        model_context += "- UK model: Use variables like hbai_household_net_income, in_poverty_bhc, in_poverty_ahc\n"
+        model_context += "- Common filter variable: equiv_hbai_household_net_income\n"
+    else:
+        model_context += "- US model: Use variables like spm_unit_net_income, snap, medicaid\n"
+        model_context += "- Common filter variable: spm_unit_net_income\n"
+
+    system_prompt = f"""Convert natural language to JSON aggregate queries. Return ONLY valid JSON.
+
+{model_context}
 
 RULES:
+- IMPORTANT: Only use variables available in {model_id} (see Variables list below)
 - For "by deciles": Create 10 aggregates with filter_variable_quantile_geq/leq from 0.0-0.1, 0.1-0.2, ... 0.9-1.0
 - For "by quintiles": Create 5 aggregates with ranges 0.0-0.2, 0.2-0.4, 0.4-0.6, 0.6-0.8, 0.8-1.0
 - entity is optional (auto-inferred from variable), default function: "mean"
-- Common income variable for filtering: "equiv_hbai_household_net_income"
 
 JSON schema:
-{
-  "aggregates": [{
+{{
+  "aggregates": [{{
     "entity": null,
     "variable_name": "hbai_household_net_income",
     "aggregate_function": "mean",
@@ -97,12 +124,12 @@ JSON schema:
     "filter_variable_quantile_leq": null,
     "filter_variable_quantile_geq": null,
     "filter_variable_quantile_value": null
-  }],
+  }}],
   "chart_type": "table",
   "x_axis_variable": null,
   "y_axis_variable": null,
   "explanation": "Brief description"
-}"""
+}}"""
 
     user_prompt = f"""Request: {request.description}
 

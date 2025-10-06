@@ -46,10 +46,14 @@ from policyengine.database import (
     BaselineVariableTable,
     DynamicTable,
     ModelVersionTable,
-    ReportTable,
-    ReportElementTable,
     AggregateTable,
     AggregateChangeTable,
+)
+
+# Import user/report tables from local models
+from policyengine_api_full.models import (
+    ReportTable,
+    ReportElementTable,
     UserTable,
     UserPolicyTable,
     UserDynamicTable,
@@ -70,15 +74,38 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create tables on startup
+    from .database import create_api_tables
+    from sqlmodel import select
+    import os
+
+    # Create core tables (idempotent)
     SQLModel.metadata.create_all(engine)
 
-    # Ensure anonymous user exists for development
+    # Create API-specific tables (users, reports, associations)
+    create_api_tables()
+
+    # Ensure anonymous user exists
     from policyengine.database import Database
-    import os
     db_url = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres")
     database = Database(url=db_url)
-    database.ensure_anonymous_user()
+
+    stmt = select(UserTable).where(UserTable.id == "anonymous")
+    existing = database.session.exec(stmt).first()
+
+    if not existing:
+        anonymous_user = UserTable(
+            id="anonymous",
+            username="anonymous",
+            first_name="Anonymous",
+            last_name="User",
+            email=None,
+            current_model_id="policyengine_uk",
+        )
+        database.session.add(anonymous_user)
+        database.session.commit()
+        logger.info("Created anonymous user")
+    else:
+        logger.info("Anonymous user already exists")
 
     yield
 

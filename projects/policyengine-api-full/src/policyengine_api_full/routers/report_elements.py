@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, Body
 from sqlmodel import Session, select
-from policyengine.database import ReportElementTable, AggregateTable, AggregateChangeTable
+from policyengine.database import AggregateTable, AggregateChangeTable
 from policyengine.models import Aggregate, AggregateChange
+from policyengine_api_full.models import ReportElementTable
 from policyengine_api_full.database import get_session, database
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone

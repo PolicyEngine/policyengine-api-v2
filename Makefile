@@ -13,13 +13,19 @@ help:
 	@echo "Setup (first time):"
 	@echo "  make setup            - Create .env file from template"
 	@echo "  make init-gcp         - Initialize GCP project (APIs, registry, bucket)"
+	@echo "  make init-db          - Reset and initialize database (WARNING: Drops all tables!)"
 	@echo ""
 	@echo "Development:"
 	@echo "  make dev              - Start all services in development mode (Docker)"
+	@echo "  make dev-local        - Start API-full, API-simulation, and queue worker locally (no Docker)"
 	@echo "  make up [service=x]   - Start specific service or all services"
 	@echo "  make down             - Stop all services"
 	@echo "  make logs [service=x] - Show logs for service"
 	@echo "  make test             - Run tests for all services"
+	@echo ""
+	@echo "Database:"
+	@echo "  make init-db          - Initialize database (core + API tables)"
+	@echo "  make reset-db         - Alias for init-db"
 	@echo ""
 	@echo "Deployment:"
 	@echo "  make deploy           - Full deployment (builds, pushes, deploys project + infra)"
@@ -364,6 +370,21 @@ check:
 integ-test:
 	cd projects/policyengine-apis-integ && uv run pytest
 
+# Database commands
+init-db:
+	@echo "Resetting database with Supabase..."
+	@cd projects/supabase && supabase db reset
+	@echo ""
+	@echo "Running database initialization script..."
+	@cd projects/policyengine-api-full && python scripts/init_database.py
+	@echo ""
+	@echo "Creating API-specific tables..."
+	@cd projects/policyengine-api-full && python scripts/migrate_add_api_tables.py
+	@echo ""
+	@echo "✅ Database initialized!"
+
+reset-db: init-db  # Alias for backward compatibility
+
 # Cleanup
 clean:
 	find . -type d -name "__pycache__" -exec rm -r {} +; \
@@ -374,6 +395,17 @@ clean:
 
 	docker-compose -f deployment/docker-compose.yml down -v
 	docker system prune -f
+
+# Local development (no Docker)
+dev-local:
+	@echo "Starting local development servers..."
+	@echo "Make sure you have 'concurrently' installed: npm install -g concurrently"
+	@concurrently \
+		--names "API-FULL,API-SIM,QUEUE" \
+		--prefix-colors "blue,magenta,green" \
+		"fastapi dev projects/policyengine-api-full/src/policyengine_api_full/main.py" \
+		"fastapi dev projects/policyengine-api-simulation/src/policyengine_api_simulation/main.py --port 8001" \
+		"python projects/policyengine-api-simulation/queue_worker.py"
 
 # Local development helpers
 shell:

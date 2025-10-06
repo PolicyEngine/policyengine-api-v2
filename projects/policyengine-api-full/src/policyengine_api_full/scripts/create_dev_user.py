@@ -1,5 +1,5 @@
 """Create a dev test user for local development."""
-from policyengine.database import UserTable
+from policyengine_api_full.models import UserTable
 from policyengine_api_full.database import get_session
 
 

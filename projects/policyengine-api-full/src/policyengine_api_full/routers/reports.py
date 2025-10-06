@@ -1,16 +1,18 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlmodel import Session, select
-from policyengine.database import ReportTable, ReportElementTable, AggregateTable, UserReportTable
+from policyengine.database import AggregateTable
+from policyengine_api_full.models import ReportTable, ReportElementTable
 from policyengine_api_full.database import get_session
-from typing import Optional
 from datetime import datetime, timezone
 from pydantic import BaseModel
+from typing import Optional
 
 reports_router = APIRouter(prefix="/reports", tags=["reports"])
 
 
 class ReportUpdateRequest(BaseModel):
     """Request model for updating a report."""
+
     label: Optional[str] = None
 
 
@@ -19,23 +21,9 @@ def list_reports(
     session: Session = Depends(get_session),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=10_000),
-    user_id: Optional[str] = Query(None),
 ):
-    """List all reports with pagination. Optionally filter by user_id."""
-    if user_id:
-        # Get report IDs for this user
-        user_reports = session.exec(
-            select(UserReportTable).where(UserReportTable.user_id == user_id)
-        ).all()
-        report_ids = [ur.report_id for ur in user_reports]
-
-        if not report_ids:
-            return []
-
-        statement = select(ReportTable).where(ReportTable.id.in_(report_ids)).offset(skip).limit(limit)
-    else:
-        statement = select(ReportTable).offset(skip).limit(limit)
-
+    """List all reports with pagination."""
+    statement = select(ReportTable).offset(skip).limit(limit)
     reports = session.exec(statement).all()
     return reports
 
@@ -48,6 +36,7 @@ def create_report(
     """Create a new report."""
     if not report.id:
         import uuid
+
         report.id = str(uuid.uuid4())
 
     report.created_at = datetime.now(timezone.utc)
@@ -82,9 +71,11 @@ def get_report_elements(
         raise HTTPException(status_code=404, detail="Report not found")
 
     # Get all report elements for this report, ordered by position
-    statement = select(ReportElementTable).where(
-        ReportElementTable.report_id == report_id
-    ).order_by(ReportElementTable.position)
+    statement = (
+        select(ReportElementTable)
+        .where(ReportElementTable.report_id == report_id)
+        .order_by(ReportElementTable.position)
+    )
 
     report_elements = session.exec(statement).all()
     return report_elements

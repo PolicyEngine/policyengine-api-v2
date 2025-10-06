@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlmodel import Session, select
 from typing import List
 from pydantic import BaseModel
-from policyengine.database import UserSimulationTable
+from policyengine_api_full.models import UserSimulationTable
 from policyengine_api_full.database import get_session
 
 router = APIRouter(prefix="/user-simulations", tags=["user simulations"])
