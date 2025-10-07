@@ -15,10 +15,16 @@ from policyengine.database import BaselineVariableTable, SimulationTable, Policy
 router = APIRouter(prefix="/data-requests", tags=["data requests"])
 
 
+class SimulationInfo(BaseModel):
+    id: str
+    name: str
+
+
 class DataRequest(BaseModel):
     description: str
     report_id: str
     simulation_ids: Optional[List[str]] = None
+    simulations: Optional[List[SimulationInfo]] = None
     is_comparison: Optional[bool] = False
 
 
@@ -63,7 +69,19 @@ async def parse_data_request(
 
     # Determine model_id from simulations to filter variables appropriately
     model_id = "policyengine_uk"  # Default
-    if request.simulation_ids and len(request.simulation_ids) > 0:
+    simulations_context = []
+
+    # Use provided simulations with names if available, otherwise fall back to simulation_ids
+    if request.simulations and len(request.simulations) > 0:
+        simulations_context = [{"id": s.id, "name": s.name} for s in request.simulations]
+        # Get model_id from first simulation
+        first_sim = db.get(SimulationTable, request.simulations[0].id)
+        if first_sim and first_sim.model_id:
+            model_id = first_sim.model_id
+    elif request.simulation_ids and len(request.simulation_ids) > 0:
+        # Fallback: just use IDs without names
+        simulations_context = [{"id": sim_id, "name": f"Simulation {i+1}"}
+                              for i, sim_id in enumerate(request.simulation_ids)]
         first_sim = db.get(SimulationTable, request.simulation_ids[0])
         if first_sim and first_sim.model_id:
             model_id = first_sim.model_id
@@ -71,9 +89,12 @@ async def parse_data_request(
     # Fetch common variables for the specific model
     if model_id == "policyengine_uk":
         common_variable_names = [
-            "household_net_income", "hbai_household_net_income", "equiv_hbai_household_net_income",
-            "household_benefits", "household_tax", "employment_income", "person_weight",
-            "in_poverty_bhc", "in_poverty_ahc", "in_deep_poverty_bhc", "in_deep_poverty_ahc"
+            "hbai_household_net_income", "equiv_hbai_household_net_income",
+            "gov_tax", "gov_spending", "gov_balance",
+            "income_tax", "vat", "ni_employee", "ni_employer", "universal_credit", "state_pension", "child_benefit", "housing_benefit", "pension_credit",
+            "household_benefits", "household_tax", "employment_income", "self_employment_income", "pension_income", "state_pension", "property_income", "dividend_income", "savings_interest_income",
+            "age",
+            "in_poverty_bhc", "in_poverty_ahc", "in_relative_poverty_bhc", "in_relative_poverty_ahc"
         ]
     else:  # policyengine_us
         common_variable_names = [
@@ -106,6 +127,7 @@ async def parse_data_request(
 
 RULES:
 - IMPORTANT: Only use variables available in {model_id} (see Variables list below)
+- When user mentions simulation names, match them to the provided simulation IDs in the Simulations list
 - For "by deciles": Create 10 aggregates with filter_variable_quantile_geq/leq from 0.0-0.1, 0.1-0.2, ... 0.9-1.0
 - For "by quintiles": Create 5 aggregates with ranges 0.0-0.2, 0.2-0.4, 0.4-0.6, 0.6-0.8, 0.8-1.0
 - entity is optional (auto-inferred from variable), default function: "mean"
@@ -123,7 +145,8 @@ JSON schema:
     "filter_variable_geq": null,
     "filter_variable_quantile_leq": null,
     "filter_variable_quantile_geq": null,
-    "filter_variable_quantile_value": null
+    "filter_variable_quantile_value": null,
+    "simulation_id": "simulation-uuid-here"
   }}],
   "chart_type": "table",
   "x_axis_variable": null,
@@ -131,9 +154,13 @@ JSON schema:
   "explanation": "Brief description"
 }}"""
 
+    simulations_text = ""
+    if simulations_context:
+        simulations_text = f"\n\nSimulations: {json.dumps(simulations_context)}"
+
     user_prompt = f"""Request: {request.description}
 
-Variables: {json.dumps(variables_context)}
+Variables: {json.dumps(variables_context)}{simulations_text}
 
 Return JSON:"""
 
@@ -142,7 +169,7 @@ Return JSON:"""
 
     try:
         message = client.messages.create(
-            model="claude-3-5-haiku-20241022",
+            model="claude-sonnet-4-5",
             max_tokens=2000,
             temperature=0,
             system=[
@@ -225,12 +252,15 @@ Return JSON:"""
                     # Don't set simulation_id for comparisons
                     agg_copy.pop("simulation_id", None)
                 else:
-                    # For single simulation, use the first simulation_id
-                    if request.simulation_ids and len(request.simulation_ids) > 0:
+                    # If the LLM provided a simulation_id, use it (for multi-simulation requests)
+                    if agg_data.get("simulation_id"):
+                        agg_copy["simulation_id"] = agg_data.get("simulation_id")
+                    # Otherwise, use the first simulation_id from the request
+                    elif request.simulation_ids and len(request.simulation_ids) > 0:
                         agg_copy["simulation_id"] = request.simulation_ids[0]
                     else:
                         # Fallback if no simulation_ids provided (shouldn't happen in new flow)
-                        agg_copy["simulation_id"] = agg_data.get("simulation_id", "default")
+                        agg_copy["simulation_id"] = "default"
 
                 # Ensure entity has a default
                 if not agg_copy.get("entity"):

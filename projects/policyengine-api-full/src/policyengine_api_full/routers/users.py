@@ -42,7 +42,7 @@ class UserResponse(BaseModel):
 
 
 class UserDetailResponse(BaseModel):
-    """User details with counts of associated resources."""
+    """User details with associated resources."""
 
     id: str
     username: str
@@ -52,10 +52,11 @@ class UserDetailResponse(BaseModel):
     current_model_id: str
     created_at: str
     updated_at: str
-    reports_count: int
-    policies_count: int
-    datasets_count: int
-    simulations_count: int
+    reports: list
+    policies: list
+    datasets: list
+    simulations: list
+    dynamics: list
 
 
 class UserCreate(BaseModel):
@@ -95,7 +96,7 @@ async def list_users(db: Session = Depends(get_session)):
 
 @router.get("/{user_id}", response_model=UserDetailResponse)
 async def get_user(user_id: str, db: Session = Depends(get_session)):
-    """Get a specific user with collated resource counts. Auto-creates user if they don't exist."""
+    """Get a specific user with all associated resources. Auto-creates user if they don't exist."""
     user = db.get(UserTable, user_id)
     if not user:
         # Auto-create user if they don't exist (for Supabase auth users)
@@ -110,26 +111,32 @@ async def get_user(user_id: str, db: Session = Depends(get_session)):
         db.commit()
         db.refresh(user)
 
-    # Get counts of associated resources
-    reports_count = len(
-        db.exec(select(UserReportTable).where(UserReportTable.user_id == user_id)).all()
-    )
+    # Get resource IDs
+    user_reports = db.exec(
+        select(UserReportTable).where(UserReportTable.user_id == user_id)
+    ).all()
 
-    policies_count = len(
-        db.exec(select(UserPolicyTable).where(UserPolicyTable.user_id == user_id)).all()
-    )
+    user_policies = db.exec(
+        select(UserPolicyTable).where(UserPolicyTable.user_id == user_id)
+    ).all()
 
-    datasets_count = len(
-        db.exec(
-            select(UserDatasetTable).where(UserDatasetTable.user_id == user_id)
-        ).all()
-    )
+    user_datasets = db.exec(
+        select(UserDatasetTable).where(UserDatasetTable.user_id == user_id)
+    ).all()
 
-    simulations_count = len(
-        db.exec(
-            select(UserSimulationTable).where(UserSimulationTable.user_id == user_id)
-        ).all()
-    )
+    user_simulations = db.exec(
+        select(UserSimulationTable).where(UserSimulationTable.user_id == user_id)
+    ).all()
+
+    user_dynamics = db.exec(
+        select(UserDynamicTable).where(UserDynamicTable.user_id == user_id)
+    ).all()
+
+    reports = [ur.report_id for ur in user_reports]
+    policies = [up.policy_id for up in user_policies]
+    datasets = [ud.dataset_id for ud in user_datasets]
+    simulations = [us.simulation_id for us in user_simulations]
+    dynamics = [ud.dynamic_id for ud in user_dynamics]
 
     return UserDetailResponse(
         id=user.id,
@@ -140,10 +147,11 @@ async def get_user(user_id: str, db: Session = Depends(get_session)):
         current_model_id=user.current_model_id,
         created_at=user.created_at.isoformat(),
         updated_at=user.updated_at.isoformat(),
-        reports_count=reports_count,
-        policies_count=policies_count,
-        datasets_count=datasets_count,
-        simulations_count=simulations_count,
+        reports=reports,
+        policies=policies,
+        datasets=datasets,
+        simulations=simulations,
+        dynamics=dynamics,
     )
 
 

@@ -367,6 +367,9 @@ check:
 		fi \
 	done
 
+supabase-start:
+	cd projects/supabase && supabase start
+
 # Integration tests
 integ-test:
 	cd projects/policyengine-apis-integ && uv run pytest
