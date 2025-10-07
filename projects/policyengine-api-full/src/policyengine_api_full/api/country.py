@@ -302,14 +302,16 @@ class PolicyEngineCountry:
         if reform and self.country_id == "uk":
             behavioral_params = [
                 "gov.simulation.labor_supply_responses.income_elasticity",
-                "gov.simulation.labor_supply_responses.substitution_elasticity"
+                "gov.simulation.labor_supply_responses.substitution_elasticity",
             ]
             # If these parameters exist in reform, toggle is ON
             if any(param in reform for param in behavioral_params):
                 # Extract year from household data, default to 2025
                 year = 2025
                 if "households" in household_raw:
-                    for household_id, household_data in household_raw["households"].items():
+                    for household_id, household_data in household_raw[
+                        "households"
+                    ].items():
                         # Try to extract year from any period in the household
                         for variable_data in household_data.values():
                             if isinstance(variable_data, dict):
@@ -322,7 +324,7 @@ class PolicyEngineCountry:
                         if year != 2025:
                             break
 
-                if hasattr(simulation, 'apply_dynamics'):
+                if hasattr(simulation, "apply_dynamics"):
                     simulation.apply_dynamics(year=year)
 
         household_result: dict[str, Any] = deepcopy(household_raw)
