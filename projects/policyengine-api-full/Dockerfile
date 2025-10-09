@@ -12,7 +12,7 @@ WORKDIR /app
 
 # Copy shared libraries and LICENSE
 COPY LICENSE ./LICENSE
-COPY libs ./libs/
+COPY libs ./libs/ 
 
 # Final stage
 FROM base AS final
