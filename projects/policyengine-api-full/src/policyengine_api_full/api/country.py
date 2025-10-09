@@ -205,6 +205,9 @@ class PolicyEngineCountry:
         self, system: TaxBenefitSystem
     ) -> ModeledPolicies | None:
         if system.modelled_policies:
+            # Handle case where modelled_policies is a Path object
+            if isinstance(system.modelled_policies, Path):
+                return None
             return ModeledPolicies(**system.modelled_policies)
         return None
 
@@ -239,11 +242,16 @@ class PolicyEngineCountry:
             for value_at_instant in parameter.values_list
         }
 
+        # Get label, ensuring it's not None
+        label = parameter.metadata.get("label", end_name.replace("_", " "))
+        if label is None:
+            label = end_name.replace("_", " ")
+
         return Parameter(
             type="parameter",
             parameter=parameter.name,
             description=parameter.description,
-            label=parameter.metadata.get("label", end_name.replace("_", " ")),
+            label=label,
             unit=parameter.metadata.get("unit"),
             period=parameter.metadata.get("period"),
             values=values_list,
