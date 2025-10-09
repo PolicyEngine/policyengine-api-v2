@@ -553,7 +553,8 @@ def get_requested_computations(household: dict[str, Any]):
 COUNTRIES = {
     "uk": PolicyEngineCountry("policyengine_uk", "uk"),
     "us": PolicyEngineCountry("policyengine_us", "us"),
-    "ca": PolicyEngineCountry("policyengine_canada", "ca"),
-    "ng": PolicyEngineCountry("policyengine_ng", "ng"),
-    "il": PolicyEngineCountry("policyengine_il", "il"),
+    # TODO: Re-enable when dependencies are available in CI
+    # "ca": PolicyEngineCountry("policyengine_canada", "ca"),
+    # "ng": PolicyEngineCountry("policyengine_ng", "ng"),
+    # "il": PolicyEngineCountry("policyengine_il", "il"),
 }

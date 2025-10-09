@@ -6,9 +6,17 @@ the API automatically calls apply_dynamics() to enable behavioral adjustments.
 """
 
 from unittest.mock import MagicMock, patch
+import pytest
 
 
-def test_uk_behavioral_response_calls_apply_dynamics():
+@pytest.fixture
+def uk_country():
+    """Create UK country instance for testing."""
+    from policyengine_api_full.api.country import PolicyEngineCountry
+    return PolicyEngineCountry("policyengine_uk", "uk")
+
+
+def test_uk_behavioral_response_calls_apply_dynamics(uk_country):
     """
     Test that apply_dynamics is called when behavioral response parameters are present.
 
@@ -16,7 +24,6 @@ def test_uk_behavioral_response_calls_apply_dynamics():
     behavioral response parameters and calling apply_dynamics().
     """
     from policyengine_api_full.api.models.household import HouseholdUK
-    from policyengine_api_full.api.country import PolicyEngineCountry
 
     household_data = {
         "people": {"person": {"age": {"2025": 30}}},
@@ -31,9 +38,6 @@ def test_uk_behavioral_response_calls_apply_dynamics():
     }
 
     household = HouseholdUK(**household_data)
-
-    # Create UK country instance directly to avoid loading all countries
-    uk_country = PolicyEngineCountry("policyengine_uk", "uk")
 
     # Mock the Simulation class to verify apply_dynamics is called
     with patch.object(uk_country.country_package, "Simulation") as MockSimulation:
@@ -51,12 +55,11 @@ def test_uk_behavioral_response_calls_apply_dynamics():
         mock_sim.apply_dynamics.assert_called_once_with(year=2025)
 
 
-def test_uk_without_behavioral_response_no_apply_dynamics():
+def test_uk_without_behavioral_response_no_apply_dynamics(uk_country):
     """
     Test that apply_dynamics is NOT called when behavioral response parameters are absent.
     """
     from policyengine_api_full.api.models.household import HouseholdUK
-    from policyengine_api_full.api.country import PolicyEngineCountry
 
     household_data = {
         "people": {"person": {"age": {"2025": 30}}},
@@ -69,7 +72,6 @@ def test_uk_without_behavioral_response_no_apply_dynamics():
     }
 
     household = HouseholdUK(**household_data)
-    uk_country = PolicyEngineCountry("policyengine_uk", "uk")
 
     with patch.object(uk_country.country_package, "Simulation") as MockSimulation:
         mock_sim = MagicMock()
