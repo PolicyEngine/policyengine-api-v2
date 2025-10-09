@@ -31,5 +31,8 @@ RUN uv sync --frozen --no-dev
 
 EXPOSE 8080
 
+# Install policyengine from the api-v2 branch
+RUN uv pip install git+https://github.com/PolicyEngine/policyengine.py@api-v2
+
 # Run with uvicorn
 CMD ["uv", "run", "uvicorn", "policyengine_api_full.main:app", "--host", "0.0.0.0", "--port", "8080"]
