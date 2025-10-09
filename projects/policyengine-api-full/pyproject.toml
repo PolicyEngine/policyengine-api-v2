@@ -35,3 +35,11 @@ pythonpath = [
 ]
 testpaths = ["tests"]
 addopts = "--cov=policyengine_api_full --cov-report=term-missing"
+
+[dependency-groups]
+dev = [
+    "policyengine-core>=3.20.1",
+    "policyengine-uk>=2.53.1",
+    "policyengine-us>=1.410.0",
+    "setuptools>=80.9.0",
+]
