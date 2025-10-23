@@ -135,7 +135,7 @@ AGGREGATE FUNCTIONS:
 
 ENTITIES (when to use each):
 - null/omit: Let the system infer from the variable name (preferred in most cases)
-- "household": Force household-level aggregation (for household_net_income, household_weight)
+- "household": Force household-level aggregation (for household_net_income, housing costs)
 - "person": Force person-level aggregation (for age, employment_status, individual benefits)
 
 FILTER FIELDS (all optional - use to subset data):
@@ -154,7 +154,8 @@ IMPORTANT FILTER RULES:
 - Do NOT use filter_variable_value with geq/leq on the same variable
 
 IMPORTANT RULES:
-- For "count" function, variable_name should typically be a weight variable (household_weight, person_weight)
+- **NEVER use weight variables (person_weight, household_weight, or any *_weight variables)** - weights are handled automatically by the backend
+- For "count" function, use ANY relevant variable (e.g., age, is_income_tax_payer, employment_status) - the system applies weights automatically
 - For income/tax/benefit totals, use "sum" with the appropriate variable
 - For average amounts per household/person, use "mean"
 - Filters can be combined (all conditions must be true)
