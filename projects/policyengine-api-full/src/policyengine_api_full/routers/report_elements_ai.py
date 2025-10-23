@@ -91,6 +91,8 @@ def parse_data_request(prompt: str, simulation_ids: List[str]) -> Dict[str, Any]
 
     system_prompt = """You are an expert at PolicyEngine's data model. You need to parse user requests into specific data aggregates.
 
+CRITICAL: Return ONLY valid JSON. Do not wrap your response in markdown code blocks or any other formatting. Your entire response must be parseable as JSON.
+
 PolicyEngine tracks economic simulations with these key variable categories:
 
 INCOME VARIABLES:
@@ -161,7 +163,9 @@ IMPORTANT RULES:
 When users ask for comparisons between simulations, create aggregate_changes.
 When users ask for metrics from individual simulations, create aggregates.
 
-Respond with JSON in this format:
+Your response must be valid JSON starting with { and ending with }. Do not include any text before or after the JSON. Do not use markdown formatting.
+
+Response format:
 {
   "type": "aggregates" or "aggregate_changes",
   "data": [array of aggregate or aggregate_change objects],
@@ -197,7 +201,9 @@ If the request asks for specific metrics from each simulation separately, create
 Include relevant variables based on the request - don't just include one variable if the user asks about a broad topic.
 
 For the title field: Maximum 7 words in sentence case (e.g., "Tax impact by income decile").
-For the explanation field: Clear description in sentence case of what will be calculated."""
+For the explanation field: Clear description in sentence case of what will be calculated.
+
+Return only the JSON object, starting with {{ and ending with }}."""
 
     try:
         response = client.beta.messages.create(
@@ -205,20 +211,28 @@ For the explanation field: Clear description in sentence case of what will be ca
             max_tokens=2000,
             temperature=0,
             system=system_prompt,
-            messages=[{"role": "user", "content": user_message}]
+            messages=[
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": "{"}
+            ]
         )
 
+        # Get raw response text (prefilled with "{")
+        raw_response = "{" + response.content[0].text
+        logger.info(f"[PARSE_DATA] Raw LLM response: {raw_response[:500]}")
+
         # Parse the JSON response
-        result = json.loads(response.content[0].text)
+        result = json.loads(raw_response)
         return result
 
     except json.JSONDecodeError as e:
+        logger.error(f"[PARSE_DATA] JSON parsing failed. Raw response: {raw_response if 'raw_response' in locals() else 'N/A'}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to parse LLM response as JSON: {str(e)}"
         )
     except Exception as e:
-        raise e
+        logger.error(f"[PARSE_DATA] Unexpected error: {type(e).__name__}: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to generate data request: {str(e)}"
@@ -231,8 +245,17 @@ def create_ai_report_element(
 ) -> AIReportElementResponse:
     """Create a report element using AI to generate data requests."""
 
-    # Parse the prompt to determine what data to create
-    parsed = parse_data_request(request.prompt, request.simulation_ids)
+    logger.info(f"[CREATE_AI] Starting AI report element creation")
+    logger.info(f"[CREATE_AI] Request: prompt={request.prompt[:100]}..., report_id={request.report_id}, simulation_ids={request.simulation_ids}")
+
+    try:
+        # Parse the prompt to determine what data to create
+        logger.info(f"[CREATE_AI] Calling AI to parse data request...")
+        parsed = parse_data_request(request.prompt, request.simulation_ids)
+        logger.info(f"[CREATE_AI] AI parsing successful: type={parsed.get('type')}, data_count={len(parsed.get('data', []))}")
+    except Exception as e:
+        logger.error(f"[CREATE_AI] FAILED during AI parsing: {type(e).__name__}: {str(e)}")
+        raise
 
     # Log the parsed response with filter information
     log_ai_debug(
@@ -250,6 +273,7 @@ def create_ai_report_element(
 
     # Check if any data was generated
     if not parsed.get("data") or len(parsed["data"]) == 0:
+        logger.warning(f"[CREATE_AI] No data generated from AI parsing")
         raise HTTPException(
             status_code=400,
             detail="Could not generate any data from your request. Please be more specific about what metrics you want to analyse."
@@ -257,153 +281,229 @@ def create_ai_report_element(
 
     # Use title from AI response (AI should generate in sentence case)
     title = parsed.get("title", parsed["explanation"][:50])
+    logger.info(f"[CREATE_AI] Creating report element with title: {title}")
 
-    # Create the report element only after we know we have data
-    report_element = ReportElementTable(
-        label=title,
-        type="data",
-        report_id=request.report_id,
-        data_table="aggregate_changes" if parsed["type"] == "aggregate_changes" else "aggregates",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
-    )
-    session.add(report_element)
-    session.commit()
-    session.refresh(report_element)
+    try:
+        # Create the report element only after we know we have data
+        report_element = ReportElementTable(
+            label=title,
+            type="data",
+            report_id=request.report_id,
+            data_table="aggregate_changes" if parsed["type"] == "aggregate_changes" else "aggregates",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        session.add(report_element)
+        session.commit()
+        session.refresh(report_element)
+        logger.info(f"[CREATE_AI] Report element created with id: {report_element.id}")
+    except Exception as e:
+        logger.error(f"[CREATE_AI] FAILED creating report element: {type(e).__name__}: {str(e)}")
+        raise
 
     aggregates = []
     aggregate_changes = []
 
     if parsed["type"] == "aggregate_changes":
+        logger.info(f"[CREATE_AI] Processing {len(parsed['data'])} aggregate changes")
         # Process aggregate changes
         aggregate_change_models = []
 
-        for change_data in parsed["data"]:
-            # Fetch simulations
-            baseline_sim = session.get(SimulationTable, change_data["baseline_simulation_id"])
-            comparison_sim = session.get(SimulationTable, change_data["comparison_simulation_id"])
+        for idx, change_data in enumerate(parsed["data"]):
+            try:
+                logger.info(f"[CREATE_AI] Processing aggregate change {idx + 1}/{len(parsed['data'])}: variable={change_data.get('variable_name')}, baseline={change_data.get('baseline_simulation_id')}, comparison={change_data.get('comparison_simulation_id')}")
 
-            if not baseline_sim or not comparison_sim:
+                # Fetch simulations
+                baseline_sim = session.get(SimulationTable, change_data["baseline_simulation_id"])
+                comparison_sim = session.get(SimulationTable, change_data["comparison_simulation_id"])
+
+                if not baseline_sim:
+                    logger.warning(f"[CREATE_AI] Baseline simulation not found: {change_data['baseline_simulation_id']}")
+                    continue
+                if not comparison_sim:
+                    logger.warning(f"[CREATE_AI] Comparison simulation not found: {change_data['comparison_simulation_id']}")
+                    continue
+
+                logger.info(f"[CREATE_AI] Simulations fetched, converting to models...")
+
+                # Convert to models
+                db = database
+                baseline_model = baseline_sim.convert_to_model(db)
+                comparison_model = comparison_sim.convert_to_model(db)
+
+                logger.info(f"[CREATE_AI] Creating AggregateChange model...")
+
+                # Create AggregateChange model
+                agg_change = AggregateChange(
+                    baseline_simulation=baseline_model,
+                    comparison_simulation=comparison_model,
+                    entity=change_data.get("entity"),  # Let it be None to infer
+                    variable_name=change_data["variable_name"],
+                    aggregate_function=change_data["aggregate_function"],
+                    year=change_data.get("year", 2026),
+                    filter_variable_name=change_data.get("filter_variable_name"),
+                    filter_variable_value=change_data.get("filter_variable_value"),
+                    filter_variable_leq=change_data.get("filter_variable_leq"),
+                    filter_variable_geq=change_data.get("filter_variable_geq"),
+                    reportelement_id=report_element.id
+                )
+                aggregate_change_models.append(agg_change)
+                logger.info(f"[CREATE_AI] AggregateChange model created successfully")
+
+            except Exception as e:
+                logger.error(f"[CREATE_AI] FAILED creating aggregate change {idx + 1}: {type(e).__name__}: {str(e)}")
+                import traceback
+                logger.error(f"[CREATE_AI] Traceback: {traceback.format_exc()}")
+                # Continue to next item instead of failing completely
                 continue
-
-            # Convert to models
-            db = database
-            baseline_model = baseline_sim.convert_to_model(db)
-            comparison_model = comparison_sim.convert_to_model(db)
-
-            # Create AggregateChange model
-            agg_change = AggregateChange(
-                baseline_simulation=baseline_model,
-                comparison_simulation=comparison_model,
-                entity=change_data.get("entity"),  # Let it be None to infer
-                variable_name=change_data["variable_name"],
-                aggregate_function=change_data["aggregate_function"],
-                year=change_data.get("year", 2026),
-                filter_variable_name=change_data.get("filter_variable_name"),
-                filter_variable_value=change_data.get("filter_variable_value"),
-                filter_variable_leq=change_data.get("filter_variable_leq"),
-                filter_variable_geq=change_data.get("filter_variable_geq"),
-                reportelement_id=report_element.id
-            )
-            aggregate_change_models.append(agg_change)
 
         # Run computations
         if aggregate_change_models:
-            computed_models = AggregateChange.run(aggregate_change_models)
+            try:
+                logger.info(f"[CREATE_AI] Running computations for {len(aggregate_change_models)} aggregate change models...")
+                computed_models = AggregateChange.run(aggregate_change_models)
+                logger.info(f"[CREATE_AI] Computations completed, got {len(computed_models)} results")
+            except Exception as e:
+                logger.error(f"[CREATE_AI] FAILED during aggregate change computation: {type(e).__name__}: {str(e)}")
+                import traceback
+                logger.error(f"[CREATE_AI] Traceback: {traceback.format_exc()}")
+                raise
 
             # Save to database
-            for agg_model in computed_models:
-                agg_table = AggregateChangeTable(
-                    id=agg_model.id,
-                    baseline_simulation_id=agg_model.baseline_simulation.id,
-                    comparison_simulation_id=agg_model.comparison_simulation.id,
-                    entity=agg_model.entity,
-                    variable_name=agg_model.variable_name,
-                    year=agg_model.year,
-                    filter_variable_name=agg_model.filter_variable_name,
-                    filter_variable_value=agg_model.filter_variable_value,
-                    filter_variable_leq=agg_model.filter_variable_leq,
-                    filter_variable_geq=agg_model.filter_variable_geq,
-                    aggregate_function=agg_model.aggregate_function,
-                    reportelement_id=report_element.id,
-                    baseline_value=agg_model.baseline_value,
-                    comparison_value=agg_model.comparison_value,
-                    change=agg_model.change,
-                    relative_change=agg_model.relative_change
-                )
-                session.add(agg_table)
+            try:
+                logger.info(f"[CREATE_AI] Saving {len(computed_models)} aggregate changes to database...")
+                for idx, agg_model in enumerate(computed_models):
+                    agg_table = AggregateChangeTable(
+                        id=agg_model.id,
+                        baseline_simulation_id=agg_model.baseline_simulation.id,
+                        comparison_simulation_id=agg_model.comparison_simulation.id,
+                        entity=agg_model.entity,
+                        variable_name=agg_model.variable_name,
+                        year=agg_model.year,
+                        filter_variable_name=agg_model.filter_variable_name,
+                        filter_variable_value=agg_model.filter_variable_value,
+                        filter_variable_leq=agg_model.filter_variable_leq,
+                        filter_variable_geq=agg_model.filter_variable_geq,
+                        aggregate_function=agg_model.aggregate_function,
+                        reportelement_id=report_element.id,
+                        baseline_value=agg_model.baseline_value,
+                        comparison_value=agg_model.comparison_value,
+                        change=agg_model.change,
+                        relative_change=agg_model.relative_change
+                    )
+                    session.add(agg_table)
 
-                aggregate_changes.append({
-                    "baseline_simulation_id": agg_table.baseline_simulation_id,
-                    "comparison_simulation_id": agg_table.comparison_simulation_id,
-                    "variable_name": agg_table.variable_name,
-                    "aggregate_function": agg_table.aggregate_function,
-                    "baseline_value": agg_table.baseline_value,
-                    "comparison_value": agg_table.comparison_value,
-                    "change": agg_table.change,
-                    "relative_change": agg_table.relative_change,
-                })
+                    aggregate_changes.append({
+                        "baseline_simulation_id": agg_table.baseline_simulation_id,
+                        "comparison_simulation_id": agg_table.comparison_simulation_id,
+                        "variable_name": agg_table.variable_name,
+                        "aggregate_function": agg_table.aggregate_function,
+                        "baseline_value": agg_table.baseline_value,
+                        "comparison_value": agg_table.comparison_value,
+                        "change": agg_table.change,
+                        "relative_change": agg_table.relative_change,
+                    })
+                logger.info(f"[CREATE_AI] Aggregate changes saved successfully")
+            except Exception as e:
+                logger.error(f"[CREATE_AI] FAILED saving aggregate changes to database: {type(e).__name__}: {str(e)}")
+                import traceback
+                logger.error(f"[CREATE_AI] Traceback: {traceback.format_exc()}")
+                raise
 
     else:
+        logger.info(f"[CREATE_AI] Processing {len(parsed['data'])} aggregates")
         # Process regular aggregates
         aggregate_models = []
 
-        for agg_data in parsed["data"]:
-            # Fetch simulation
-            sim = session.get(SimulationTable, agg_data["simulation_id"])
-            if not sim:
+        for idx, agg_data in enumerate(parsed["data"]):
+            try:
+                logger.info(f"[CREATE_AI] Processing aggregate {idx + 1}/{len(parsed['data'])}: variable={agg_data.get('variable_name')}, simulation={agg_data.get('simulation_id')}")
+
+                # Fetch simulation
+                sim = session.get(SimulationTable, agg_data["simulation_id"])
+                if not sim:
+                    logger.warning(f"[CREATE_AI] Simulation not found: {agg_data['simulation_id']}")
+                    continue
+
+                logger.info(f"[CREATE_AI] Simulation fetched, converting to model...")
+
+                # Convert to model
+                db = database
+                sim_model = sim.convert_to_model(db)
+
+                logger.info(f"[CREATE_AI] Creating Aggregate model...")
+
+                # Create Aggregate model
+                agg = Aggregate(
+                    simulation=sim_model,
+                    entity=agg_data.get("entity"),  # Let it be None to infer
+                    variable_name=agg_data["variable_name"],
+                    aggregate_function=agg_data["aggregate_function"],
+                    year=agg_data.get("year", 2026),
+                    filter_variable_name=agg_data.get("filter_variable_name"),
+                    filter_variable_value=agg_data.get("filter_variable_value"),
+                    filter_variable_leq=agg_data.get("filter_variable_leq"),
+                    filter_variable_geq=agg_data.get("filter_variable_geq"),
+                    reportelement_id=report_element.id
+                )
+                aggregate_models.append(agg)
+                logger.info(f"[CREATE_AI] Aggregate model created successfully")
+
+            except Exception as e:
+                logger.error(f"[CREATE_AI] FAILED creating aggregate {idx + 1}: {type(e).__name__}: {str(e)}")
+                import traceback
+                logger.error(f"[CREATE_AI] Traceback: {traceback.format_exc()}")
+                # Continue to next item instead of failing completely
                 continue
-
-            # Convert to model
-            db = database
-            sim_model = sim.convert_to_model(db)
-
-            # Create Aggregate model
-            agg = Aggregate(
-                simulation=sim_model,
-                entity=agg_data.get("entity"),  # Let it be None to infer
-                variable_name=agg_data["variable_name"],
-                aggregate_function=agg_data["aggregate_function"],
-                year=agg_data.get("year", 2026),
-                filter_variable_name=agg_data.get("filter_variable_name"),
-                filter_variable_value=agg_data.get("filter_variable_value"),
-                filter_variable_leq=agg_data.get("filter_variable_leq"),
-                filter_variable_geq=agg_data.get("filter_variable_geq"),
-                reportelement_id=report_element.id
-            )
-            aggregate_models.append(agg)
 
         # Run computations
         if aggregate_models:
-            computed_models = Aggregate.run(aggregate_models)
+            try:
+                logger.info(f"[CREATE_AI] Running computations for {len(aggregate_models)} aggregate models...")
+                computed_models = Aggregate.run(aggregate_models)
+                logger.info(f"[CREATE_AI] Computations completed, got {len(computed_models)} results")
+            except Exception as e:
+                logger.error(f"[CREATE_AI] FAILED during aggregate computation: {type(e).__name__}: {str(e)}")
+                import traceback
+                logger.error(f"[CREATE_AI] Traceback: {traceback.format_exc()}")
+                raise
 
             # Save to database
-            for agg_model in computed_models:
-                agg_table = AggregateTable(
-                    id=agg_model.id,
-                    simulation_id=agg_model.simulation.id,
-                    entity=agg_model.entity,
-                    variable_name=agg_model.variable_name,
-                    year=agg_model.year,
-                    filter_variable_name=agg_model.filter_variable_name,
-                    filter_variable_value=agg_model.filter_variable_value,
-                    filter_variable_leq=agg_model.filter_variable_leq,
-                    filter_variable_geq=agg_model.filter_variable_geq,
-                    aggregate_function=agg_model.aggregate_function,
-                    reportelement_id=report_element.id,
-                    value=agg_model.value
-                )
-                session.add(agg_table)
+            try:
+                logger.info(f"[CREATE_AI] Saving {len(computed_models)} aggregates to database...")
+                for idx, agg_model in enumerate(computed_models):
+                    agg_table = AggregateTable(
+                        id=agg_model.id,
+                        simulation_id=agg_model.simulation.id,
+                        entity=agg_model.entity,
+                        variable_name=agg_model.variable_name,
+                        year=agg_model.year,
+                        filter_variable_name=agg_model.filter_variable_name,
+                        filter_variable_value=agg_model.filter_variable_value,
+                        filter_variable_leq=agg_model.filter_variable_leq,
+                        filter_variable_geq=agg_model.filter_variable_geq,
+                        aggregate_function=agg_model.aggregate_function,
+                        reportelement_id=report_element.id,
+                        value=agg_model.value
+                    )
+                    session.add(agg_table)
 
-                aggregates.append({
-                    "simulation_id": agg_table.simulation_id,
-                    "variable_name": agg_table.variable_name,
-                    "aggregate_function": agg_table.aggregate_function,
-                    "value": agg_table.value,
-                })
+                    aggregates.append({
+                        "simulation_id": agg_table.simulation_id,
+                        "variable_name": agg_table.variable_name,
+                        "aggregate_function": agg_table.aggregate_function,
+                        "value": agg_table.value,
+                    })
+                logger.info(f"[CREATE_AI] Aggregates saved successfully")
+            except Exception as e:
+                logger.error(f"[CREATE_AI] FAILED saving aggregates to database: {type(e).__name__}: {str(e)}")
+                import traceback
+                logger.error(f"[CREATE_AI] Traceback: {traceback.format_exc()}")
+                raise
 
     # Check if we actually generated any data before committing
     if len(aggregates) == 0 and len(aggregate_changes) == 0:
+        logger.error(f"[CREATE_AI] No data computed - aggregates: {len(aggregates)}, aggregate_changes: {len(aggregate_changes)}")
         # Delete the report element we created
         session.delete(report_element)
         session.commit()
@@ -412,7 +512,17 @@ def create_ai_report_element(
             detail="Failed to compute any data. This might be due to simulation errors or invalid variables."
         )
 
-    session.commit()
+    try:
+        logger.info(f"[CREATE_AI] Committing changes to database...")
+        session.commit()
+        logger.info(f"[CREATE_AI] Database commit successful")
+    except Exception as e:
+        logger.error(f"[CREATE_AI] FAILED during database commit: {type(e).__name__}: {str(e)}")
+        import traceback
+        logger.error(f"[CREATE_AI] Traceback: {traceback.format_exc()}")
+        raise
+
+    logger.info(f"[CREATE_AI] Successfully created AI report element with {len(aggregates)} aggregates and {len(aggregate_changes)} aggregate changes")
 
     return AIReportElementResponse(
         report_element=report_element,
@@ -448,6 +558,8 @@ def process_with_ai(
     theme_font = request.context.get('theme', {}).get('font', 'system-ui, -apple-system, sans-serif')
 
     system_prompt = """You are a data visualization and analysis expert for PolicyEngine.
+
+CRITICAL: Return ONLY valid JSON. Do not wrap your response in markdown code blocks or any other formatting. Your entire response must be parseable as JSON.
 
 When the user asks for a chart or visualization, respond with JSON in this format:
 {
@@ -532,11 +644,14 @@ When creating charts, use the simulation names from the context for legend label
             max_tokens=4000,
             temperature=0,
             system=system_prompt,
-            messages=[{"role": "user", "content": user_message}]
+            messages=[
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": "{"}
+            ]
         )
 
-        # Parse the JSON response from Claude
-        raw_response = response.content[0].text
+        # Parse the JSON response from Claude (prefilled with "{")
+        raw_response = "{" + response.content[0].text
         print(f"[AI PROCESS] Raw Claude response: {raw_response[:500]}")
 
         result = json.loads(raw_response)

@@ -226,7 +226,22 @@ def create_ai_report_element(
     session: Session = Depends(get_session),
 ):
     """Create a report element using AI to generate data requests."""
-    return ai_create_element(request, session)
+    import logging
+    logger = logging.getLogger(__name__)
+
+    try:
+        return ai_create_element(request, session)
+    except HTTPException:
+        # Re-raise HTTPExceptions as-is (they have proper status codes)
+        raise
+    except Exception as e:
+        logger.error(f"[ENDPOINT] Unhandled exception in create_ai_report_element: {type(e).__name__}: {str(e)}")
+        import traceback
+        logger.error(f"[ENDPOINT] Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {type(e).__name__}: {str(e)}"
+        )
 
 
 @report_elements_router.post("/ai/process", response_model=AIProcessResponse)

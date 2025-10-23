@@ -7,6 +7,7 @@ services:
       - ENVIRONMENT=desktop
       - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-beta-api-v2}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     volumes:
       - ~/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro
       - ../projects/policyengine-api-full/src:/app/projects/policyengine-api-full/src
