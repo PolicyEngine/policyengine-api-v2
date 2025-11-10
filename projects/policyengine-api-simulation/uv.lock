@@ -367,16 +367,16 @@ standard = [
 
 [[package]]
 name = "fastapi-cli"
-version = "0.0.15"
+version = "0.0.16"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "rich-toolkit" },
     { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/69/8f/1e9350a188a4d2bc01ee56d0a785200650fc8e39734c317eb5b58ba8117f/fastapi_cli-0.0.15.tar.gz", hash = "sha256:48618d33a1623686a4a688b5f045f24f30353a0d751a5cd390beb2fcbf549298", size = 19283, upload-time = "2025-11-10T15:46:42.772Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/99/75/9407a6b452be4c988feacec9c9d2f58d8f315162a6c7258d5a649d933ebe/fastapi_cli-0.0.16.tar.gz", hash = "sha256:e8a2a1ecf7a4e062e3b2eec63ae34387d1e142d4849181d936b23c4bdfe29073", size = 19447, upload-time = "2025-11-10T19:01:07.856Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1e/e6/9c6ee62f008f0e58cfa3f169519a78dc908efd6212a33049e6cbb6f99a58/fastapi_cli-0.0.15-py3-none-any.whl", hash = "sha256:6fda4f0d4c78a1f08bea1db74c5fb6a14ec1e7e4adbec0f6667f7c293c2e717e", size = 12147, upload-time = "2025-11-10T15:46:41.27Z" },
+    { url = "https://files.pythonhosted.org/packages/55/43/678528c19318394320ee43757648d5e0a8070cf391b31f69d931e5c840d2/fastapi_cli-0.0.16-py3-none-any.whl", hash = "sha256:addcb6d130b5b9c91adbbf3f2947fe115991495fdb442fe3e51b5fc6327df9f4", size = 12312, upload-time = "2025-11-10T19:01:06.728Z" },
 ]
 
 [package.optional-dependencies]
@@ -1564,16 +1564,16 @@ wheels = [
 
 [[package]]
 name = "policyengine-us"
-version = "1.432.4"
+version = "1.432.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "microdf-python" },
     { name = "policyengine-core" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/78/6c/d43da81f75e9658947f2d5e50cbf4897d2f7b41820afcdca13f369caff47/policyengine_us-1.432.4.tar.gz", hash = "sha256:3539c52f81ebd1da1801851031aa93ef6937ee42a529035d5f23e951b50776e4", size = 8133574, upload-time = "2025-11-10T14:41:19.354Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7a/6d/cf2afe0740ba3eda932834f5153b7e4efe5d90c7c5a389666c4a708139f2/policyengine_us-1.432.5.tar.gz", hash = "sha256:ba60e9586be29fbf0152b3d938ffa863c65cebbd8e3f46b26c4cda025d737d19", size = 8133766, upload-time = "2025-11-10T20:00:05.172Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f0/21/acdd714a63566b7059954584d1507660001f5739a248427b56f381eef523/policyengine_us-1.432.4-py3-none-any.whl", hash = "sha256:d5e1267a46c562698c2428db07b396d00894ea140b68d5fc15fd91e57539fc8c", size = 6272318, upload-time = "2025-11-10T14:41:15.44Z" },
+    { url = "https://files.pythonhosted.org/packages/00/71/546166cefef2d8c653b2f573be3dfafa7160769b1df9d08a1b92eff43b1a/policyengine_us-1.432.5-py3-none-any.whl", hash = "sha256:19906f7bda8c17b9f8e3ea3fa9d1655b9a4dadce311b603ec8e7c85eeef5f3ba", size = 6272484, upload-time = "2025-11-10T19:59:59.677Z" },
 ]
 
 [[package]]
