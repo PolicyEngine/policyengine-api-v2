@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+    - Add behavioral response detection for UK household calculations. When labor supply response parameters are present in reforms, the API automatically calls apply_dynamics() to enable behavioral adjustments.
