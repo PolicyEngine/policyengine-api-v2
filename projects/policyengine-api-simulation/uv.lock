@@ -1632,7 +1632,7 @@ requires-dist = [
     { name = "openapi-python-client", marker = "extra == 'build'", specifier = ">=0.21.6" },
     { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.51b0,<0.52" },
     { name = "opentelemetry-instrumentation-sqlalchemy", specifier = ">=0.51b0,<0.52" },
-    { name = "policyengine", specifier = ">=0.6.0,<=0.6.1" },
+    { name = "policyengine", specifier = ">=0.6.0,<=0.7.0" },
     { name = "policyengine-fastapi", editable = "../../libs/policyengine-fastapi" },
     { name = "policyengine-uk", specifier = ">=2.22.8" },
     { name = "policyengine-us", specifier = ">=1.370.2" },
