@@ -1519,7 +1519,7 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "0.6.1"
+version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "diskcache" },
@@ -1531,7 +1531,7 @@ dependencies = [
     { name = "policyengine-us" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b0/97/6e21ea2f22ae3ac667146fab2d5cff9fb4a481fa8abd53b394d1aef06cb2/policyengine-0.6.1.tar.gz", hash = "sha256:e647c09bb353b10bb4416267309df31dbac941b159e0615db7483249e276721b", size = 202869, upload-time = "2025-08-14T08:12:38.477Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1a/33/c31e73875aa3eec8b75724751740b3d4a9e11dc141d6462697a2625223fc/policyengine-0.7.0.tar.gz", hash = "sha256:36492e8ccfdbd21b1f15dcf1e65badf25c6d6a98bc700287609af397c6359688", size = 207337, upload-time = "2025-11-27T23:36:41.816Z" }
 
 [[package]]
 name = "policyengine-core"
@@ -1632,7 +1632,7 @@ requires-dist = [
     { name = "openapi-python-client", marker = "extra == 'build'", specifier = ">=0.21.6" },
     { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.51b0,<0.52" },
     { name = "opentelemetry-instrumentation-sqlalchemy", specifier = ">=0.51b0,<0.52" },
-    { name = "policyengine", specifier = ">=0.6.0,<=0.7.0" },
+    { name = "policyengine", specifier = "==0.7.0" },
     { name = "policyengine-fastapi", editable = "../../libs/policyengine-fastapi" },
     { name = "policyengine-uk", specifier = ">=2.22.8" },
     { name = "policyengine-us", specifier = ">=1.370.2" },
