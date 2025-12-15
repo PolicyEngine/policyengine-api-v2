@@ -27,7 +27,28 @@ class AppSettings(BaseSettings):
     bucket containing the service metadata information (i.e. revisions a models)
     """
 
+    # Cleanup configuration
+    simulation_service_name: str = ""
+    """
+    Name of the simulation API Cloud Run service (e.g., 'api-simulation').
+    Required for cleanup functionality.
+    """
+    project_id: str = ""
+    """
+    GCP project ID. Required for cleanup functionality.
+    """
+    region: str = ""
+    """
+    GCP region (e.g., 'us-central1'). Required for cleanup functionality.
+    """
+
     model_config = SettingsConfigDict(env_file=".env")
+
+    def cleanup_enabled(self) -> bool:
+        """Check if cleanup functionality is properly configured."""
+        return bool(
+            self.simulation_service_name and self.project_id and self.region
+        )
 
 
 @lru_cache

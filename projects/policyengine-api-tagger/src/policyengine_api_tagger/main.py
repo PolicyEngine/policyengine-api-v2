@@ -9,6 +9,7 @@ from policyengine_fastapi.health import (
 from policyengine_fastapi.exit import exit
 
 from .api.revision_tagger import RevisionTagger
+from .api.revision_cleanup import RevisionCleanup
 from .api.routes import add_all_routes
 from .api.settings import get_settings, Environment
 from policyengine_fastapi.opentelemetry import (
@@ -39,9 +40,29 @@ app = FastAPI(
     summary="Internal service that tags revisions of the simulation api",
 )
 
-tagger = RevisionTagger(get_settings().metadata_bucket_name)
+settings = get_settings()
+tagger = RevisionTagger(settings.metadata_bucket_name)
 
-add_all_routes(app, tagger)
+# Initialize cleanup service if configured
+cleanup = None
+if settings.cleanup_enabled():
+    cleanup = RevisionCleanup(
+        bucket_name=settings.metadata_bucket_name,
+        simulation_service_name=settings.simulation_service_name,
+        project_id=settings.project_id,
+        region=settings.region,
+    )
+    logger.info(
+        f"Cleanup service initialized for {settings.simulation_service_name} "
+        f"in {settings.project_id}/{settings.region}"
+    )
+else:
+    logger.warning(
+        "Cleanup service not configured. Set simulation_service_name, "
+        "project_id, and region environment variables to enable."
+    )
+
+add_all_routes(app, tagger, cleanup)
 
 health_registry = HealthRegistry()
 # TODO: we can use this to verify the db connection, etc.
