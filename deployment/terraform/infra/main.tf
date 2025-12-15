@@ -89,18 +89,14 @@ resource "google_storage_bucket_iam_member" "bucket_iam_tagger_member" {
   member = "serviceAccount:${module.cloud_run_tagger_api.sa_email}"
 }
 
-# Give permission to get/update cloudrun services and delete revisions
-# (for tagging and cleanup)
+# Give permission to get/update cloudrun services (for tagging and cleanup)
 resource "google_project_iam_custom_role" "cloudrun_service_updater" {
   role_id     = "cloudRunServiceUpdater"
   title       = "Cloud Run Service Updater"
-  description = "Can get and update Cloud Run services, and delete revisions"
+  description = "Can get and update Cloud Run services"
   permissions = [
     "run.services.get",
-    "run.services.update",
-    "run.revisions.delete",
-    "run.revisions.get",
-    "run.revisions.list"
+    "run.services.update"
   ]
 }
 

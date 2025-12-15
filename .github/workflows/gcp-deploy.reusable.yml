@@ -168,59 +168,18 @@ jobs:
         REVISION=$(terraform output -json release_metadata | jq -r '.revision')
         US_VERSION="${{ steps.versions.outputs.us_version }}"
         UK_VERSION="${{ steps.versions.outputs.uk_version }}"
-        DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-        # Download existing manifest or create empty array
-        if gcloud storage cat "gs://${METADATA_BUCKET}/deployments.json" > deployments.json 2>/dev/null; then
-          echo "Found existing deployments manifest"
-        else
-          echo "[]" > deployments.json
-          echo "Created new deployments manifest"
-        fi
-
-        # Add new deployment entry
-        NEW_ENTRY=$(jq -n \
-          --arg revision "$REVISION" \
-          --arg us "$US_VERSION" \
-          --arg uk "$UK_VERSION" \
-          --arg deployed_at "$DEPLOYED_AT" \
-          '{revision: $revision, us: $us, uk: $uk, deployed_at: $deployed_at}')
-
-        # Append to manifest
-        jq ". + [$NEW_ENTRY]" deployments.json > deployments_updated.json
-
-        # Upload updated manifest
-        gcloud storage cp deployments_updated.json "gs://${METADATA_BUCKET}/deployments.json"
-
-        echo "Updated deployments manifest with revision: $REVISION"
+        ../../../scripts/update-deployments-manifest.sh \
+          "$METADATA_BUCKET" \
+          "$REVISION" \
+          "$US_VERSION" \
+          "$UK_VERSION"
 
     - name: Cleanup old revisions
       working-directory: deployment/terraform/infra
       run: |
         TAGGER_URL=$(terraform output -raw tagger_api_url)
-
-        # Get ID token for tagger API
-        TOKEN=$(gcloud auth print-identity-token --audiences="$TAGGER_URL")
-
-        # Call cleanup endpoint (keep last 5 deployments, don't delete revisions yet)
-        # The endpoint will remove old traffic tags and metadata files
-        RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-          "${TAGGER_URL}/cleanup?keep=5&delete_revisions=false" \
-          -H "Authorization: Bearer $TOKEN" \
-          -H "Content-Type: application/json")
-
-        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-        BODY=$(echo "$RESPONSE" | sed '$d')
-
-        if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-          echo "Cleanup successful:"
-          echo "$BODY" | jq .
-        else
-          echo "Cleanup failed with HTTP $HTTP_CODE:"
-          echo "$BODY"
-          # Don't fail the deployment if cleanup fails - it's not critical
-          echo "::warning::Cleanup failed but deployment succeeded"
-        fi
+        ../../../scripts/cleanup-old-revisions.sh "$TAGGER_URL" 5
 
   integ_test:
     name: Run integration test

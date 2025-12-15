@@ -1,5 +1,5 @@
 """
-Cleanup module for removing old Cloud Run revisions and their associated tags.
+Cleanup module for removing old Cloud Run traffic tags and metadata files.
 
 This module provides functionality to:
 1. Read the deployment manifest from GCS
@@ -11,14 +11,13 @@ This module provides functionality to:
 from google.cloud import storage
 from google.cloud.run_v2 import (
     ServicesAsyncClient,
-    RevisionsAsyncClient,
     UpdateServiceRequest,
     GetServiceRequest,
-    DeleteRevisionRequest,
 )
 from pydantic import BaseModel
 from anyio import to_thread
 import logging
+import uuid
 from datetime import datetime
 
 log = logging.getLogger(__name__)
@@ -37,7 +36,6 @@ class CleanupResult(BaseModel):
     """Result of a cleanup operation."""
 
     revisions_kept: list[str]
-    revisions_removed: list[str]
     tags_removed: list[str]
     metadata_files_deleted: list[str]
     errors: list[str]
@@ -49,7 +47,11 @@ def _read_manifest_sync(bucket_name: str) -> list[DeploymentEntry]:
     blob = storage_client.bucket(bucket_name).blob("deployments.json")
 
     if not blob.exists():
-        log.info("No deployments.json manifest found, returning empty list")
+        log.warning(
+            "No deployments.json manifest found in bucket %s. "
+            "Cleanup cannot proceed without a manifest.",
+            bucket_name,
+        )
         return []
 
     import json
@@ -60,14 +62,40 @@ def _read_manifest_sync(bucket_name: str) -> list[DeploymentEntry]:
 
 
 def _write_manifest_sync(bucket_name: str, entries: list[DeploymentEntry]) -> None:
-    """Write the deployments manifest to GCS."""
+    """
+    Write the deployments manifest to GCS atomically.
+
+    Uses a write-to-temp-then-copy pattern to avoid partial writes being visible.
+    """
     import json
 
     storage_client = storage.Client()
-    blob = storage_client.bucket(bucket_name).blob("deployments.json")
+    bucket = storage_client.bucket(bucket_name)
+
+    # Generate a unique temporary blob name
+    temp_blob_name = f"deployments.json.tmp.{uuid.uuid4().hex}"
+    temp_blob = bucket.blob(temp_blob_name)
 
     data = [entry.model_dump(mode="json") for entry in entries]
-    blob.upload_from_string(json.dumps(data, indent=2, default=str))
+    content = json.dumps(data, indent=2, default=str)
+
+    try:
+        # Write to temporary location
+        temp_blob.upload_from_string(content, content_type="application/json")
+        log.info(f"Wrote manifest to temporary location: {temp_blob_name}")
+
+        # Copy temp to final location (atomic from reader's perspective)
+        bucket.copy_blob(temp_blob, bucket, "deployments.json")
+        log.info(f"Copied manifest to final location: deployments.json")
+
+    finally:
+        # Clean up temp blob
+        try:
+            temp_blob.delete()
+            log.info(f"Deleted temporary manifest: {temp_blob_name}")
+        except Exception as e:
+            log.warning(f"Failed to delete temporary manifest {temp_blob_name}: {e}")
+
     log.info(f"Updated manifest with {len(entries)} entries")
 
 
@@ -140,7 +168,7 @@ class RevisionCleanup:
         return await to_thread.run_sync(_read_manifest_sync, self.bucket_name)
 
     async def _write_manifest(self, entries: list[DeploymentEntry]) -> None:
-        """Write the deployment manifest to GCS."""
+        """Write the deployment manifest to GCS atomically."""
         await to_thread.run_sync(_write_manifest_sync, self.bucket_name, entries)
 
     async def _list_metadata_files(self) -> list[str]:
@@ -165,11 +193,11 @@ class RevisionCleanup:
 
         Safeguards:
         1. Keep the last `keep_count` deployments
-        2. ALWAYS keep the revision with the most recent US version
-        3. ALWAYS keep the revision with the most recent UK version
+        2. ALWAYS keep the revision with the highest US semver version
+        3. ALWAYS keep the revision with the highest UK semver version
 
-        This ensures we never delete the latest version of either country package,
-        even if there's a bug or unusual deployment pattern.
+        This ensures we never remove tags for the latest version of either
+        country package, even if there's a bug or unusual deployment pattern.
         """
         if not manifest:
             return set()
@@ -182,8 +210,7 @@ class RevisionCleanup:
         for entry in sorted_manifest[:keep_count]:
             revisions_to_keep.add(entry.revision)
 
-        # Safeguard: Find and keep the most recent US version
-        # (the one deployed most recently that has a US version)
+        # Safeguard: Find and keep the revision with highest US semver
         most_recent_us_revision = None
         most_recent_us_version = None
         for entry in sorted_manifest:
@@ -198,11 +225,11 @@ class RevisionCleanup:
             if most_recent_us_revision not in revisions_to_keep:
                 log.info(
                     f"Safeguard: Keeping revision {most_recent_us_revision} "
-                    f"as it has the most recent US version ({most_recent_us_version})"
+                    f"as it has the highest US version ({most_recent_us_version})"
                 )
             revisions_to_keep.add(most_recent_us_revision)
 
-        # Safeguard: Find and keep the most recent UK version
+        # Safeguard: Find and keep the revision with highest UK semver
         most_recent_uk_revision = None
         most_recent_uk_version = None
         for entry in sorted_manifest:
@@ -217,7 +244,7 @@ class RevisionCleanup:
             if most_recent_uk_revision not in revisions_to_keep:
                 log.info(
                     f"Safeguard: Keeping revision {most_recent_uk_revision} "
-                    f"as it has the most recent UK version ({most_recent_uk_version})"
+                    f"as it has the highest UK version ({most_recent_uk_version})"
                 )
             revisions_to_keep.add(most_recent_uk_revision)
 
@@ -257,7 +284,9 @@ class RevisionCleanup:
             return revision.split("/")[-1]
         return revision
 
-    def _revision_in_keep_set(self, revision: str, revisions_to_keep: set[str]) -> bool:
+    def _revision_in_keep_set(
+        self, revision: str, revisions_to_keep: set[str]
+    ) -> bool:
         """Check if a revision is in the keep set, handling full paths vs names."""
         revision_name = self._extract_revision_name(revision)
         for keep_rev in revisions_to_keep:
@@ -269,6 +298,10 @@ class RevisionCleanup:
     async def _remove_old_tags(self, revisions_to_keep: set[str]) -> list[str]:
         """
         Remove Cloud Run traffic tags for revisions not in the keep set.
+
+        Traffic entries with percent > 0 are always kept because they represent
+        active traffic routing (e.g., 100% to latest, or canary deployments).
+        Tagged revisions have percent=0 and are accessed via URL prefix only.
 
         Returns list of removed tag names.
         """
@@ -285,7 +318,8 @@ class RevisionCleanup:
         traffic_to_keep = []
 
         for traffic in service.traffic:
-            # Always keep traffic entries with percent > 0 (main traffic route)
+            # Always keep traffic entries with percent > 0 (main traffic route
+            # or any active canary/blue-green deployment)
             if traffic.percent > 0:
                 traffic_to_keep.append(traffic)
                 continue
@@ -303,6 +337,7 @@ class RevisionCleanup:
                     f"(revision: {revision_name})"
                 )
             else:
+                # Keep entries without tags (shouldn't happen, but be safe)
                 traffic_to_keep.append(traffic)
 
         if not tags_to_remove:
@@ -319,37 +354,8 @@ class RevisionCleanup:
 
         return tags_to_remove
 
-    async def _delete_old_revisions(
-        self, manifest: list[DeploymentEntry], revisions_to_keep: set[str]
-    ) -> list[str]:
-        """
-        Delete Cloud Run revisions not in the keep set.
-
-        Returns list of deleted revision names.
-        """
-        revisions_client = RevisionsAsyncClient()
-        deleted = []
-
-        for entry in manifest:
-            if entry.revision not in revisions_to_keep:
-                # Extract just the revision name from the full path if needed
-                revision_path = entry.revision
-                if not revision_path.startswith("projects/"):
-                    revision_path = f"projects/{self.project_id}/locations/{self.region}/services/{self.simulation_service_name}/revisions/{entry.revision}"
-
-                try:
-                    log.info(f"Deleting revision: {revision_path}")
-                    await revisions_client.delete_revision(
-                        DeleteRevisionRequest(name=revision_path)
-                    )
-                    deleted.append(entry.revision)
-                except Exception as e:
-                    log.warning(f"Failed to delete revision {revision_path}: {e}")
-
-        return deleted
-
     async def _cleanup_metadata_files(
-        self, manifest: list[DeploymentEntry], revisions_to_keep: set[str]
+        self, revisions_to_keep: set[str]
     ) -> list[str]:
         """
         Delete metadata files that point to revisions not in the keep set.
@@ -381,15 +387,16 @@ class RevisionCleanup:
 
         return deleted
 
-    async def cleanup(
-        self, keep_count: int = 5, delete_revisions: bool = False
-    ) -> CleanupResult:
+    async def cleanup(self, keep_count: int = 5) -> CleanupResult:
         """
-        Perform cleanup of old revisions and tags.
+        Perform cleanup of old traffic tags and metadata files.
+
+        This removes Cloud Run traffic tags for old revisions (stopping them
+        from keeping instances warm) and deletes their metadata files.
 
         Args:
-            keep_count: Number of recent deployments to keep (minimum, safeguards may keep more)
-            delete_revisions: If True, also delete old Cloud Run revisions (not just tags)
+            keep_count: Number of recent deployments to keep (minimum,
+                       safeguards may keep more to protect latest US/UK versions)
 
         Returns:
             CleanupResult with details of what was cleaned up
@@ -399,10 +406,9 @@ class RevisionCleanup:
         # 1. Read manifest
         manifest = await self._read_manifest()
         if not manifest:
-            log.info("No manifest found, nothing to clean up")
+            log.warning("No manifest found, nothing to clean up")
             return CleanupResult(
                 revisions_kept=[],
-                revisions_removed=[],
                 tags_removed=[],
                 metadata_files_deleted=[],
                 errors=["No deployment manifest found"],
@@ -424,28 +430,17 @@ class RevisionCleanup:
 
         # 4. Delete old metadata files
         try:
-            metadata_deleted = await self._cleanup_metadata_files(
-                manifest, revisions_to_keep
-            )
+            metadata_deleted = await self._cleanup_metadata_files(revisions_to_keep)
         except Exception as e:
             log.error(f"Failed to cleanup metadata files: {e}")
             metadata_deleted = []
             errors.append(f"Failed to cleanup metadata files: {e}")
 
-        # 5. Optionally delete old revisions
-        revisions_removed = []
-        if delete_revisions:
-            try:
-                revisions_removed = await self._delete_old_revisions(
-                    manifest, revisions_to_keep
-                )
-            except Exception as e:
-                log.error(f"Failed to delete old revisions: {e}")
-                errors.append(f"Failed to delete revisions: {e}")
-
-        # 6. Update manifest to only include kept revisions
+        # 5. Update manifest to only include kept revisions
         updated_manifest = [
-            entry for entry in manifest if entry.revision in revisions_to_keep
+            entry
+            for entry in manifest
+            if self._revision_in_keep_set(entry.revision, revisions_to_keep)
         ]
         try:
             await self._write_manifest(updated_manifest)
@@ -455,7 +450,6 @@ class RevisionCleanup:
 
         return CleanupResult(
             revisions_kept=list(revisions_to_keep),
-            revisions_removed=revisions_removed,
             tags_removed=tags_removed,
             metadata_files_deleted=metadata_deleted,
             errors=errors,

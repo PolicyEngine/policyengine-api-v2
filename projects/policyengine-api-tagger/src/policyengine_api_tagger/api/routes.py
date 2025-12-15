@@ -23,19 +23,17 @@ def create_router(
         return uri
 
     @router.post("/cleanup")
-    async def cleanup_old_revisions(
-        keep: int = 5, delete_revisions: bool = False
-    ) -> CleanupResult:
+    async def cleanup_old_revisions(keep: int = 5) -> CleanupResult:
         """
-        Clean up old Cloud Run revisions and their associated tags.
+        Clean up old Cloud Run traffic tags and metadata files.
 
-        This endpoint removes traffic tags for old revisions and optionally
-        deletes the revisions themselves. It maintains safeguards to ensure
-        the most recent US and UK versions are never deleted.
+        This endpoint removes traffic tags for old revisions (which stops
+        them from keeping instances warm) and deletes their metadata files.
+        It maintains safeguards to ensure the most recent US and UK versions
+        are never removed.
 
         Args:
             keep: Number of recent deployments to keep (default: 5)
-            delete_revisions: If true, also delete old Cloud Run revisions
 
         Returns:
             CleanupResult with details of what was cleaned up
@@ -52,17 +50,12 @@ def create_router(
                 status_code=400, detail="keep parameter must be at least 1"
             )
 
-        log.info(
-            f"Starting cleanup: keep={keep}, delete_revisions={delete_revisions}"
-        )
-        result = await cleanup.cleanup(
-            keep_count=keep, delete_revisions=delete_revisions
-        )
+        log.info(f"Starting cleanup: keep={keep}")
+        result = await cleanup.cleanup(keep_count=keep)
         log.info(
             f"Cleanup complete: kept={len(result.revisions_kept)}, "
             f"tags_removed={len(result.tags_removed)}, "
-            f"files_deleted={len(result.metadata_files_deleted)}, "
-            f"revisions_removed={len(result.revisions_removed)}"
+            f"files_deleted={len(result.metadata_files_deleted)}"
         )
         return result
 
