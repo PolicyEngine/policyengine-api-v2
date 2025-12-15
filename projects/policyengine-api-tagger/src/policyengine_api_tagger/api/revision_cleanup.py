@@ -215,9 +215,10 @@ class RevisionCleanup:
         most_recent_us_version = None
         for entry in sorted_manifest:
             if entry.us:
-                if most_recent_us_version is None or self._compare_versions(
-                    entry.us, most_recent_us_version
-                ) > 0:
+                if (
+                    most_recent_us_version is None
+                    or self._compare_versions(entry.us, most_recent_us_version) > 0
+                ):
                     most_recent_us_version = entry.us
                     most_recent_us_revision = entry.revision
 
@@ -234,9 +235,10 @@ class RevisionCleanup:
         most_recent_uk_version = None
         for entry in sorted_manifest:
             if entry.uk:
-                if most_recent_uk_version is None or self._compare_versions(
-                    entry.uk, most_recent_uk_version
-                ) > 0:
+                if (
+                    most_recent_uk_version is None
+                    or self._compare_versions(entry.uk, most_recent_uk_version) > 0
+                ):
                     most_recent_uk_version = entry.uk
                     most_recent_uk_revision = entry.revision
 
@@ -284,9 +286,7 @@ class RevisionCleanup:
             return revision.split("/")[-1]
         return revision
 
-    def _revision_in_keep_set(
-        self, revision: str, revisions_to_keep: set[str]
-    ) -> bool:
+    def _revision_in_keep_set(self, revision: str, revisions_to_keep: set[str]) -> bool:
         """Check if a revision is in the keep set, handling full paths vs names."""
         revision_name = self._extract_revision_name(revision)
         for keep_rev in revisions_to_keep:
@@ -354,9 +354,7 @@ class RevisionCleanup:
 
         return tags_to_remove
 
-    async def _cleanup_metadata_files(
-        self, revisions_to_keep: set[str]
-    ) -> list[str]:
+    async def _cleanup_metadata_files(self, revisions_to_keep: set[str]) -> list[str]:
         """
         Delete metadata files that point to revisions not in the keep set.
 

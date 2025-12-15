@@ -46,9 +46,7 @@ class AppSettings(BaseSettings):
 
     def cleanup_enabled(self) -> bool:
         """Check if cleanup functionality is properly configured."""
-        return bool(
-            self.simulation_service_name and self.project_id and self.region
-        )
+        return bool(self.simulation_service_name and self.project_id and self.region)
 
 
 @lru_cache

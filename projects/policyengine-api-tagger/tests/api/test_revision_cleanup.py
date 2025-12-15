@@ -104,18 +104,14 @@ class TestExtractRevisionName:
 
 class TestRevisionInKeepSet:
     def test_matches_full_path_against_full_path(self, cleanup):
-        keep_set = {
-            "projects/proj/locations/us/services/svc/revisions/rev-abc"
-        }
+        keep_set = {"projects/proj/locations/us/services/svc/revisions/rev-abc"}
         assert cleanup._revision_in_keep_set(
             "projects/proj/locations/us/services/svc/revisions/rev-abc",
             keep_set,
         )
 
     def test_matches_name_against_full_path(self, cleanup):
-        keep_set = {
-            "projects/proj/locations/us/services/svc/revisions/rev-abc"
-        }
+        keep_set = {"projects/proj/locations/us/services/svc/revisions/rev-abc"}
         assert cleanup._revision_in_keep_set("rev-abc", keep_set)
 
     def test_matches_full_path_against_name(self, cleanup):
@@ -299,13 +295,9 @@ class TestRemoveOldTags:
             # Main traffic (100%) - should be kept
             TrafficTarget(percent=100, revision="rev-latest"),
             # Tagged revision in keep set - should be kept
-            TrafficTarget(
-                percent=0, revision="rev-keep", tag="country-us-model-1-0-0"
-            ),
+            TrafficTarget(percent=0, revision="rev-keep", tag="country-us-model-1-0-0"),
             # Tagged revision NOT in keep set - should be removed
-            TrafficTarget(
-                percent=0, revision="rev-old", tag="country-us-model-0-9-0"
-            ),
+            TrafficTarget(percent=0, revision="rev-old", tag="country-us-model-0-9-0"),
         ]
         mock_client.get_service.return_value = service
 
@@ -353,9 +345,7 @@ class TestRemoveOldTags:
         service.uri = "https://api-simulation.run.app"
         service.traffic = [
             TrafficTarget(percent=100, revision="rev-latest"),
-            TrafficTarget(
-                percent=0, revision="rev-keep", tag="country-us-model-1-0-0"
-            ),
+            TrafficTarget(percent=0, revision="rev-keep", tag="country-us-model-1-0-0"),
         ]
         mock_client.get_service.return_value = service
 
@@ -374,13 +364,17 @@ class TestRemoveOldTags:
 class TestCleanupMetadataFiles:
     @pytest.mark.asyncio
     async def test_deletes_metadata_for_old_revisions(self, cleanup):
-        with patch.object(
-            cleanup, "_list_metadata_files", new_callable=AsyncMock
-        ) as mock_list, patch.object(
-            cleanup, "_read_metadata_file", new_callable=AsyncMock
-        ) as mock_read, patch.object(
-            cleanup, "_delete_metadata_file", new_callable=AsyncMock
-        ) as mock_delete:
+        with (
+            patch.object(
+                cleanup, "_list_metadata_files", new_callable=AsyncMock
+            ) as mock_list,
+            patch.object(
+                cleanup, "_read_metadata_file", new_callable=AsyncMock
+            ) as mock_read,
+            patch.object(
+                cleanup, "_delete_metadata_file", new_callable=AsyncMock
+            ) as mock_delete,
+        ):
             mock_list.return_value = [
                 "us.1.0.0.json",  # Keep
                 "us.0.9.0.json",  # Delete
@@ -408,13 +402,17 @@ class TestCleanupMetadataFiles:
 
     @pytest.mark.asyncio
     async def test_skips_special_files(self, cleanup):
-        with patch.object(
-            cleanup, "_list_metadata_files", new_callable=AsyncMock
-        ) as mock_list, patch.object(
-            cleanup, "_read_metadata_file", new_callable=AsyncMock
-        ) as mock_read, patch.object(
-            cleanup, "_delete_metadata_file", new_callable=AsyncMock
-        ) as mock_delete:
+        with (
+            patch.object(
+                cleanup, "_list_metadata_files", new_callable=AsyncMock
+            ) as mock_list,
+            patch.object(
+                cleanup, "_read_metadata_file", new_callable=AsyncMock
+            ) as mock_read,
+            patch.object(
+                cleanup, "_delete_metadata_file", new_callable=AsyncMock
+            ) as mock_delete,
+        ):
             mock_list.return_value = [
                 "live.json",
                 "deployments.json",
@@ -435,15 +433,20 @@ class TestCleanupMetadataFiles:
 class TestCleanup:
     @pytest.mark.asyncio
     async def test_full_cleanup_flow(self, cleanup, sample_manifest):
-        with patch.object(
-            cleanup, "_read_manifest", new_callable=AsyncMock
-        ) as mock_read_manifest, patch.object(
-            cleanup, "_remove_old_tags", new_callable=AsyncMock
-        ) as mock_remove_tags, patch.object(
-            cleanup, "_cleanup_metadata_files", new_callable=AsyncMock
-        ) as mock_cleanup_files, patch.object(
-            cleanup, "_write_manifest", new_callable=AsyncMock
-        ) as mock_write_manifest:
+        with (
+            patch.object(
+                cleanup, "_read_manifest", new_callable=AsyncMock
+            ) as mock_read_manifest,
+            patch.object(
+                cleanup, "_remove_old_tags", new_callable=AsyncMock
+            ) as mock_remove_tags,
+            patch.object(
+                cleanup, "_cleanup_metadata_files", new_callable=AsyncMock
+            ) as mock_cleanup_files,
+            patch.object(
+                cleanup, "_write_manifest", new_callable=AsyncMock
+            ) as mock_write_manifest,
+        ):
             mock_read_manifest.return_value = sample_manifest[:6]  # 6 deployments
             mock_remove_tags.return_value = ["tag-1", "tag-2"]
             mock_cleanup_files.return_value = ["us.old.json"]
@@ -474,15 +477,20 @@ class TestCleanup:
 
     @pytest.mark.asyncio
     async def test_cleanup_handles_errors_gracefully(self, cleanup, sample_manifest):
-        with patch.object(
-            cleanup, "_read_manifest", new_callable=AsyncMock
-        ) as mock_read_manifest, patch.object(
-            cleanup, "_remove_old_tags", new_callable=AsyncMock
-        ) as mock_remove_tags, patch.object(
-            cleanup, "_cleanup_metadata_files", new_callable=AsyncMock
-        ) as mock_cleanup_files, patch.object(
-            cleanup, "_write_manifest", new_callable=AsyncMock
-        ) as mock_write_manifest:
+        with (
+            patch.object(
+                cleanup, "_read_manifest", new_callable=AsyncMock
+            ) as mock_read_manifest,
+            patch.object(
+                cleanup, "_remove_old_tags", new_callable=AsyncMock
+            ) as mock_remove_tags,
+            patch.object(
+                cleanup, "_cleanup_metadata_files", new_callable=AsyncMock
+            ) as mock_cleanup_files,
+            patch.object(
+                cleanup, "_write_manifest", new_callable=AsyncMock
+            ) as mock_write_manifest,
+        ):
             mock_read_manifest.return_value = sample_manifest[:3]
             mock_remove_tags.side_effect = Exception("Cloud Run API error")
             mock_cleanup_files.return_value = []
