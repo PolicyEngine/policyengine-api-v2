@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = [ "pytest>=8.3.4", "pytest-xdist>=3.7.0", "backoff>=2.2.1", "httpx>=0.23.0"]
+test = [ "pytest>=8.3.4", "pytest-xdist>=3.7.0", "backoff>=2.2.1", "httpx>=0.27.0"]
 build = [ "pyright>=1.1.401", "black>=25.1.0",]
 
 [tool.pytest.ini_options]
@@ -26,6 +26,7 @@ pythonpath = [
 testpaths = ["tests"]
 markers = [
     "requires_gcp: mark test as requiring GCP credentials and workflow access",
+    "beta_only: mark test as only safe to run against beta environment (not prod)",
 ]
 
 [tool.uv.sources]
