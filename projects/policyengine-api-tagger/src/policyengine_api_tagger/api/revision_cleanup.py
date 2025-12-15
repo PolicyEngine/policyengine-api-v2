@@ -191,10 +191,11 @@ class RevisionCleanup:
         """
         Determine which revisions should be kept.
 
-        Safeguards:
-        1. Keep the last `keep_count` deployments
-        2. ALWAYS keep the revision with the highest US semver version
-        3. ALWAYS keep the revision with the highest UK semver version
+        Always returns exactly `keep_count` revisions (or fewer if manifest
+        has fewer entries). Prioritizes:
+        1. The revision with the highest US semver version (safeguard)
+        2. The revision with the highest UK semver version (safeguard)
+        3. Most recent deployments by deployed_at to fill remaining slots
 
         This ensures we never remove tags for the latest version of either
         country package, even if there's a bug or unusual deployment pattern.
@@ -202,53 +203,62 @@ class RevisionCleanup:
         if not manifest:
             return set()
 
+        # If manifest has fewer entries than keep_count, keep all
+        if len(manifest) <= keep_count:
+            return {entry.revision for entry in manifest}
+
         # Sort by deployment time, newest first
         sorted_manifest = sorted(manifest, key=lambda x: x.deployed_at, reverse=True)
 
-        # Start with the last N deployments
+        # Start with safeguarded revisions
         revisions_to_keep = set()
-        for entry in sorted_manifest[:keep_count]:
-            revisions_to_keep.add(entry.revision)
 
         # Safeguard: Find and keep the revision with highest US semver
-        most_recent_us_revision = None
-        most_recent_us_version = None
+        highest_us_entry = None
+        highest_us_version = None
         for entry in sorted_manifest:
             if entry.us:
                 if (
-                    most_recent_us_version is None
-                    or self._compare_versions(entry.us, most_recent_us_version) > 0
+                    highest_us_version is None
+                    or self._compare_versions(entry.us, highest_us_version) > 0
                 ):
-                    most_recent_us_version = entry.us
-                    most_recent_us_revision = entry.revision
+                    highest_us_version = entry.us
+                    highest_us_entry = entry
 
-        if most_recent_us_revision:
-            if most_recent_us_revision not in revisions_to_keep:
-                log.info(
-                    f"Safeguard: Keeping revision {most_recent_us_revision} "
-                    f"as it has the highest US version ({most_recent_us_version})"
-                )
-            revisions_to_keep.add(most_recent_us_revision)
+        if highest_us_entry:
+            revisions_to_keep.add(highest_us_entry.revision)
+            log.info(
+                f"Safeguard: Keeping revision {highest_us_entry.revision} "
+                f"(highest US version: {highest_us_version})"
+            )
 
         # Safeguard: Find and keep the revision with highest UK semver
-        most_recent_uk_revision = None
-        most_recent_uk_version = None
+        highest_uk_entry = None
+        highest_uk_version = None
         for entry in sorted_manifest:
             if entry.uk:
                 if (
-                    most_recent_uk_version is None
-                    or self._compare_versions(entry.uk, most_recent_uk_version) > 0
+                    highest_uk_version is None
+                    or self._compare_versions(entry.uk, highest_uk_version) > 0
                 ):
-                    most_recent_uk_version = entry.uk
-                    most_recent_uk_revision = entry.revision
+                    highest_uk_version = entry.uk
+                    highest_uk_entry = entry
 
-        if most_recent_uk_revision:
-            if most_recent_uk_revision not in revisions_to_keep:
-                log.info(
-                    f"Safeguard: Keeping revision {most_recent_uk_revision} "
-                    f"as it has the highest UK version ({most_recent_uk_version})"
-                )
-            revisions_to_keep.add(most_recent_uk_revision)
+        if highest_uk_entry and highest_uk_entry.revision not in revisions_to_keep:
+            revisions_to_keep.add(highest_uk_entry.revision)
+            log.info(
+                f"Safeguard: Keeping revision {highest_uk_entry.revision} "
+                f"(highest UK version: {highest_uk_version})"
+            )
+
+        # Fill remaining slots with most recent deployments
+        remaining_slots = keep_count - len(revisions_to_keep)
+        for entry in sorted_manifest:
+            if remaining_slots <= 0:
+                break
+            if entry.revision not in revisions_to_keep:
+                revisions_to_keep.add(entry.revision)
+                remaining_slots -= 1
 
         return revisions_to_keep
 

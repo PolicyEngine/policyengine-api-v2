@@ -38,13 +38,20 @@ def cleanup():
 
 @pytest.fixture
 def sample_manifest():
-    """Create a sample manifest with 10 deployments."""
+    """
+    Create a sample manifest with 10 deployments.
+
+    Most recent deployments (lower i) have HIGHER versions, matching
+    real-world behavior where we deploy newer versions more recently.
+    - rev-0: deployed today, us=1.9.0, uk=2.9.0 (highest)
+    - rev-9: deployed 9 days ago, us=1.0.0, uk=2.0.0 (lowest)
+    """
     now = datetime.now()
     return [
         DeploymentEntry(
             revision=f"projects/test-project/locations/us-central1/services/api-simulation/revisions/rev-{i}",
-            us=f"1.{i}.0",
-            uk=f"2.{i}.0",
+            us=f"1.{9 - i}.0",  # Higher version for more recent deployments
+            uk=f"2.{9 - i}.0",
             deployed_at=now - timedelta(days=i),
         )
         for i in range(10)
@@ -223,7 +230,7 @@ class TestDetermineRevisionsToKeep:
         assert "rev-old-high-uk" in result
 
     def test_safeguard_keeps_both_highest_us_and_uk(self, cleanup):
-        """If highest US and UK are on different revisions, keep both."""
+        """If highest US and UK are on different old revisions, both are kept."""
         now = datetime.now()
         manifest = [
             DeploymentEntry(
@@ -246,12 +253,45 @@ class TestDetermineRevisionsToKeep:
             ),
         ]
 
-        result = cleanup._determine_revisions_to_keep(manifest, keep_count=1)
+        # With keep_count=2, both safeguards fit exactly
+        result = cleanup._determine_revisions_to_keep(manifest, keep_count=2)
 
-        assert "rev-recent" in result
+        # Both safeguarded revisions must be kept
         assert "rev-high-us" in result
         assert "rev-high-uk" in result
-        assert len(result) == 3
+        assert len(result) == 2
+
+    def test_safeguard_exceeds_keep_count_when_necessary(self, cleanup):
+        """When safeguards require more than keep_count, we keep all safeguards."""
+        now = datetime.now()
+        manifest = [
+            DeploymentEntry(
+                revision="rev-recent",
+                us="1.0.0",
+                uk="1.0.0",
+                deployed_at=now,
+            ),
+            DeploymentEntry(
+                revision="rev-high-us",
+                us="99.0.0",
+                uk="1.0.0",
+                deployed_at=now - timedelta(days=100),
+            ),
+            DeploymentEntry(
+                revision="rev-high-uk",
+                us="1.0.0",
+                uk="99.0.0",
+                deployed_at=now - timedelta(days=101),
+            ),
+        ]
+
+        # With keep_count=1, safeguards still require 2 revisions
+        result = cleanup._determine_revisions_to_keep(manifest, keep_count=1)
+
+        # Both safeguards are kept even though keep_count=1
+        assert "rev-high-us" in result
+        assert "rev-high-uk" in result
+        assert len(result) == 2  # Safeguards exceed keep_count
 
     def test_same_revision_has_highest_us_and_uk(self, cleanup):
         """If same revision has both highest US and UK, it's not duplicated."""
@@ -275,6 +315,87 @@ class TestDetermineRevisionsToKeep:
 
         assert "rev-recent" in result
         assert len(result) == 1  # Only rev-recent, not duplicated
+
+    def test_keeps_exactly_n_with_uniform_versions(self, cleanup):
+        """
+        With 15 deployments where all have same UK version (US-only progression),
+        keep=5 returns exactly 5 revisions.
+
+        This tests the scenario where no safeguard adds extra revisions because
+        the highest US version is in the most recent deployment.
+        """
+        now = datetime.now()
+        manifest = [
+            DeploymentEntry(
+                revision=f"rev-{i}",
+                us=f"1.{14 - i}.0",  # Most recent (i=0) has highest US (1.14.0)
+                uk="2.0.0",  # All have same UK version
+                deployed_at=now - timedelta(days=i),
+            )
+            for i in range(15)
+        ]
+
+        result = cleanup._determine_revisions_to_keep(manifest, keep_count=5)
+
+        # Should keep exactly 5: the 5 most recent (rev-0 through rev-4)
+        assert len(result) == 5
+        for i in range(5):
+            assert f"rev-{i}" in result
+        for i in range(5, 15):
+            assert f"rev-{i}" not in result
+
+    def test_keeps_exactly_n_with_old_uk_safeguard(self, cleanup):
+        """
+        With 15 deployments: 14 with increasing US versions (same UK),
+        and 1 old deployment with the highest UK version.
+        keep=5 returns exactly 5 revisions: the old UK + 4 most recent.
+
+        This tests the safeguard functionality where an old deployment
+        must be kept, displacing one of the recent deployments.
+        """
+        now = datetime.now()
+
+        # 14 recent deployments with increasing US, same UK
+        manifest = [
+            DeploymentEntry(
+                revision=f"rev-{i}",
+                us=f"1.{13 - i}.0",  # Most recent (i=0) has highest US (1.13.0)
+                uk="2.0.0",  # All have same UK version
+                deployed_at=now - timedelta(days=i),
+            )
+            for i in range(14)
+        ]
+
+        # 1 old deployment with highest UK version
+        manifest.append(
+            DeploymentEntry(
+                revision="rev-old-uk",
+                us="0.1.0",  # Old, low US version
+                uk="2.1.0",  # Highest UK version (safeguarded)
+                deployed_at=now - timedelta(days=100),
+            )
+        )
+
+        result = cleanup._determine_revisions_to_keep(manifest, keep_count=5)
+
+        # Should keep exactly 5:
+        # - rev-old-uk (safeguard: highest UK)
+        # - rev-0 (safeguard: highest US, also most recent)
+        # - rev-1, rev-2, rev-3 (fill remaining 3 slots)
+        assert len(result) == 5
+
+        # The old UK deployment must be kept (safeguard)
+        assert "rev-old-uk" in result
+
+        # The most recent 4 deployments should be kept
+        # (rev-0 has highest US, so it's safeguarded too, but still counts)
+        assert "rev-0" in result
+        assert "rev-1" in result
+        assert "rev-2" in result
+        assert "rev-3" in result
+
+        # rev-4 should NOT be kept (only 5 slots total)
+        assert "rev-4" not in result
 
 
 # -----------------------------------------------------------------------------

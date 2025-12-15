@@ -137,12 +137,13 @@ class TestCleanupEndpointLocal:
         self, client, mock_gcs, mock_cloudrun
     ):
         # Set up manifest with deployments
+        # Most recent (i=0) has highest versions (realistic deployment pattern)
         now = datetime.now()
         manifest = [
             {
                 "revision": f"rev-{i}",
-                "us": f"1.{i}.0",
-                "uk": f"2.{i}.0",
+                "us": f"1.{6 - i}.0",  # rev-0 has 1.6.0 (highest), rev-6 has 1.0.0
+                "uk": f"2.{6 - i}.0",
                 "deployed_at": (now - timedelta(days=i)).isoformat(),
             }
             for i in range(7)
@@ -151,18 +152,19 @@ class TestCleanupEndpointLocal:
 
         # Set up metadata files
         for i in range(7):
-            mock_gcs["contents"][f"us.1.{i}.0.json"] = json.dumps(
+            mock_gcs["contents"][f"us.1.{6 - i}.0.json"] = json.dumps(
                 {"revision": f"rev-{i}"}
             )
-            mock_gcs["contents"][f"uk.2.{i}.0.json"] = json.dumps(
+            mock_gcs["contents"][f"uk.2.{6 - i}.0.json"] = json.dumps(
                 {"revision": f"rev-{i}"}
             )
 
         # Set up Cloud Run service with tags
+        # rev-0 has 100% traffic (most recent), rev-1 and rev-2 have tags
         mock_cloudrun["service"].traffic = [
             TrafficTarget(percent=100, revision="rev-0"),
-            TrafficTarget(percent=0, revision="rev-5", tag="country-us-model-1-5-0"),
-            TrafficTarget(percent=0, revision="rev-6", tag="country-us-model-1-6-0"),
+            TrafficTarget(percent=0, revision="rev-1", tag="country-us-model-1-5-0"),
+            TrafficTarget(percent=0, revision="rev-2", tag="country-us-model-1-4-0"),
         ]
 
         response = client.post("/cleanup?keep=5")
