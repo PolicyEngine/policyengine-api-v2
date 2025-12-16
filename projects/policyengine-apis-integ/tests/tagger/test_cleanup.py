@@ -10,11 +10,16 @@ import httpx
 
 
 @pytest.mark.beta_only
+@pytest.mark.requires_gcp
 class TestCleanupEndpoint:
     """
     Tests for the /cleanup endpoint.
 
-    These tests are marked beta_only because:
+    These tests are marked:
+    - requires_gcp: They need real GCP credentials (excluded from PR tests)
+    - beta_only: They should only run on beta deployments (excluded from prod)
+
+    Rationale:
     1. They interact with real Cloud Run traffic configuration
     2. They modify the deployments manifest
     3. While designed to be safe, they should not run against production
@@ -81,6 +86,7 @@ class TestCleanupEndpoint:
 
 
 @pytest.mark.beta_only
+@pytest.mark.requires_gcp
 class TestCleanupSafeguards:
     """
     Tests to verify cleanup safeguards are working.
