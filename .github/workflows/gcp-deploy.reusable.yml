@@ -181,11 +181,24 @@ jobs:
           "$US_VERSION" \
           "$UK_VERSION"
 
+    - name: Get tagger API ID token
+      id: tagger-token
+      uses: "google-github-actions/auth@v2"
+      with:
+        workload_identity_provider: "${{ vars._GITHUB_IDENTITY_POOL_PROVIDER_NAME }}"
+        service_account: "deploy@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com"
+        token_format: "id_token"
+        id_token_audience: ${{ steps.deploy_infra.outputs.tagger_api_url }}
+        id_token_include_email: true
+
     - name: Cleanup old revisions
       working-directory: deployment/terraform/infra
       run: |
         TAGGER_URL=$(terraform output -raw tagger_api_url)
-        bash ../../../scripts/cleanup-old-revisions.sh "$TAGGER_URL" 40
+        bash ../../../scripts/cleanup-old-revisions.sh \
+          "$TAGGER_URL" \
+          "${{ steps.tagger-token.outputs.id_token }}" \
+          40
 
   integ_test:
     name: Run integration test

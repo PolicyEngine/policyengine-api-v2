@@ -3,28 +3,26 @@
 # Calls the tagger API cleanup endpoint to remove old traffic tags and metadata.
 #
 # Usage:
-#   ./scripts/cleanup-old-revisions.sh <tagger_url> [keep_count]
+#   ./scripts/cleanup-old-revisions.sh <tagger_url> <token> [keep_count]
 #
 # Arguments:
 #   tagger_url  - Full URL of the tagger API (e.g., "https://tagger-api-xxx.run.app")
-#   keep_count  - Number of recent deployments to keep (default: 5)
+#   token       - ID token for authentication
+#   keep_count  - Number of recent deployments to keep (default: 40)
 #
 # The script:
-# 1. Gets an ID token for authentication
-# 2. Calls POST /cleanup?keep=N on the tagger API
-# 3. Reports results (but doesn't fail the deployment on cleanup errors)
+# 1. Calls POST /cleanup?keep=N on the tagger API
+# 2. Reports results (but doesn't fail the deployment on cleanup errors)
 #
 
 set -euo pipefail
 
 TAGGER_URL="$1"
-KEEP_COUNT="${2:-5}"
+TOKEN="$2"
+KEEP_COUNT="${3:-40}"
 
 echo "Calling cleanup endpoint on tagger API"
 echo "  URL: ${TAGGER_URL}/cleanup?keep=${KEEP_COUNT}"
-
-# Get ID token for tagger API
-TOKEN=$(gcloud auth print-identity-token --audiences="$TAGGER_URL")
 
 # Call cleanup endpoint
 RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
