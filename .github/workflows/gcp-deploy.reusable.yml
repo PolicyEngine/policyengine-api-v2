@@ -175,7 +175,7 @@ jobs:
         US_VERSION="${{ steps.versions.outputs.us_version }}"
         UK_VERSION="${{ steps.versions.outputs.uk_version }}"
 
-        ../../../scripts/update-deployments-manifest.sh \
+        bash ../../../scripts/update-deployments-manifest.sh \
           "$METADATA_BUCKET" \
           "$REVISION" \
           "$US_VERSION" \
@@ -185,7 +185,7 @@ jobs:
       working-directory: deployment/terraform/infra
       run: |
         TAGGER_URL=$(terraform output -raw tagger_api_url)
-        ../../../scripts/cleanup-old-revisions.sh "$TAGGER_URL" 40
+        bash ../../../scripts/cleanup-old-revisions.sh "$TAGGER_URL" 40
 
   integ_test:
     name: Run integration test
