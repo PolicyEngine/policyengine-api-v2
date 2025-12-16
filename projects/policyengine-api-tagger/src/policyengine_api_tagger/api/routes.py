@@ -23,7 +23,7 @@ def create_router(
         return uri
 
     @router.post("/cleanup")
-    async def cleanup_old_revisions(keep: int = 40) -> CleanupResult:
+    async def cleanup_old_revisions(keep: int = 40, dry_run: bool = False) -> CleanupResult:
         """
         Clean up old traffic tags, keeping the specified number.
 
@@ -31,15 +31,16 @@ def create_router(
         1. Gets all existing traffic tags from Cloud Run
         2. Identifies the newest US and UK tags (always kept as safeguards)
         3. Keeps the top `keep` tags total (including safeguards)
-        4. Updates the traffic configuration in one atomic operation
+        4. Updates the traffic configuration in one atomic operation (unless dry_run=true)
 
         Metadata files are NOT touched - they enable on-demand tag recreation.
 
         Args:
             keep: Number of tags to keep (default: 40, minimum: 2)
+            dry_run: If true, only preview what would be cleaned up without making changes
 
         Returns:
-            CleanupResult with details of what was cleaned up
+            CleanupResult with details of what was/would be cleaned up
         """
         if cleanup is None:
             raise HTTPException(
@@ -54,12 +55,20 @@ def create_router(
                 detail="keep parameter must be at least 2 (for US + UK safeguards)",
             )
 
-        log.info(f"Starting cleanup with keep={keep}")
-        result = await cleanup.cleanup(keep_count=keep)
-        log.info(
-            f"Cleanup complete: total_tags={result.total_tags_found}, "
-            f"kept={len(result.tags_kept)}, removed={len(result.tags_removed)}"
-        )
+        if dry_run:
+            log.info(f"Starting cleanup PREVIEW with keep={keep}")
+            result = await cleanup.preview(keep_count=keep)
+            log.info(
+                f"Cleanup preview: total_tags={result.total_tags_found}, "
+                f"would_keep={len(result.tags_kept)}, would_remove={len(result.tags_removed)}"
+            )
+        else:
+            log.info(f"Starting cleanup with keep={keep}")
+            result = await cleanup.cleanup(keep_count=keep)
+            log.info(
+                f"Cleanup complete: total_tags={result.total_tags_found}, "
+                f"kept={len(result.tags_kept)}, removed={len(result.tags_removed)}"
+            )
         return result
 
     return router
