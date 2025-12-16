@@ -32,6 +32,7 @@ class TagInfo(BaseModel):
     country: str  # "us" or "uk"
     version: tuple[int, ...]  # Parsed version for comparison, e.g., (1, 459, 0)
     version_str: str  # Original version string, e.g., "1.459.0"
+    deploy_timestamp: str  # Timestamp from revision name, e.g., "20251216101118" or "" if not available
 
 
 class CleanupResult(BaseModel):
@@ -76,6 +77,21 @@ class RevisionCleanup:
         """Get the full service name for Cloud Run API."""
         return f"projects/{self.project_id}/locations/{self.region}/services/{self.simulation_service_name}"
 
+    def _extract_deploy_timestamp(self, revision: str) -> str:
+        """
+        Extract deployment timestamp from revision name.
+
+        Revision names have format: api-simulation-{hash}-{YYYYMMDDHHmmss}
+        Returns the timestamp string, or empty string if not found.
+        """
+        parts = revision.split("-")
+        if len(parts) >= 3:
+            last_part = parts[-1]
+            # Check if last part is a 14-digit timestamp
+            if len(last_part) == 14 and last_part.isdigit():
+                return last_part
+        return ""
+
     def _parse_tag(self, tag: str, revision: str) -> TagInfo | None:
         """
         Parse a tag string to extract country and version.
@@ -102,12 +118,16 @@ class RevisionCleanup:
             log.warning(f"Could not parse version from tag '{tag}': {version_str}")
             return None
 
+        # Extract deployment timestamp from revision name
+        deploy_timestamp = self._extract_deploy_timestamp(revision)
+
         return TagInfo(
             tag=tag,
             revision=revision,
             country=country,
             version=version_parts,
             version_str=version_str,
+            deploy_timestamp=deploy_timestamp,
         )
 
     async def _get_service(self) -> Service:
@@ -219,12 +239,17 @@ class RevisionCleanup:
             tags_to_keep.append(newest_uk)
             tags_to_keep_set.add(newest_uk.tag)
 
-        # 5. If keep_count > 2, add more tags (sorted by version, newest first)
+        # 5. If keep_count > 2, add more tags (sorted by deploy time, newest first)
         remaining_slots = keep_count - len(tags_to_keep)
 
         if remaining_slots > 0:
-            # Sort all tags by version (newest first), combining US and UK
-            all_tags_sorted = sorted(all_tags, key=lambda t: t.version, reverse=True)
+            # Sort all tags by deployment timestamp (newest first)
+            # Tags without timestamps (empty string) sort to the end
+            all_tags_sorted = sorted(
+                all_tags,
+                key=lambda t: t.deploy_timestamp if t.deploy_timestamp else "0",
+                reverse=True,
+            )
 
             for tag_info in all_tags_sorted:
                 if remaining_slots <= 0:

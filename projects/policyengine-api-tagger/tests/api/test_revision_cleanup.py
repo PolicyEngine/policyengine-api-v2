@@ -35,6 +35,40 @@ def make_mock_traffic_entry(tag: str | None, revision: str, percent: int = 0):
 
 
 # -----------------------------------------------------------------------------
+# Tests for _extract_deploy_timestamp
+# -----------------------------------------------------------------------------
+
+
+class TestExtractDeployTimestamp:
+    def test_extracts_timestamp_from_standard_revision(self, cleanup):
+        """Should extract timestamp from standard revision name format."""
+        result = cleanup._extract_deploy_timestamp("api-simulation-abc123-20251216101118")
+        assert result == "20251216101118"
+
+    def test_extracts_timestamp_from_longer_revision(self, cleanup):
+        """Should extract timestamp from revision with multiple dashes."""
+        result = cleanup._extract_deploy_timestamp(
+            "api-simulation-some-extra-parts-20251201123456"
+        )
+        assert result == "20251201123456"
+
+    def test_returns_empty_for_short_revision(self, cleanup):
+        """Should return empty string for revisions without proper timestamp."""
+        result = cleanup._extract_deploy_timestamp("rev-abc")
+        assert result == ""
+
+    def test_returns_empty_for_non_numeric_suffix(self, cleanup):
+        """Should return empty string if last part is not numeric."""
+        result = cleanup._extract_deploy_timestamp("api-simulation-abc-notanumber")
+        assert result == ""
+
+    def test_returns_empty_for_wrong_length_number(self, cleanup):
+        """Should return empty string if number is not 14 digits."""
+        result = cleanup._extract_deploy_timestamp("api-simulation-abc-12345")
+        assert result == ""
+
+
+# -----------------------------------------------------------------------------
 # Tests for _parse_tag
 # -----------------------------------------------------------------------------
 
@@ -421,20 +455,26 @@ class TestCleanup:
 
 
 # -----------------------------------------------------------------------------
-# Tests for version comparison
+# Tests for version comparison and timestamp sorting
 # -----------------------------------------------------------------------------
 
 
 class TestVersionComparison:
     @pytest.mark.asyncio
-    async def test_sorts_versions_correctly(self, cleanup):
-        """Should sort versions numerically, not lexicographically."""
+    async def test_safeguards_use_version_comparison(self, cleanup):
+        """Newest US and UK safeguards should be identified by version number."""
         mock_service = MagicMock()
         # These would sort wrong lexicographically: 1-9-0 > 1-10-0 > 1-100-0
         mock_service.traffic = [
-            make_mock_traffic_entry("country-us-model-1-9-0", "rev-1"),
-            make_mock_traffic_entry("country-us-model-1-100-0", "rev-2"),
-            make_mock_traffic_entry("country-us-model-1-10-0", "rev-3"),
+            make_mock_traffic_entry(
+                "country-us-model-1-9-0", "api-simulation-abc-20251210100000"
+            ),
+            make_mock_traffic_entry(
+                "country-us-model-1-100-0", "api-simulation-def-20251211100000"
+            ),
+            make_mock_traffic_entry(
+                "country-us-model-1-10-0", "api-simulation-ghi-20251212100000"
+            ),
         ]
 
         with patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get:
@@ -450,11 +490,109 @@ class TestVersionComparison:
                 errors,
             ) = await cleanup._analyze_tags(keep_count=2)
 
-        # 1.100.0 > 1.10.0 > 1.9.0 numerically
+        # 1.100.0 > 1.10.0 > 1.9.0 numerically - safeguards use version comparison
         assert newest_us.tag == "country-us-model-1-100-0"
 
-        # With keep=2, should keep 1.100.0 and 1.10.0, remove 1.9.0
+    @pytest.mark.asyncio
+    async def test_remaining_slots_use_timestamp_sorting(self, cleanup):
+        """After safeguards, remaining slots should be filled by deployment timestamp."""
+        mock_service = MagicMock()
+        # US version 1.100.0 is newest US by version but was deployed earlier
+        # US version 1.9.0 is oldest by version but deployed most recently
+        mock_service.traffic = [
+            make_mock_traffic_entry(
+                "country-us-model-1-9-0", "api-simulation-abc-20251215100000"
+            ),  # Most recent deploy
+            make_mock_traffic_entry(
+                "country-us-model-1-100-0", "api-simulation-def-20251210100000"
+            ),  # Oldest deploy
+            make_mock_traffic_entry(
+                "country-us-model-1-10-0", "api-simulation-ghi-20251212100000"
+            ),  # Middle deploy
+            make_mock_traffic_entry(
+                "country-uk-model-2-50-0", "api-simulation-jkl-20251214100000"
+            ),  # UK safeguard
+        ]
+
+        with patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_service
+
+            (
+                service,
+                all_tags,
+                tags_to_keep,
+                newest_us,
+                newest_uk,
+                tags_removed,
+                errors,
+            ) = await cleanup._analyze_tags(keep_count=3)
+
+        # Safeguards: US 1.100.0 (highest US version), UK 2.50.0 (highest UK version)
+        assert newest_us.tag == "country-us-model-1-100-0"
+        assert newest_uk.tag == "country-uk-model-2-50-0"
+
+        # With keep=3: safeguards (US 1.100.0 + UK 2.50.0) + 1 more by timestamp
+        # The next most recent by timestamp is US 1.9.0 (20251215100000)
         kept_tags = [t.tag for t in tags_to_keep]
-        assert "country-us-model-1-100-0" in kept_tags
-        assert "country-us-model-1-10-0" in kept_tags
-        assert "country-us-model-1-9-0" in tags_removed
+        assert len(kept_tags) == 3
+        assert "country-us-model-1-100-0" in kept_tags  # US safeguard
+        assert "country-uk-model-2-50-0" in kept_tags  # UK safeguard
+        assert "country-us-model-1-9-0" in kept_tags  # Most recent by timestamp
+
+        # US 1.10.0 should be removed (oldest timestamp after safeguards excluded)
+        assert "country-us-model-1-10-0" in tags_removed
+
+    @pytest.mark.asyncio
+    async def test_mixed_us_uk_sorted_by_timestamp(self, cleanup):
+        """US and UK tags should be mixed when sorting by timestamp."""
+        mock_service = MagicMock()
+        # Mix of US and UK with timestamps - should keep by deploy time, not by country
+        mock_service.traffic = [
+            make_mock_traffic_entry(
+                "country-us-model-1-400-0", "api-simulation-us1-20251210100000"
+            ),  # Oldest
+            make_mock_traffic_entry(
+                "country-uk-model-2-60-0", "api-simulation-uk1-20251211100000"
+            ),  # 2nd oldest
+            make_mock_traffic_entry(
+                "country-us-model-1-300-0", "api-simulation-us2-20251212100000"
+            ),  # Middle
+            make_mock_traffic_entry(
+                "country-uk-model-2-50-0", "api-simulation-uk2-20251213100000"
+            ),  # 2nd newest
+            make_mock_traffic_entry(
+                "country-us-model-1-200-0", "api-simulation-us3-20251214100000"
+            ),  # Newest
+        ]
+
+        with patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_service
+
+            (
+                service,
+                all_tags,
+                tags_to_keep,
+                newest_us,
+                newest_uk,
+                tags_removed,
+                errors,
+            ) = await cleanup._analyze_tags(keep_count=4)
+
+        # Safeguards by version: US 1.400.0, UK 2.60.0
+        assert newest_us.tag == "country-us-model-1-400-0"
+        assert newest_uk.tag == "country-uk-model-2-60-0"
+
+        # With keep=4:
+        # - US 1.400.0 (safeguard by version)
+        # - UK 2.60.0 (safeguard by version)
+        # - US 1.200.0 (most recent by timestamp: 20251214)
+        # - UK 2.50.0 (2nd most recent by timestamp: 20251213)
+        kept_tags = [t.tag for t in tags_to_keep]
+        assert len(kept_tags) == 4
+        assert "country-us-model-1-400-0" in kept_tags
+        assert "country-uk-model-2-60-0" in kept_tags
+        assert "country-us-model-1-200-0" in kept_tags
+        assert "country-uk-model-2-50-0" in kept_tags
+
+        # US 1.300.0 should be removed
+        assert "country-us-model-1-300-0" in tags_removed
