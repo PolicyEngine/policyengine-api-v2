@@ -49,10 +49,16 @@ module "cloud_run_tagger_api" {
   description = "API used to tag revisions for simulation api given a specific country package version"
   docker_repo = "policyengine-api-tagger"
   container_tag = var.tagger_container_tag
-  members_can_invoke = ["serviceAccount:tester@${var.project_id}.iam.gserviceaccount.com"]
+  members_can_invoke = [
+    "serviceAccount:tester@${var.project_id}.iam.gserviceaccount.com",
+    "serviceAccount:deploy@${var.project_id}.iam.gserviceaccount.com"
+  ]
 
   env = {
-    metadata_bucket_name =  google_storage_bucket.metadata.name
+    metadata_bucket_name    = google_storage_bucket.metadata.name
+    simulation_service_name = "api-simulation"
+    project_id              = var.project_id
+    region                  = var.region
   }
 
   limits = {
@@ -76,15 +82,14 @@ module "cloud_run_tagger_api" {
   enable_uptime_check = var.is_prod ? true : false
 }
 
-#give the tagger api access to the bucket
+# Give the tagger api read/write/delete access to the bucket for metadata management
 resource "google_storage_bucket_iam_member" "bucket_iam_tagger_member" {
   bucket = google_storage_bucket.metadata.name
-  role   = "roles/storage.objectViewer"  # Example: Grant object viewer role
-  member = "serviceAccount:${module.cloud_run_tagger_api.sa_email}"  # Example: Grant access to a user
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${module.cloud_run_tagger_api.sa_email}"
 }
 
-#give permission to get and update cloudrun services (for tagging revisions)
-#if you don't define your own permissions the closest role is run.developer which seems a bit expansive.
+# Give permission to get/update cloudrun services (for tagging and cleanup)
 resource "google_project_iam_custom_role" "cloudrun_service_updater" {
   role_id     = "cloudRunServiceUpdater"
   title       = "Cloud Run Service Updater"

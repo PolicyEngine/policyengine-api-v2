@@ -24,6 +24,7 @@ jobs:
     outputs:
       full_api_url: ${{ steps.deploy_infra.outputs.full_api_url }}
       simulation_api_url: ${{ steps.deploy_infra.outputs.simulation_api_url }}
+      tagger_api_url: ${{ steps.deploy_infra.outputs.tagger_api_url }}
       us_model_version: ${{ steps.deploy_infra.outputs.us_model_version }}
       uk_model_version: ${{ steps.deploy_infra.outputs.uk_model_version }}
     environment: ${{ inputs.environment }}
@@ -112,11 +113,12 @@ jobs:
         terraform output -json > terraform_output.json
         FULL_API_URL=$(cat terraform_output.json | jq -r '.full_api_url.value // empty')
         SIMULATION_API_URL=$(cat terraform_output.json | jq -r '.simulation_api_url.value // empty')
-        
+        TAGGER_API_URL=$(cat terraform_output.json | jq -r '.tagger_api_url.value // empty')
+
         # Extract model versions from release_metadata
         US_MODEL_VERSION=$(cat terraform_output.json | jq -r '.release_metadata.value.models.us // empty')
         UK_MODEL_VERSION=$(cat terraform_output.json | jq -r '.release_metadata.value.models.uk // empty')
-        
+
         # If outputs are not available from terraform, construct them
         if [ -z "$FULL_API_URL" ]; then
           FULL_API_URL="https://full-api-${{ vars.REGION }}-uc.a.run.app"
@@ -124,7 +126,10 @@ jobs:
         if [ -z "$SIMULATION_API_URL" ]; then
           SIMULATION_API_URL="https://api-simulation-${{ vars.REGION }}-uc.a.run.app"
         fi
-        
+        if [ -z "$TAGGER_API_URL" ]; then
+          TAGGER_API_URL="https://tagger-api-${{ vars.REGION }}-uc.a.run.app"
+        fi
+
         # If model versions are not available from terraform, use the ones from package extraction
         if [ -z "$US_MODEL_VERSION" ]; then
           US_MODEL_VERSION="${{ steps.versions.outputs.us_version }}"
@@ -132,9 +137,10 @@ jobs:
         if [ -z "$UK_MODEL_VERSION" ]; then
           UK_MODEL_VERSION="${{ steps.versions.outputs.uk_version }}"
         fi
-        
+
         echo "full_api_url=${FULL_API_URL}" >> "$GITHUB_OUTPUT"
         echo "simulation_api_url=${SIMULATION_API_URL}" >> "$GITHUB_OUTPUT"
+        echo "tagger_api_url=${TAGGER_API_URL}" >> "$GITHUB_OUTPUT"
         echo "us_model_version=${US_MODEL_VERSION}" >> "$GITHUB_OUTPUT"
         echo "uk_model_version=${UK_MODEL_VERSION}" >> "$GITHUB_OUTPUT"
     
@@ -143,23 +149,43 @@ jobs:
       run: |
         # Get the metadata bucket name from terraform output
         METADATA_BUCKET=$(terraform output -raw metadata_bucket_name)
-        
+
         # Get the release metadata JSON
         RELEASE_METADATA=$(terraform output -json release_metadata)
-        
+
         # Upload metadata files to GCS bucket
         # Upload live.json
         echo "$RELEASE_METADATA" | gcloud storage cp - "gs://${METADATA_BUCKET}/live.json"
-        
+
         # Upload version-tagged metadata for US model
         US_VERSION="${{ steps.versions.outputs.us_version }}"
         echo "$RELEASE_METADATA" | gcloud storage cp - "gs://${METADATA_BUCKET}/us.${US_VERSION}.json"
-        
+
         # Upload version-tagged metadata for UK model
         UK_VERSION="${{ steps.versions.outputs.uk_version }}"
         echo "$RELEASE_METADATA" | gcloud storage cp - "gs://${METADATA_BUCKET}/uk.${UK_VERSION}.json"
-        
+
         echo "Tagged API versions: US=${US_VERSION}, UK=${UK_VERSION}"
+
+    - name: Update deployments manifest
+      working-directory: deployment/terraform/infra
+      run: |
+        METADATA_BUCKET=$(terraform output -raw metadata_bucket_name)
+        REVISION=$(terraform output -json release_metadata | jq -r '.revision')
+        US_VERSION="${{ steps.versions.outputs.us_version }}"
+        UK_VERSION="${{ steps.versions.outputs.uk_version }}"
+
+        ../../../scripts/update-deployments-manifest.sh \
+          "$METADATA_BUCKET" \
+          "$REVISION" \
+          "$US_VERSION" \
+          "$UK_VERSION"
+
+    - name: Cleanup old revisions
+      working-directory: deployment/terraform/infra
+      run: |
+        TAGGER_URL=$(terraform output -raw tagger_api_url)
+        ../../../scripts/cleanup-old-revisions.sh "$TAGGER_URL" 40
 
   integ_test:
     name: Run integration test
@@ -208,11 +234,22 @@ jobs:
         token_format: "id_token"
         id_token_audience: ${{ needs.deploy.outputs.simulation_api_url }}
         id_token_include_email: true
-    
+
+    - name: Auth as tester SA for tagger API
+      id: get-tagger-id-token
+      uses: "google-github-actions/auth@v2"
+      with:
+        workload_identity_provider: "${{ vars._GITHUB_IDENTITY_POOL_PROVIDER_NAME }}"
+        service_account: "tester@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com"
+        token_format: "id_token"
+        id_token_audience: ${{ needs.deploy.outputs.tagger_api_url }}
+        id_token_include_email: true
+
     - name: Mask ID tokens
       run: |
         echo "::add-mask::${{steps.get-full-id-token.outputs.id_token}}"
         echo "::add-mask::${{steps.get-simulation-id-token.outputs.id_token}}"
+        echo "::add-mask::${{steps.get-tagger-id-token.outputs.id_token}}"
     
     - name: Generate API clients
       run: |
@@ -222,11 +259,21 @@ jobs:
       run: |
         cd projects/policyengine-apis-integ
         uv sync --extra test
-        uv run pytest tests/ -v
+        # For beta: run all tests including beta_only
+        # For prod: exclude beta_only tests
+        if [ "${{ inputs.environment }}" = "beta" ]; then
+          echo "Running all integration tests (including beta_only)"
+          uv run pytest tests/ -v
+        else
+          echo "Running integration tests (excluding beta_only)"
+          uv run pytest tests/ -v -m "not beta_only"
+        fi
       env:
         full_integ_test_access_token: ${{ steps.get-full-id-token.outputs.id_token }}
         full_integ_test_base_url: ${{ needs.deploy.outputs.full_api_url }}
         simulation_integ_test_access_token: ${{ steps.get-simulation-id-token.outputs.id_token }}
         simulation_integ_test_base_url: ${{ needs.deploy.outputs.simulation_api_url }}
+        tagger_integ_test_access_token: ${{ steps.get-tagger-id-token.outputs.id_token }}
+        tagger_integ_test_base_url: ${{ needs.deploy.outputs.tagger_api_url }}
         workflow_integ_test_project_id: ${{ vars.PROJECT_ID }}
         workflow_integ_test_us_model_version: ${{ needs.deploy.outputs.us_model_version }}
