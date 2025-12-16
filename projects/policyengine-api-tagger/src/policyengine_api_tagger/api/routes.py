@@ -23,7 +23,9 @@ def create_router(
         return uri
 
     @router.post("/cleanup")
-    async def cleanup_old_revisions(keep: int = 40, dry_run: bool = False) -> CleanupResult:
+    async def cleanup_old_revisions(
+        keep: int = 40, dry_run: bool = False
+    ) -> CleanupResult:
         """
         Clean up old traffic tags, keeping the specified number.
 

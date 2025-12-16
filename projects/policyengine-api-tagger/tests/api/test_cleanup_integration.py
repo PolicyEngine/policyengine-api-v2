@@ -71,9 +71,7 @@ class TestCleanupEndpointLocal:
 
             yield TestClient(app)
 
-    def test_cleanup_returns_success_with_tags(
-        self, client, mock_cloudrun_service
-    ):
+    def test_cleanup_returns_success_with_tags(self, client, mock_cloudrun_service):
         """Cleanup succeeds and returns tag information."""
         mock_cloudrun_service["service"].traffic = [
             make_mock_traffic_entry("country-us-model-1-459-0", "rev-us"),
@@ -90,9 +88,7 @@ class TestCleanupEndpointLocal:
         assert result["newest_us_tag"] == "country-us-model-1-459-0"
         assert result["newest_uk_tag"] == "country-uk-model-2-65-9"
 
-    def test_cleanup_dry_run_does_not_modify(
-        self, client, mock_cloudrun_service
-    ):
+    def test_cleanup_dry_run_does_not_modify(self, client, mock_cloudrun_service):
         """Cleanup with dry_run=true should NOT call update_service."""
         mock_cloudrun_service["service"].traffic = [
             make_mock_traffic_entry("country-us-model-1-100-0", "rev-1"),
@@ -112,9 +108,7 @@ class TestCleanupEndpointLocal:
         # CRITICAL: update_service should NOT have been called
         mock_cloudrun_service["client"].update_service.assert_not_called()
 
-    def test_cleanup_identifies_safeguards(
-        self, client, mock_cloudrun_service
-    ):
+    def test_cleanup_identifies_safeguards(self, client, mock_cloudrun_service):
         """Cleanup correctly identifies newest US and UK tags."""
         mock_cloudrun_service["service"].traffic = [
             make_mock_traffic_entry("country-us-model-1-100-0", "rev-1"),
@@ -130,9 +124,7 @@ class TestCleanupEndpointLocal:
         assert result["newest_us_tag"] == "country-us-model-1-459-0"
         assert result["newest_uk_tag"] == "country-uk-model-2-65-9"
 
-    def test_cleanup_respects_keep_count(
-        self, client, mock_cloudrun_service
-    ):
+    def test_cleanup_respects_keep_count(self, client, mock_cloudrun_service):
         """Cleanup keeps the correct number of tags."""
         mock_cloudrun_service["service"].traffic = [
             make_mock_traffic_entry("country-us-model-1-100-0", "rev-1"),
@@ -156,9 +148,7 @@ class TestCleanupEndpointLocal:
         assert response.status_code == 400
         assert "at least 2" in response.json()["detail"]
 
-    def test_cleanup_handles_no_tags(
-        self, client, mock_cloudrun_service
-    ):
+    def test_cleanup_handles_no_tags(self, client, mock_cloudrun_service):
         """Cleanup handles service with no tags."""
         mock_cloudrun_service["service"].traffic = [
             make_mock_traffic_entry(None, "rev-main", percent=100),

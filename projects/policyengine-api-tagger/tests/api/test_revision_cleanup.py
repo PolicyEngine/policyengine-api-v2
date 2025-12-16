@@ -101,8 +101,15 @@ class TestAnalyzeTags:
         with patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_service
 
-            service, all_tags, tags_to_keep, newest_us, newest_uk, tags_removed, errors = \
-                await cleanup._analyze_tags(keep_count=40)
+            (
+                service,
+                all_tags,
+                tags_to_keep,
+                newest_us,
+                newest_uk,
+                tags_removed,
+                errors,
+            ) = await cleanup._analyze_tags(keep_count=40)
 
         assert newest_us is not None
         assert newest_us.tag == "country-us-model-1-459-0"
@@ -126,8 +133,15 @@ class TestAnalyzeTags:
         with patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_service
 
-            service, all_tags, tags_to_keep, newest_us, newest_uk, tags_removed, errors = \
-                await cleanup._analyze_tags(keep_count=4)
+            (
+                service,
+                all_tags,
+                tags_to_keep,
+                newest_us,
+                newest_uk,
+                tags_removed,
+                errors,
+            ) = await cleanup._analyze_tags(keep_count=4)
 
         # Should keep: newest US, newest UK, then next 2 newest by version
         assert len(tags_to_keep) == 4
@@ -152,8 +166,15 @@ class TestAnalyzeTags:
         with patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_service
 
-            service, all_tags, tags_to_keep, newest_us, newest_uk, tags_removed, errors = \
-                await cleanup._analyze_tags(keep_count=1)  # Should become 2
+            (
+                service,
+                all_tags,
+                tags_to_keep,
+                newest_us,
+                newest_uk,
+                tags_removed,
+                errors,
+            ) = await cleanup._analyze_tags(keep_count=1)  # Should become 2
 
         # Should still keep both safeguards
         assert len(tags_to_keep) == 2
@@ -169,8 +190,15 @@ class TestAnalyzeTags:
         with patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_service
 
-            service, all_tags, tags_to_keep, newest_us, newest_uk, tags_removed, errors = \
-                await cleanup._analyze_tags(keep_count=40)
+            (
+                service,
+                all_tags,
+                tags_to_keep,
+                newest_us,
+                newest_uk,
+                tags_removed,
+                errors,
+            ) = await cleanup._analyze_tags(keep_count=40)
 
         assert len(all_tags) == 0
         assert len(tags_to_keep) == 0
@@ -189,8 +217,15 @@ class TestAnalyzeTags:
         with patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_service
 
-            service, all_tags, tags_to_keep, newest_us, newest_uk, tags_removed, errors = \
-                await cleanup._analyze_tags(keep_count=40)
+            (
+                service,
+                all_tags,
+                tags_to_keep,
+                newest_us,
+                newest_uk,
+                tags_removed,
+                errors,
+            ) = await cleanup._analyze_tags(keep_count=40)
 
         assert newest_us is not None
         assert newest_us.tag == "country-us-model-1-200-0"
@@ -202,8 +237,15 @@ class TestAnalyzeTags:
         with patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get:
             mock_get.side_effect = Exception("Cloud Run API error")
 
-            service, all_tags, tags_to_keep, newest_us, newest_uk, tags_removed, errors = \
-                await cleanup._analyze_tags(keep_count=40)
+            (
+                service,
+                all_tags,
+                tags_to_keep,
+                newest_us,
+                newest_uk,
+                tags_removed,
+                errors,
+            ) = await cleanup._analyze_tags(keep_count=40)
 
         assert service is None
         assert len(errors) == 1
@@ -250,7 +292,9 @@ class TestPreview:
 
         with (
             patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get,
-            patch.object(cleanup, "_update_service_traffic", new_callable=AsyncMock) as mock_update,
+            patch.object(
+                cleanup, "_update_service_traffic", new_callable=AsyncMock
+            ) as mock_update,
         ):
             mock_get.return_value = mock_service
 
@@ -278,7 +322,9 @@ class TestCleanup:
 
         with (
             patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get,
-            patch.object(cleanup, "_update_service_traffic", new_callable=AsyncMock) as mock_update,
+            patch.object(
+                cleanup, "_update_service_traffic", new_callable=AsyncMock
+            ) as mock_update,
         ):
             mock_get.return_value = mock_service
 
@@ -299,7 +345,9 @@ class TestCleanup:
 
         with (
             patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get,
-            patch.object(cleanup, "_update_service_traffic", new_callable=AsyncMock) as mock_update,
+            patch.object(
+                cleanup, "_update_service_traffic", new_callable=AsyncMock
+            ) as mock_update,
         ):
             mock_get.return_value = mock_service
 
@@ -322,7 +370,9 @@ class TestCleanup:
 
         with (
             patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get,
-            patch.object(cleanup, "_update_service_traffic", new_callable=AsyncMock) as mock_update,
+            patch.object(
+                cleanup, "_update_service_traffic", new_callable=AsyncMock
+            ) as mock_update,
         ):
             mock_get.return_value = mock_service
             mock_update.side_effect = Exception("Update failed")
@@ -354,7 +404,9 @@ class TestCleanup:
 
         with (
             patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get,
-            patch.object(cleanup, "_update_service_traffic", side_effect=capture_update) as mock_update,
+            patch.object(
+                cleanup, "_update_service_traffic", side_effect=capture_update
+            ) as mock_update,
         ):
             mock_get.return_value = mock_service
 
@@ -388,8 +440,15 @@ class TestVersionComparison:
         with patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_service
 
-            service, all_tags, tags_to_keep, newest_us, newest_uk, tags_removed, errors = \
-                await cleanup._analyze_tags(keep_count=2)
+            (
+                service,
+                all_tags,
+                tags_to_keep,
+                newest_us,
+                newest_uk,
+                tags_removed,
+                errors,
+            ) = await cleanup._analyze_tags(keep_count=2)
 
         # 1.100.0 > 1.10.0 > 1.9.0 numerically
         assert newest_us.tag == "country-us-model-1-100-0"

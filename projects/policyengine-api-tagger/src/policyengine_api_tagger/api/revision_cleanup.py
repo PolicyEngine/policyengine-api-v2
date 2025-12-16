@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 
 class TagInfo(BaseModel):
     """Information about a traffic tag."""
+
     tag: str
     revision: str
     country: str  # "us" or "uk"
@@ -77,7 +78,7 @@ class RevisionCleanup:
         Example: country-us-model-1-459-0 -> country=us, version=(1, 459, 0)
         """
         # Match pattern: country-{us|uk}-model-{version}
-        match = re.match(r'^country-(us|uk)-model-(.+)$', tag)
+        match = re.match(r"^country-(us|uk)-model-(.+)$", tag)
         if not match:
             log.debug(f"Tag '{tag}' doesn't match expected pattern, skipping")
             return None
@@ -86,11 +87,11 @@ class RevisionCleanup:
         version_with_dashes = match.group(2)
 
         # Convert dashes back to dots for the version string
-        version_str = version_with_dashes.replace('-', '.')
+        version_str = version_with_dashes.replace("-", ".")
 
         # Parse version into tuple of integers for comparison
         try:
-            version_parts = tuple(int(p) for p in version_str.split('.'))
+            version_parts = tuple(int(p) for p in version_str.split("."))
         except ValueError:
             log.warning(f"Could not parse version from tag '{tag}': {version_str}")
             return None
@@ -109,7 +110,9 @@ class RevisionCleanup:
         service_name = self._get_service_name()
         return await client.get_service(name=service_name)
 
-    async def _update_service_traffic(self, service: Service, tags_to_keep: list[TagInfo]) -> None:
+    async def _update_service_traffic(
+        self, service: Service, tags_to_keep: list[TagInfo]
+    ) -> None:
         """
         Update the service traffic configuration to only include specified tags.
 
@@ -130,11 +133,14 @@ class RevisionCleanup:
         # Add the tags we want to keep (with percent=0)
         for tag_info in tags_to_keep:
             from google.cloud.run_v2 import TrafficTarget
-            new_traffic.append(TrafficTarget(
-                percent=0,
-                revision=tag_info.revision,
-                tag=tag_info.tag,
-            ))
+
+            new_traffic.append(
+                TrafficTarget(
+                    percent=0,
+                    revision=tag_info.revision,
+                    tag=tag_info.tag,
+                )
+            )
 
         # Update the service
         service.traffic = new_traffic
@@ -142,7 +148,9 @@ class RevisionCleanup:
         request = UpdateServiceRequest(service=service)
         await client.update_service(request=request)
 
-    async def _analyze_tags(self, keep_count: int) -> tuple[
+    async def _analyze_tags(
+        self, keep_count: int
+    ) -> tuple[
         Service | None,
         list[TagInfo],
         list[TagInfo],
@@ -226,7 +234,15 @@ class RevisionCleanup:
 
         log.info(f"Keeping {len(tags_to_keep)} tags, removing {len(tags_removed)} tags")
 
-        return service, all_tags, tags_to_keep, newest_us, newest_uk, tags_removed, errors
+        return (
+            service,
+            all_tags,
+            tags_to_keep,
+            newest_us,
+            newest_uk,
+            tags_removed,
+            errors,
+        )
 
     async def preview(self, keep_count: int = 40) -> CleanupResult:
         """
@@ -238,8 +254,15 @@ class RevisionCleanup:
         Returns:
             CleanupResult showing what would be kept/removed
         """
-        service, all_tags, tags_to_keep, newest_us, newest_uk, tags_removed, errors = \
-            await self._analyze_tags(keep_count)
+        (
+            service,
+            all_tags,
+            tags_to_keep,
+            newest_us,
+            newest_uk,
+            tags_removed,
+            errors,
+        ) = await self._analyze_tags(keep_count)
 
         if service is None:
             return CleanupResult(
@@ -276,8 +299,15 @@ class RevisionCleanup:
         Returns:
             CleanupResult with details of what was cleaned up
         """
-        service, all_tags, tags_to_keep, newest_us, newest_uk, tags_removed, errors = \
-            await self._analyze_tags(keep_count)
+        (
+            service,
+            all_tags,
+            tags_to_keep,
+            newest_us,
+            newest_uk,
+            tags_removed,
+            errors,
+        ) = await self._analyze_tags(keep_count)
 
         if service is None:
             return CleanupResult(
