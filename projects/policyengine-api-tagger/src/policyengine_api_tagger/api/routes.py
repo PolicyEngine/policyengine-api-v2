@@ -23,17 +23,20 @@ def create_router(
         return uri
 
     @router.post("/cleanup")
-    async def cleanup_old_revisions(keep: int = 5) -> CleanupResult:
+    async def cleanup_old_revisions(keep: int = 40) -> CleanupResult:
         """
-        Clean up old Cloud Run traffic tags and metadata files.
+        Clean up old traffic tags, keeping the specified number.
 
-        This endpoint removes traffic tags for old revisions (which stops
-        them from keeping instances warm) and deletes their metadata files.
-        It maintains safeguards to ensure the most recent US and UK versions
-        are never removed.
+        This endpoint:
+        1. Gets all existing traffic tags from Cloud Run
+        2. Identifies the newest US and UK tags (always kept as safeguards)
+        3. Keeps the top `keep` tags total (including safeguards)
+        4. Updates the traffic configuration in one atomic operation
+
+        Metadata files are NOT touched - they enable on-demand tag recreation.
 
         Args:
-            keep: Number of recent deployments to keep (default: 5)
+            keep: Number of tags to keep (default: 40, minimum: 2)
 
         Returns:
             CleanupResult with details of what was cleaned up
@@ -45,17 +48,17 @@ def create_router(
                 "Ensure simulation_service_name, project_id, and region are set.",
             )
 
-        if keep < 1:
+        if keep < 2:
             raise HTTPException(
-                status_code=400, detail="keep parameter must be at least 1"
+                status_code=400,
+                detail="keep parameter must be at least 2 (for US + UK safeguards)",
             )
 
-        log.info(f"Starting cleanup: keep={keep}")
+        log.info(f"Starting cleanup with keep={keep}")
         result = await cleanup.cleanup(keep_count=keep)
         log.info(
-            f"Cleanup complete: kept={len(result.revisions_kept)}, "
-            f"tags_removed={len(result.tags_removed)}, "
-            f"files_deleted={len(result.metadata_files_deleted)}"
+            f"Cleanup complete: total_tags={result.total_tags_found}, "
+            f"kept={len(result.tags_kept)}, removed={len(result.tags_removed)}"
         )
         return result
 

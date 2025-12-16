@@ -191,11 +191,11 @@ jobs:
         id_token_audience: ${{ steps.deploy_infra.outputs.tagger_api_url }}
         id_token_include_email: true
 
-    - name: Cleanup old revisions
+    - name: Cleanup old traffic tags
       working-directory: deployment/terraform/infra
       run: |
         TAGGER_URL=$(terraform output -raw tagger_api_url)
-        bash ../../../scripts/cleanup-old-revisions.sh \
+        python ../../../scripts/cleanup_old_revisions.py \
           "$TAGGER_URL" \
           "${{ steps.tagger-token.outputs.id_token }}" \
           40

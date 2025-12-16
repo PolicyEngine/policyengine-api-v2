@@ -47,10 +47,10 @@ tagger = RevisionTagger(settings.metadata_bucket_name)
 cleanup = None
 if settings.cleanup_enabled():
     cleanup = RevisionCleanup(
-        bucket_name=settings.metadata_bucket_name,
-        simulation_service_name=settings.simulation_service_name,
         project_id=settings.project_id,
         region=settings.region,
+        simulation_service_name=settings.simulation_service_name,
+        bucket_name=settings.metadata_bucket_name,
     )
     logger.info(
         f"Cleanup service initialized for {settings.simulation_service_name} "

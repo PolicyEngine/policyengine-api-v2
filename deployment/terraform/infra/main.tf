@@ -71,13 +71,12 @@ module "cloud_run_tagger_api" {
   slack_notification_channel_name=var.slack_notification_channel_name
   commit_url = var.commit_url
 
+  # Allow up to 120s for cleanup operations (cold start + Cloud Run API calls)
+  timeout = "120s"
   uptime_timeout = "1s"
   min_instance_count = var.is_prod ? 1: 0
   max_instance_count = 1
-  #guessing. Need to tune.
   max_instance_request_concurrency = var.is_prod ? 20: 1
-  #this service should return basically immediately to all requests.
-  timeout = "1s"
 
   enable_uptime_check = var.is_prod ? true : false
 }
@@ -89,14 +88,15 @@ resource "google_storage_bucket_iam_member" "bucket_iam_tagger_member" {
   member = "serviceAccount:${module.cloud_run_tagger_api.sa_email}"
 }
 
-# Give permission to get/update cloudrun services (for tagging and cleanup)
+# Give permission to get/update cloudrun services and list revisions (for tagging and cleanup)
 resource "google_project_iam_custom_role" "cloudrun_service_updater" {
   role_id     = "cloudRunServiceUpdater"
   title       = "Cloud Run Service Updater"
-  description = "Can get and update Cloud Run services"
+  description = "Can get and update Cloud Run services and list revisions"
   permissions = [
     "run.services.get",
-    "run.services.update"
+    "run.services.update",
+    "run.revisions.list"
   ]
 }
 

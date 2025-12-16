@@ -1,464 +1,327 @@
 """
-Cleanup module for removing old Cloud Run traffic tags and metadata files.
+Cleanup module for managing Cloud Run traffic tags.
 
 This module provides functionality to:
-1. Read the deployment manifest from GCS
-2. Determine which revisions should be kept (last N deployments + safeguards)
-3. Remove Cloud Run traffic tags for old revisions
-4. Delete old metadata files from GCS
+1. List all existing traffic tags from Cloud Run
+2. Determine which tags to keep (newest US, newest UK, plus N most recent)
+3. Update the traffic configuration in one atomic operation
+
+Metadata files are NOT touched - they enable on-demand tag recreation.
+The manifest is NOT touched - it's kept for historical record.
 """
 
-from google.cloud import storage
-from google.cloud.run_v2 import (
-    ServicesAsyncClient,
-    UpdateServiceRequest,
-    GetServiceRequest,
-)
-from pydantic import BaseModel
-from anyio import to_thread
+import re
 import logging
-import uuid
-from datetime import datetime
+from pydantic import BaseModel
+from google.cloud.run_v2 import ServicesAsyncClient, Service, UpdateServiceRequest
 
 log = logging.getLogger(__name__)
 
 
-class DeploymentEntry(BaseModel):
-    """A single entry in the deployments manifest."""
-
+class TagInfo(BaseModel):
+    """Information about a traffic tag."""
+    tag: str
     revision: str
-    us: str
-    uk: str
-    deployed_at: datetime
+    country: str  # "us" or "uk"
+    version: tuple[int, ...]  # Parsed version for comparison, e.g., (1, 459, 0)
+    version_str: str  # Original version string, e.g., "1.459.0"
 
 
 class CleanupResult(BaseModel):
     """Result of a cleanup operation."""
 
-    revisions_kept: list[str]
+    total_tags_found: int
+    tags_kept: list[str]
     tags_removed: list[str]
-    metadata_files_deleted: list[str]
+    newest_us_tag: str | None
+    newest_uk_tag: str | None
     errors: list[str]
-
-
-def _read_manifest_sync(bucket_name: str) -> list[DeploymentEntry]:
-    """Read the deployments manifest from GCS."""
-    storage_client = storage.Client()
-    blob = storage_client.bucket(bucket_name).blob("deployments.json")
-
-    if not blob.exists():
-        log.warning(
-            "No deployments.json manifest found in bucket %s. "
-            "Cleanup cannot proceed without a manifest.",
-            bucket_name,
-        )
-        return []
-
-    import json
-
-    content = blob.download_as_text()
-    data = json.loads(content)
-    return [DeploymentEntry.model_validate(entry) for entry in data]
-
-
-def _write_manifest_sync(bucket_name: str, entries: list[DeploymentEntry]) -> None:
-    """
-    Write the deployments manifest to GCS atomically.
-
-    Uses a write-to-temp-then-copy pattern to avoid partial writes being visible.
-    """
-    import json
-
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
-
-    # Generate a unique temporary blob name
-    temp_blob_name = f"deployments.json.tmp.{uuid.uuid4().hex}"
-    temp_blob = bucket.blob(temp_blob_name)
-
-    data = [entry.model_dump(mode="json") for entry in entries]
-    content = json.dumps(data, indent=2, default=str)
-
-    try:
-        # Write to temporary location
-        temp_blob.upload_from_string(content, content_type="application/json")
-        log.info(f"Wrote manifest to temporary location: {temp_blob_name}")
-
-        # Copy temp to final location (atomic from reader's perspective)
-        bucket.copy_blob(temp_blob, bucket, "deployments.json")
-        log.info(f"Copied manifest to final location: deployments.json")
-
-    finally:
-        # Clean up temp blob
-        try:
-            temp_blob.delete()
-            log.info(f"Deleted temporary manifest: {temp_blob_name}")
-        except Exception as e:
-            log.warning(f"Failed to delete temporary manifest {temp_blob_name}: {e}")
-
-    log.info(f"Updated manifest with {len(entries)} entries")
-
-
-def _list_metadata_files_sync(bucket_name: str) -> list[str]:
-    """List all country version metadata files in the bucket."""
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
-
-    files = []
-    for blob in bucket.list_blobs():
-        name = blob.name
-        # Match patterns like us.1.2.3.json or uk.2.0.0.json
-        if (name.startswith("us.") or name.startswith("uk.")) and name.endswith(
-            ".json"
-        ):
-            files.append(name)
-    return files
-
-
-def _delete_blob_sync(bucket_name: str, blob_name: str) -> None:
-    """Delete a blob from GCS."""
-    storage_client = storage.Client()
-    blob = storage_client.bucket(bucket_name).blob(blob_name)
-    blob.delete()
-    log.info(f"Deleted metadata file: {blob_name}")
-
-
-def _read_metadata_file_sync(bucket_name: str, blob_name: str) -> dict | None:
-    """Read a metadata file and return its contents."""
-    import json
-
-    storage_client = storage.Client()
-    blob = storage_client.bucket(bucket_name).blob(blob_name)
-
-    if not blob.exists():
-        return None
-
-    content = blob.download_as_text()
-    return json.loads(content)
 
 
 class RevisionCleanup:
     def __init__(
         self,
-        bucket_name: str,
-        simulation_service_name: str,
         project_id: str,
         region: str,
+        simulation_service_name: str | None = None,
+        bucket_name: str | None = None,
+        # Alternative shorter parameter names for CLI use
+        project: str | None = None,
+        service: str | None = None,
     ):
         """
         Initialize RevisionCleanup.
 
         Args:
-            bucket_name: GCS bucket containing metadata and manifest
-            simulation_service_name: Name of the simulation API Cloud Run service
-            project_id: GCP project ID
+            project_id: GCP project ID (or use 'project' shorthand)
             region: GCP region
+            simulation_service_name: Name of the simulation API Cloud Run service (or use 'service' shorthand)
+            bucket_name: GCS bucket containing metadata files (not used in tag cleanup)
+            project: Shorthand for project_id
+            service: Shorthand for simulation_service_name
         """
-        self.bucket_name = bucket_name
-        self.simulation_service_name = simulation_service_name
-        self.project_id = project_id
+        self.project_id = project or project_id
         self.region = region
+        self.simulation_service_name = service or simulation_service_name
+        self.bucket_name = bucket_name
 
-    def _get_full_service_name(self) -> str:
-        """Get the full Cloud Run service resource name."""
+    def _get_service_name(self) -> str:
+        """Get the full service name for Cloud Run API."""
         return f"projects/{self.project_id}/locations/{self.region}/services/{self.simulation_service_name}"
 
-    async def _read_manifest(self) -> list[DeploymentEntry]:
-        """Read the deployment manifest from GCS."""
-        return await to_thread.run_sync(_read_manifest_sync, self.bucket_name)
-
-    async def _write_manifest(self, entries: list[DeploymentEntry]) -> None:
-        """Write the deployment manifest to GCS atomically."""
-        await to_thread.run_sync(_write_manifest_sync, self.bucket_name, entries)
-
-    async def _list_metadata_files(self) -> list[str]:
-        """List all metadata files in the bucket."""
-        return await to_thread.run_sync(_list_metadata_files_sync, self.bucket_name)
-
-    async def _delete_metadata_file(self, blob_name: str) -> None:
-        """Delete a metadata file from GCS."""
-        await to_thread.run_sync(_delete_blob_sync, self.bucket_name, blob_name)
-
-    async def _read_metadata_file(self, blob_name: str) -> dict | None:
-        """Read a metadata file."""
-        return await to_thread.run_sync(
-            _read_metadata_file_sync, self.bucket_name, blob_name
-        )
-
-    def _determine_revisions_to_keep(
-        self, manifest: list[DeploymentEntry], keep_count: int
-    ) -> set[str]:
+    def _parse_tag(self, tag: str, revision: str) -> TagInfo | None:
         """
-        Determine which revisions should be kept.
+        Parse a tag string to extract country and version.
 
-        Always returns exactly `keep_count` revisions (or fewer if manifest
-        has fewer entries). Prioritizes:
-        1. The revision with the highest US semver version (safeguard)
-        2. The revision with the highest UK semver version (safeguard)
-        3. Most recent deployments by deployed_at to fill remaining slots
-
-        This ensures we never remove tags for the latest version of either
-        country package, even if there's a bug or unusual deployment pattern.
+        Expected format: country-{country}-model-{version with dashes}
+        Example: country-us-model-1-459-0 -> country=us, version=(1, 459, 0)
         """
-        if not manifest:
-            return set()
+        # Match pattern: country-{us|uk}-model-{version}
+        match = re.match(r'^country-(us|uk)-model-(.+)$', tag)
+        if not match:
+            log.debug(f"Tag '{tag}' doesn't match expected pattern, skipping")
+            return None
 
-        # If manifest has fewer entries than keep_count, keep all
-        if len(manifest) <= keep_count:
-            return {entry.revision for entry in manifest}
+        country = match.group(1)
+        version_with_dashes = match.group(2)
 
-        # Sort by deployment time, newest first
-        sorted_manifest = sorted(manifest, key=lambda x: x.deployed_at, reverse=True)
+        # Convert dashes back to dots for the version string
+        version_str = version_with_dashes.replace('-', '.')
 
-        # Start with safeguarded revisions
-        revisions_to_keep = set()
-
-        # Safeguard: Find and keep the revision with highest US semver
-        highest_us_entry = None
-        highest_us_version = None
-        for entry in sorted_manifest:
-            if entry.us:
-                if (
-                    highest_us_version is None
-                    or self._compare_versions(entry.us, highest_us_version) > 0
-                ):
-                    highest_us_version = entry.us
-                    highest_us_entry = entry
-
-        if highest_us_entry:
-            revisions_to_keep.add(highest_us_entry.revision)
-            log.info(
-                f"Safeguard: Keeping revision {highest_us_entry.revision} "
-                f"(highest US version: {highest_us_version})"
-            )
-
-        # Safeguard: Find and keep the revision with highest UK semver
-        highest_uk_entry = None
-        highest_uk_version = None
-        for entry in sorted_manifest:
-            if entry.uk:
-                if (
-                    highest_uk_version is None
-                    or self._compare_versions(entry.uk, highest_uk_version) > 0
-                ):
-                    highest_uk_version = entry.uk
-                    highest_uk_entry = entry
-
-        if highest_uk_entry and highest_uk_entry.revision not in revisions_to_keep:
-            revisions_to_keep.add(highest_uk_entry.revision)
-            log.info(
-                f"Safeguard: Keeping revision {highest_uk_entry.revision} "
-                f"(highest UK version: {highest_uk_version})"
-            )
-
-        # Fill remaining slots with most recent deployments
-        remaining_slots = keep_count - len(revisions_to_keep)
-        for entry in sorted_manifest:
-            if remaining_slots <= 0:
-                break
-            if entry.revision not in revisions_to_keep:
-                revisions_to_keep.add(entry.revision)
-                remaining_slots -= 1
-
-        return revisions_to_keep
-
-    def _compare_versions(self, v1: str, v2: str) -> int:
-        """
-        Compare two semantic versions.
-        Returns: positive if v1 > v2, negative if v1 < v2, 0 if equal.
-        """
+        # Parse version into tuple of integers for comparison
         try:
-            parts1 = [int(x) for x in v1.split(".")]
-            parts2 = [int(x) for x in v2.split(".")]
+            version_parts = tuple(int(p) for p in version_str.split('.'))
+        except ValueError:
+            log.warning(f"Could not parse version from tag '{tag}': {version_str}")
+            return None
 
-            # Pad shorter version with zeros
-            max_len = max(len(parts1), len(parts2))
-            parts1.extend([0] * (max_len - len(parts1)))
-            parts2.extend([0] * (max_len - len(parts2)))
-
-            for p1, p2 in zip(parts1, parts2):
-                if p1 > p2:
-                    return 1
-                if p1 < p2:
-                    return -1
-            return 0
-        except (ValueError, AttributeError):
-            # If version parsing fails, fall back to string comparison
-            if v1 > v2:
-                return 1
-            if v1 < v2:
-                return -1
-            return 0
-
-    def _extract_revision_name(self, revision: str) -> str:
-        """Extract just the revision name from a full path or return as-is."""
-        if "/" in revision:
-            return revision.split("/")[-1]
-        return revision
-
-    def _revision_in_keep_set(self, revision: str, revisions_to_keep: set[str]) -> bool:
-        """Check if a revision is in the keep set, handling full paths vs names."""
-        revision_name = self._extract_revision_name(revision)
-        for keep_rev in revisions_to_keep:
-            keep_rev_name = self._extract_revision_name(keep_rev)
-            if revision_name == keep_rev_name:
-                return True
-        return False
-
-    async def _remove_old_tags(self, revisions_to_keep: set[str]) -> list[str]:
-        """
-        Remove Cloud Run traffic tags for revisions not in the keep set.
-
-        Traffic entries with percent > 0 are always kept because they represent
-        active traffic routing (e.g., 100% to latest, or canary deployments).
-        Tagged revisions have percent=0 and are accessed via URL prefix only.
-
-        Returns list of removed tag names.
-        """
-        services_client = ServicesAsyncClient()
-        service_name = self._get_full_service_name()
-
-        log.info(f"Fetching service {service_name} to check tags")
-        service = await services_client.get_service(
-            GetServiceRequest(name=service_name)
+        return TagInfo(
+            tag=tag,
+            revision=revision,
+            country=country,
+            version=version_parts,
+            version_str=version_str,
         )
 
-        # Find tags to remove
-        tags_to_remove = []
-        traffic_to_keep = []
+    async def _get_service(self) -> Service:
+        """Get the Cloud Run service."""
+        client = ServicesAsyncClient()
+        service_name = self._get_service_name()
+        return await client.get_service(name=service_name)
 
-        for traffic in service.traffic:
-            # Always keep traffic entries with percent > 0 (main traffic route
-            # or any active canary/blue-green deployment)
-            if traffic.percent > 0:
-                traffic_to_keep.append(traffic)
-                continue
-
-            # Check if this traffic entry's revision should be kept
-            revision_name = traffic.revision
-            if revision_name and self._revision_in_keep_set(
-                revision_name, revisions_to_keep
-            ):
-                traffic_to_keep.append(traffic)
-            elif traffic.tag:
-                tags_to_remove.append(traffic.tag)
-                log.info(
-                    f"Marking tag '{traffic.tag}' for removal "
-                    f"(revision: {revision_name})"
-                )
-            else:
-                # Keep entries without tags (shouldn't happen, but be safe)
-                traffic_to_keep.append(traffic)
-
-        if not tags_to_remove:
-            log.info("No tags to remove")
-            return []
-
-        # Update service with filtered traffic
-        service.traffic = traffic_to_keep
-
-        log.info(f"Removing {len(tags_to_remove)} tags from service")
-        await services_client.update_service(
-            UpdateServiceRequest(service=service, update_mask={"paths": ["traffic"]})
-        )
-
-        return tags_to_remove
-
-    async def _cleanup_metadata_files(self, revisions_to_keep: set[str]) -> list[str]:
+    async def _update_service_traffic(self, service: Service, tags_to_keep: list[TagInfo]) -> None:
         """
-        Delete metadata files that point to revisions not in the keep set.
+        Update the service traffic configuration to only include specified tags.
 
-        Returns list of deleted file names.
+        This rebuilds the traffic list with:
+        1. All traffic entries with percent > 0 (main traffic routes)
+        2. Only the specified tags (with percent=0)
         """
-        metadata_files = await self._list_metadata_files()
-        deleted = []
+        client = ServicesAsyncClient()
 
-        for file_name in metadata_files:
-            # Skip special files
-            if file_name in ["live.json", "deployments.json"]:
-                continue
+        # Build new traffic list
+        new_traffic = []
 
-            # Read the file to check which revision it points to
-            metadata = await self._read_metadata_file(file_name)
-            if metadata is None:
-                continue
+        # Keep all traffic with percent > 0 (main traffic routes)
+        for entry in service.traffic:
+            if entry.percent > 0:
+                new_traffic.append(entry)
 
-            revision = metadata.get("revision", "")
+        # Add the tags we want to keep (with percent=0)
+        for tag_info in tags_to_keep:
+            from google.cloud.run_v2 import TrafficTarget
+            new_traffic.append(TrafficTarget(
+                percent=0,
+                revision=tag_info.revision,
+                tag=tag_info.tag,
+            ))
 
-            # Check if this revision should be kept
-            if not self._revision_in_keep_set(revision, revisions_to_keep):
-                try:
-                    await self._delete_metadata_file(file_name)
-                    deleted.append(file_name)
-                except Exception as e:
-                    log.warning(f"Failed to delete metadata file {file_name}: {e}")
+        # Update the service
+        service.traffic = new_traffic
 
-        return deleted
+        request = UpdateServiceRequest(service=service)
+        await client.update_service(request=request)
 
-    async def cleanup(self, keep_count: int = 5) -> CleanupResult:
+    async def _analyze_tags(self, keep_count: int) -> tuple[
+        Service | None,
+        list[TagInfo],
+        list[TagInfo],
+        TagInfo | None,
+        TagInfo | None,
+        list[str],
+        list[str],
+    ]:
         """
-        Perform cleanup of old traffic tags and metadata files.
+        Analyze tags and determine which to keep/remove.
 
-        This removes Cloud Run traffic tags for old revisions (stopping them
-        from keeping instances warm) and deletes their metadata files.
+        Returns:
+            Tuple of (service, all_tags, tags_to_keep, newest_us, newest_uk, tags_removed, errors)
+        """
+        errors: list[str] = []
+
+        # Ensure keep_count is at least 2 (for US + UK safeguards)
+        if keep_count < 2:
+            keep_count = 2
+
+        # 1. Get the service and its traffic configuration
+        try:
+            service = await self._get_service()
+        except Exception as e:
+            log.error(f"Failed to get service: {e}")
+            return None, [], [], None, None, [], [f"Failed to get service: {e}"]
+
+        # 2. Parse all existing tags
+        all_tags: list[TagInfo] = []
+        for entry in service.traffic:
+            if entry.tag and entry.percent == 0:
+                tag_info = self._parse_tag(entry.tag, entry.revision)
+                if tag_info:
+                    all_tags.append(tag_info)
+
+        log.info(f"Found {len(all_tags)} traffic tags")
+
+        if not all_tags:
+            return service, [], [], None, None, [], []
+
+        # 3. Find newest US and UK tags (safeguards)
+        us_tags = [t for t in all_tags if t.country == "us"]
+        uk_tags = [t for t in all_tags if t.country == "uk"]
+
+        newest_us = max(us_tags, key=lambda t: t.version) if us_tags else None
+        newest_uk = max(uk_tags, key=lambda t: t.version) if uk_tags else None
+
+        log.info(f"Newest US tag: {newest_us.tag if newest_us else 'None'}")
+        log.info(f"Newest UK tag: {newest_uk.tag if newest_uk else 'None'}")
+
+        # 4. Build the list of tags to keep
+        tags_to_keep: list[TagInfo] = []
+        tags_to_keep_set: set[str] = set()
+
+        # Always add newest US and UK first (safeguards)
+        if newest_us:
+            tags_to_keep.append(newest_us)
+            tags_to_keep_set.add(newest_us.tag)
+
+        if newest_uk and newest_uk.tag not in tags_to_keep_set:
+            tags_to_keep.append(newest_uk)
+            tags_to_keep_set.add(newest_uk.tag)
+
+        # 5. If keep_count > 2, add more tags (sorted by version, newest first)
+        remaining_slots = keep_count - len(tags_to_keep)
+
+        if remaining_slots > 0:
+            # Sort all tags by version (newest first), combining US and UK
+            all_tags_sorted = sorted(all_tags, key=lambda t: t.version, reverse=True)
+
+            for tag_info in all_tags_sorted:
+                if remaining_slots <= 0:
+                    break
+                if tag_info.tag not in tags_to_keep_set:
+                    tags_to_keep.append(tag_info)
+                    tags_to_keep_set.add(tag_info.tag)
+                    remaining_slots -= 1
+
+        # 6. Determine which tags are being removed
+        tags_removed = [t.tag for t in all_tags if t.tag not in tags_to_keep_set]
+
+        log.info(f"Keeping {len(tags_to_keep)} tags, removing {len(tags_removed)} tags")
+
+        return service, all_tags, tags_to_keep, newest_us, newest_uk, tags_removed, errors
+
+    async def preview(self, keep_count: int = 40) -> CleanupResult:
+        """
+        Preview what cleanup would do without making changes.
 
         Args:
-            keep_count: Number of recent deployments to keep (minimum,
-                       safeguards may keep more to protect latest US/UK versions)
+            keep_count: Number of tags to keep (minimum 2 for US + UK safeguards)
+
+        Returns:
+            CleanupResult showing what would be kept/removed
+        """
+        service, all_tags, tags_to_keep, newest_us, newest_uk, tags_removed, errors = \
+            await self._analyze_tags(keep_count)
+
+        if service is None:
+            return CleanupResult(
+                total_tags_found=0,
+                tags_kept=[],
+                tags_removed=[],
+                newest_us_tag=None,
+                newest_uk_tag=None,
+                errors=errors,
+            )
+
+        return CleanupResult(
+            total_tags_found=len(all_tags),
+            tags_kept=[t.tag for t in tags_to_keep],
+            tags_removed=tags_removed,
+            newest_us_tag=newest_us.tag if newest_us else None,
+            newest_uk_tag=newest_uk.tag if newest_uk else None,
+            errors=errors,
+        )
+
+    async def cleanup(self, keep_count: int = 40) -> CleanupResult:
+        """
+        Clean up old traffic tags, keeping the specified number.
+
+        This:
+        1. Gets all existing traffic tags from Cloud Run
+        2. Identifies the newest US and UK tags (always kept as safeguards)
+        3. Keeps the top `keep_count` tags total (including safeguards)
+        4. Updates the traffic configuration in one atomic operation
+
+        Args:
+            keep_count: Number of tags to keep (minimum 2 for US + UK safeguards)
 
         Returns:
             CleanupResult with details of what was cleaned up
         """
-        errors: list[str] = []
+        service, all_tags, tags_to_keep, newest_us, newest_uk, tags_removed, errors = \
+            await self._analyze_tags(keep_count)
 
-        # 1. Read manifest
-        manifest = await self._read_manifest()
-        if not manifest:
-            log.warning("No manifest found, nothing to clean up")
+        if service is None:
             return CleanupResult(
-                revisions_kept=[],
+                total_tags_found=0,
+                tags_kept=[],
                 tags_removed=[],
-                metadata_files_deleted=[],
-                errors=["No deployment manifest found"],
+                newest_us_tag=None,
+                newest_uk_tag=None,
+                errors=errors,
             )
 
-        log.info(f"Found {len(manifest)} deployments in manifest")
+        if not all_tags:
+            return CleanupResult(
+                total_tags_found=0,
+                tags_kept=[],
+                tags_removed=[],
+                newest_us_tag=None,
+                newest_uk_tag=None,
+                errors=[],
+            )
 
-        # 2. Determine which revisions to keep (with safeguards)
-        revisions_to_keep = self._determine_revisions_to_keep(manifest, keep_count)
-        log.info(f"Keeping {len(revisions_to_keep)} revisions")
-
-        # 3. Remove tags for old revisions
-        try:
-            tags_removed = await self._remove_old_tags(revisions_to_keep)
-        except Exception as e:
-            log.error(f"Failed to remove old tags: {e}")
-            tags_removed = []
-            errors.append(f"Failed to remove tags: {e}")
-
-        # 4. Delete old metadata files
-        try:
-            metadata_deleted = await self._cleanup_metadata_files(revisions_to_keep)
-        except Exception as e:
-            log.error(f"Failed to cleanup metadata files: {e}")
-            metadata_deleted = []
-            errors.append(f"Failed to cleanup metadata files: {e}")
-
-        # 5. Update manifest to only include kept revisions
-        updated_manifest = [
-            entry
-            for entry in manifest
-            if self._revision_in_keep_set(entry.revision, revisions_to_keep)
-        ]
-        try:
-            await self._write_manifest(updated_manifest)
-        except Exception as e:
-            log.error(f"Failed to update manifest: {e}")
-            errors.append(f"Failed to update manifest: {e}")
+        # If there are tags to remove, update the service in one operation
+        if tags_removed:
+            try:
+                await self._update_service_traffic(service, tags_to_keep)
+                log.info("Successfully updated traffic configuration")
+            except Exception as e:
+                log.error(f"Failed to update service traffic: {e}")
+                errors.append(f"Failed to update service traffic: {e}")
+                # Return without changes since update failed
+                return CleanupResult(
+                    total_tags_found=len(all_tags),
+                    tags_kept=[t.tag for t in all_tags],  # Nothing was removed
+                    tags_removed=[],
+                    newest_us_tag=newest_us.tag if newest_us else None,
+                    newest_uk_tag=newest_uk.tag if newest_uk else None,
+                    errors=errors,
+                )
 
         return CleanupResult(
-            revisions_kept=list(revisions_to_keep),
+            total_tags_found=len(all_tags),
+            tags_kept=[t.tag for t in tags_to_keep],
             tags_removed=tags_removed,
-            metadata_files_deleted=metadata_deleted,
+            newest_us_tag=newest_us.tag if newest_us else None,
+            newest_uk_tag=newest_uk.tag if newest_uk else None,
             errors=errors,
         )

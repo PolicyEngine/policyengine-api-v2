@@ -1,13 +1,10 @@
 """Integration tests for the cleanup endpoint."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timedelta
 import json
 import pytest
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
-
-from google.cloud.run_v2 import TrafficTarget, Service
 
 from policyengine_api_tagger.api.revision_tagger import RevisionTagger
 from policyengine_api_tagger.api.revision_cleanup import RevisionCleanup
@@ -61,11 +58,6 @@ class TestCleanupEndpointLocal:
 
             mock_bucket.blob = mock_blob
 
-            def copy_blob(source_blob, dest_bucket, dest_name):
-                bucket_contents[dest_name] = bucket_contents.get(source_blob.name, "")
-
-            mock_bucket.copy_blob = copy_blob
-
             def list_blobs():
                 return [mock_blob(name) for name in bucket_contents.keys()]
 
@@ -78,28 +70,35 @@ class TestCleanupEndpointLocal:
             }
 
     @pytest.fixture
-    def mock_cloudrun(self):
-        """Mock Cloud Run services client."""
+    def mock_cloudrun_revisions(self):
+        """Mock Cloud Run revisions client."""
         with patch(
-            "policyengine_api_tagger.api.revision_cleanup.ServicesAsyncClient"
+            "policyengine_api_tagger.api.revision_cleanup.RevisionsAsyncClient"
         ) as MockClient:
             mock_client = AsyncMock()
             MockClient.return_value = mock_client
 
-            # Create a mock service with traffic
-            service = Service()
-            service.uri = "https://api-simulation.run.app"
-            service.traffic = []
+            # Store for existing revisions
+            existing_revisions = []
 
-            mock_client.get_service.return_value = service
+            async def mock_list_revisions(request):
+                async def async_gen():
+                    for rev_name in existing_revisions:
+                        mock_rev = MagicMock()
+                        mock_rev.name = f"projects/test-project/locations/us-central1/services/api-simulation/revisions/{rev_name}"
+                        yield mock_rev
+
+                return async_gen()
+
+            mock_client.list_revisions = mock_list_revisions
 
             yield {
                 "client": mock_client,
-                "service": service,
+                "revisions": existing_revisions,
             }
 
     @pytest.fixture
-    def client(self, mock_gcs, mock_cloudrun):
+    def client(self, mock_gcs, mock_cloudrun_revisions):
         """Create test client with mocked dependencies."""
         app = FastAPI(
             title="policyengine-api-tagger-test",
@@ -119,87 +118,92 @@ class TestCleanupEndpointLocal:
 
             yield TestClient(app)
 
-    def test_cleanup_returns_400_for_invalid_keep_count(self, client):
-        response = client.post("/cleanup?keep=0")
-        assert response.status_code == 400
-        assert "at least 1" in response.json()["detail"]
-
-    def test_cleanup_returns_error_when_no_manifest(self, client, mock_gcs):
-        # No manifest in bucket
-        response = client.post("/cleanup?keep=5")
-
-        assert response.status_code == 200
-        result = response.json()
-        assert "No deployment manifest found" in result["errors"]
-        assert result["revisions_kept"] == []
-
-    def test_cleanup_with_manifest_returns_success(
-        self, client, mock_gcs, mock_cloudrun
+    def test_cleanup_returns_success_with_existing_revisions(
+        self, client, mock_gcs, mock_cloudrun_revisions
     ):
-        # Set up manifest with deployments
-        # Most recent (i=0) has highest versions (realistic deployment pattern)
-        now = datetime.now()
-        manifest = [
-            {
-                "revision": f"rev-{i}",
-                "us": f"1.{6 - i}.0",  # rev-0 has 1.6.0 (highest), rev-6 has 1.0.0
-                "uk": f"2.{6 - i}.0",
-                "deployed_at": (now - timedelta(days=i)).isoformat(),
-            }
-            for i in range(7)
-        ]
-        mock_gcs["contents"]["deployments.json"] = json.dumps(manifest)
+        """Cleanup succeeds and returns existing revisions."""
+        # Set up existing revisions in Cloud Run
+        mock_cloudrun_revisions["revisions"].extend(["rev-1", "rev-2", "rev-3"])
 
-        # Set up metadata files
-        for i in range(7):
-            mock_gcs["contents"][f"us.1.{6 - i}.0.json"] = json.dumps(
-                {"revision": f"rev-{i}"}
-            )
-            mock_gcs["contents"][f"uk.2.{6 - i}.0.json"] = json.dumps(
-                {"revision": f"rev-{i}"}
-            )
+        # Set up metadata files that all point to existing revisions
+        mock_gcs["contents"]["us.1.0.0.json"] = json.dumps(
+            {"revision": "projects/.../revisions/rev-1"}
+        )
+        mock_gcs["contents"]["uk.2.0.0.json"] = json.dumps(
+            {"revision": "projects/.../revisions/rev-2"}
+        )
 
-        # Set up Cloud Run service with tags
-        # rev-0 has 100% traffic (most recent), rev-1 and rev-2 have tags
-        mock_cloudrun["service"].traffic = [
-            TrafficTarget(percent=100, revision="rev-0"),
-            TrafficTarget(percent=0, revision="rev-1", tag="country-us-model-1-5-0"),
-            TrafficTarget(percent=0, revision="rev-2", tag="country-us-model-1-4-0"),
-        ]
-
-        response = client.post("/cleanup?keep=5")
+        response = client.post("/cleanup")
 
         assert response.status_code == 200
         result = response.json()
         assert len(result["errors"]) == 0
-        assert len(result["revisions_kept"]) == 5
+        assert set(result["existing_revisions"]) == {"rev-1", "rev-2", "rev-3"}
+        assert len(result["metadata_files_deleted"]) == 0
+        assert len(result["metadata_files_kept"]) == 2
 
-    def test_cleanup_preserves_main_traffic_route(
-        self, client, mock_gcs, mock_cloudrun
+    def test_cleanup_deletes_stale_metadata_files(
+        self, client, mock_gcs, mock_cloudrun_revisions
     ):
-        """Ensure traffic with percent > 0 is never removed."""
-        now = datetime.now()
-        manifest = [
-            {
-                "revision": "rev-new",
-                "us": "1.0.0",
-                "uk": "2.0.0",
-                "deployed_at": now.isoformat(),
-            }
-        ]
-        mock_gcs["contents"]["deployments.json"] = json.dumps(manifest)
+        """Cleanup deletes metadata files for non-existent revisions."""
+        # Only rev-1 exists in Cloud Run
+        mock_cloudrun_revisions["revisions"].append("rev-1")
 
-        # Main traffic points to revision NOT in manifest
-        mock_cloudrun["service"].traffic = [
-            TrafficTarget(percent=100, revision="rev-not-in-manifest"),
-        ]
+        # Set up metadata files - one for existing revision, one for deleted
+        mock_gcs["contents"]["us.1.0.0.json"] = json.dumps(
+            {"revision": "projects/.../revisions/rev-1"}
+        )
+        mock_gcs["contents"]["us.0.9.0.json"] = json.dumps(
+            {"revision": "projects/.../revisions/rev-deleted"}
+        )
 
-        response = client.post("/cleanup?keep=5")
+        response = client.post("/cleanup")
 
         assert response.status_code == 200
-        # Should not have tried to remove the main traffic route
         result = response.json()
-        assert result["tags_removed"] == []
+        assert len(result["errors"]) == 0
+        assert result["metadata_files_deleted"] == ["us.0.9.0.json"]
+        assert result["metadata_files_kept"] == ["us.1.0.0.json"]
+
+        # Verify the file was actually deleted from mock storage
+        assert "us.0.9.0.json" not in mock_gcs["contents"]
+        assert "us.1.0.0.json" in mock_gcs["contents"]
+
+    def test_cleanup_skips_special_files(
+        self, client, mock_gcs, mock_cloudrun_revisions
+    ):
+        """Cleanup skips live.json and deployments.json."""
+        mock_cloudrun_revisions["revisions"].append("rev-1")
+
+        # Add special files that should not be deleted
+        mock_gcs["contents"]["live.json"] = json.dumps({"revision": "rev-deleted"})
+        mock_gcs["contents"]["deployments.json"] = json.dumps([])
+
+        response = client.post("/cleanup")
+
+        assert response.status_code == 200
+        result = response.json()
+        # Special files should still exist
+        assert "live.json" in mock_gcs["contents"]
+        assert "deployments.json" in mock_gcs["contents"]
+        # They shouldn't appear in kept or deleted lists
+        assert "live.json" not in result["metadata_files_kept"]
+        assert "deployments.json" not in result["metadata_files_kept"]
+
+    def test_cleanup_handles_empty_bucket(
+        self, client, mock_gcs, mock_cloudrun_revisions
+    ):
+        """Cleanup succeeds with no metadata files."""
+        mock_cloudrun_revisions["revisions"].extend(["rev-1", "rev-2"])
+        # No metadata files in bucket
+
+        response = client.post("/cleanup")
+
+        assert response.status_code == 200
+        result = response.json()
+        assert len(result["errors"]) == 0
+        assert result["metadata_files_deleted"] == []
+        assert result["metadata_files_kept"] == []
 
 
 # -----------------------------------------------------------------------------
@@ -222,7 +226,7 @@ class TestCleanupEndpointNotConfigured:
             yield TestClient(app)
 
     def test_cleanup_returns_503_when_not_configured(self, client_without_cleanup):
-        response = client_without_cleanup.post("/cleanup?keep=5")
+        response = client_without_cleanup.post("/cleanup")
 
         assert response.status_code == 503
         assert "not configured" in response.json()["detail"]
