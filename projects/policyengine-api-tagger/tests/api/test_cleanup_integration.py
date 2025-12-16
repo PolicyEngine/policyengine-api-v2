@@ -1,17 +1,22 @@
-"""Integration tests for the cleanup endpoint."""
+"""Integration tests for the cleanup endpoint (with mocks)."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timedelta
-import json
 import pytest
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
 
-from google.cloud.run_v2 import TrafficTarget, Service
-
 from policyengine_api_tagger.api.revision_tagger import RevisionTagger
 from policyengine_api_tagger.api.revision_cleanup import RevisionCleanup
 from policyengine_api_tagger.api.routes import add_all_routes
+
+
+def make_mock_traffic_entry(tag: str | None, revision: str, percent: int = 0):
+    """Create a mock traffic entry."""
+    entry = MagicMock()
+    entry.tag = tag
+    entry.revision = revision
+    entry.percent = percent
+    return entry
 
 
 # -----------------------------------------------------------------------------
@@ -20,65 +25,10 @@ from policyengine_api_tagger.api.routes import add_all_routes
 
 
 class TestCleanupEndpointLocal:
-    """Tests the cleanup endpoint with mocked GCS and Cloud Run."""
+    """Tests the cleanup endpoint with mocked Cloud Run."""
 
     @pytest.fixture
-    def mock_gcs(self):
-        """Mock GCS storage client."""
-        with patch(
-            "policyengine_api_tagger.api.revision_cleanup.storage.Client"
-        ) as MockClient:
-            mock_client = MagicMock()
-            MockClient.return_value = mock_client
-            mock_bucket = MagicMock()
-            mock_client.bucket.return_value = mock_bucket
-
-            # Store for tracking what's in the bucket
-            bucket_contents = {}
-
-            def mock_blob(name):
-                blob = MagicMock()
-                blob.name = name
-
-                def exists():
-                    return name in bucket_contents
-
-                def download_as_text():
-                    return bucket_contents.get(name, "")
-
-                def upload_from_string(content, content_type=None):
-                    bucket_contents[name] = content
-
-                def delete():
-                    if name in bucket_contents:
-                        del bucket_contents[name]
-
-                blob.exists = exists
-                blob.download_as_text = download_as_text
-                blob.upload_from_string = upload_from_string
-                blob.delete = delete
-                return blob
-
-            mock_bucket.blob = mock_blob
-
-            def copy_blob(source_blob, dest_bucket, dest_name):
-                bucket_contents[dest_name] = bucket_contents.get(source_blob.name, "")
-
-            mock_bucket.copy_blob = copy_blob
-
-            def list_blobs():
-                return [mock_blob(name) for name in bucket_contents.keys()]
-
-            mock_bucket.list_blobs = list_blobs
-
-            yield {
-                "client": mock_client,
-                "bucket": mock_bucket,
-                "contents": bucket_contents,
-            }
-
-    @pytest.fixture
-    def mock_cloudrun(self):
+    def mock_cloudrun_service(self):
         """Mock Cloud Run services client."""
         with patch(
             "policyengine_api_tagger.api.revision_cleanup.ServicesAsyncClient"
@@ -86,119 +36,130 @@ class TestCleanupEndpointLocal:
             mock_client = AsyncMock()
             MockClient.return_value = mock_client
 
-            # Create a mock service with traffic
-            service = Service()
-            service.uri = "https://api-simulation.run.app"
-            service.traffic = []
+            # Store mock service for manipulation in tests
+            mock_service = MagicMock()
+            mock_service.traffic = []
 
-            mock_client.get_service.return_value = service
+            async def mock_get_service(name):
+                return mock_service
+
+            mock_client.get_service = mock_get_service
+            mock_client.update_service = AsyncMock()
 
             yield {
                 "client": mock_client,
-                "service": service,
+                "service": mock_service,
             }
 
     @pytest.fixture
-    def client(self, mock_gcs, mock_cloudrun):
+    def client(self, mock_cloudrun_service):
         """Create test client with mocked dependencies."""
         app = FastAPI(
             title="policyengine-api-tagger-test",
             summary="Test instance",
         )
 
-        # Mock the revision tagger's blob access too
+        # Mock the revision tagger's blob access
         with patch("policyengine_api_tagger.api.revision_tagger._get_blob"):
             tagger = RevisionTagger("test-bucket")
             cleanup = RevisionCleanup(
-                bucket_name="test-bucket",
-                simulation_service_name="api-simulation",
                 project_id="test-project",
                 region="us-central1",
+                simulation_service_name="api-simulation",
             )
             add_all_routes(app, tagger, cleanup)
 
             yield TestClient(app)
 
-    def test_cleanup_returns_400_for_invalid_keep_count(self, client):
-        response = client.post("/cleanup?keep=0")
-        assert response.status_code == 400
-        assert "at least 1" in response.json()["detail"]
-
-    def test_cleanup_returns_error_when_no_manifest(self, client, mock_gcs):
-        # No manifest in bucket
-        response = client.post("/cleanup?keep=5")
-
-        assert response.status_code == 200
-        result = response.json()
-        assert "No deployment manifest found" in result["errors"]
-        assert result["revisions_kept"] == []
-
-    def test_cleanup_with_manifest_returns_success(
-        self, client, mock_gcs, mock_cloudrun
-    ):
-        # Set up manifest with deployments
-        # Most recent (i=0) has highest versions (realistic deployment pattern)
-        now = datetime.now()
-        manifest = [
-            {
-                "revision": f"rev-{i}",
-                "us": f"1.{6 - i}.0",  # rev-0 has 1.6.0 (highest), rev-6 has 1.0.0
-                "uk": f"2.{6 - i}.0",
-                "deployed_at": (now - timedelta(days=i)).isoformat(),
-            }
-            for i in range(7)
-        ]
-        mock_gcs["contents"]["deployments.json"] = json.dumps(manifest)
-
-        # Set up metadata files
-        for i in range(7):
-            mock_gcs["contents"][f"us.1.{6 - i}.0.json"] = json.dumps(
-                {"revision": f"rev-{i}"}
-            )
-            mock_gcs["contents"][f"uk.2.{6 - i}.0.json"] = json.dumps(
-                {"revision": f"rev-{i}"}
-            )
-
-        # Set up Cloud Run service with tags
-        # rev-0 has 100% traffic (most recent), rev-1 and rev-2 have tags
-        mock_cloudrun["service"].traffic = [
-            TrafficTarget(percent=100, revision="rev-0"),
-            TrafficTarget(percent=0, revision="rev-1", tag="country-us-model-1-5-0"),
-            TrafficTarget(percent=0, revision="rev-2", tag="country-us-model-1-4-0"),
+    def test_cleanup_returns_success_with_tags(self, client, mock_cloudrun_service):
+        """Cleanup succeeds and returns tag information."""
+        mock_cloudrun_service["service"].traffic = [
+            make_mock_traffic_entry("country-us-model-1-459-0", "rev-us"),
+            make_mock_traffic_entry("country-uk-model-2-65-9", "rev-uk"),
+            make_mock_traffic_entry(None, "rev-main", percent=100),
         ]
 
-        response = client.post("/cleanup?keep=5")
+        response = client.post("/cleanup?dry_run=true")
 
         assert response.status_code == 200
         result = response.json()
         assert len(result["errors"]) == 0
-        assert len(result["revisions_kept"]) == 5
+        assert result["total_tags_found"] == 2
+        assert result["newest_us_tag"] == "country-us-model-1-459-0"
+        assert result["newest_uk_tag"] == "country-uk-model-2-65-9"
 
-    def test_cleanup_preserves_main_traffic_route(
-        self, client, mock_gcs, mock_cloudrun
-    ):
-        """Ensure traffic with percent > 0 is never removed."""
-        now = datetime.now()
-        manifest = [
-            {
-                "revision": "rev-new",
-                "us": "1.0.0",
-                "uk": "2.0.0",
-                "deployed_at": now.isoformat(),
-            }
-        ]
-        mock_gcs["contents"]["deployments.json"] = json.dumps(manifest)
-
-        # Main traffic points to revision NOT in manifest
-        mock_cloudrun["service"].traffic = [
-            TrafficTarget(percent=100, revision="rev-not-in-manifest"),
+    def test_cleanup_dry_run_does_not_modify(self, client, mock_cloudrun_service):
+        """Cleanup with dry_run=true should NOT call update_service."""
+        mock_cloudrun_service["service"].traffic = [
+            make_mock_traffic_entry("country-us-model-1-100-0", "rev-1"),
+            make_mock_traffic_entry("country-us-model-1-200-0", "rev-2"),
+            make_mock_traffic_entry("country-uk-model-2-50-0", "rev-3"),
         ]
 
-        response = client.post("/cleanup?keep=5")
+        response = client.post("/cleanup?dry_run=true&keep=2")
 
         assert response.status_code == 200
-        # Should not have tried to remove the main traffic route
         result = response.json()
+
+        # Should show what would be removed
+        assert len(result["tags_removed"]) == 1
+        assert result["tags_removed"][0] == "country-us-model-1-100-0"
+
+        # CRITICAL: update_service should NOT have been called
+        mock_cloudrun_service["client"].update_service.assert_not_called()
+
+    def test_cleanup_identifies_safeguards(self, client, mock_cloudrun_service):
+        """Cleanup correctly identifies newest US and UK tags."""
+        mock_cloudrun_service["service"].traffic = [
+            make_mock_traffic_entry("country-us-model-1-100-0", "rev-1"),
+            make_mock_traffic_entry("country-us-model-1-459-0", "rev-2"),
+            make_mock_traffic_entry("country-uk-model-2-30-0", "rev-3"),
+            make_mock_traffic_entry("country-uk-model-2-65-9", "rev-4"),
+        ]
+
+        response = client.post("/cleanup?dry_run=true")
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["newest_us_tag"] == "country-us-model-1-459-0"
+        assert result["newest_uk_tag"] == "country-uk-model-2-65-9"
+
+    def test_cleanup_respects_keep_count(self, client, mock_cloudrun_service):
+        """Cleanup keeps the correct number of tags."""
+        mock_cloudrun_service["service"].traffic = [
+            make_mock_traffic_entry("country-us-model-1-100-0", "rev-1"),
+            make_mock_traffic_entry("country-us-model-1-200-0", "rev-2"),
+            make_mock_traffic_entry("country-us-model-1-300-0", "rev-3"),
+            make_mock_traffic_entry("country-us-model-1-400-0", "rev-4"),
+            make_mock_traffic_entry("country-uk-model-2-50-0", "rev-5"),
+        ]
+
+        response = client.post("/cleanup?dry_run=true&keep=3")
+
+        assert response.status_code == 200
+        result = response.json()
+        assert len(result["tags_kept"]) == 3
+        assert len(result["tags_removed"]) == 2
+
+    def test_cleanup_validates_keep_minimum(self, client, mock_cloudrun_service):
+        """Cleanup rejects keep < 2."""
+        response = client.post("/cleanup?keep=1")
+
+        assert response.status_code == 400
+        assert "at least 2" in response.json()["detail"]
+
+    def test_cleanup_handles_no_tags(self, client, mock_cloudrun_service):
+        """Cleanup handles service with no tags."""
+        mock_cloudrun_service["service"].traffic = [
+            make_mock_traffic_entry(None, "rev-main", percent=100),
+        ]
+
+        response = client.post("/cleanup?dry_run=true")
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["total_tags_found"] == 0
+        assert result["tags_kept"] == []
         assert result["tags_removed"] == []
 
 
@@ -222,7 +183,14 @@ class TestCleanupEndpointNotConfigured:
             yield TestClient(app)
 
     def test_cleanup_returns_503_when_not_configured(self, client_without_cleanup):
-        response = client_without_cleanup.post("/cleanup?keep=5")
+        response = client_without_cleanup.post("/cleanup")
+
+        assert response.status_code == 503
+        assert "not configured" in response.json()["detail"]
+
+    def test_cleanup_dry_run_also_returns_503(self, client_without_cleanup):
+        """Even dry_run should return 503 if not configured."""
+        response = client_without_cleanup.post("/cleanup?dry_run=true")
 
         assert response.status_code == 503
         assert "not configured" in response.json()["detail"]

@@ -1,22 +1,12 @@
-"""Unit tests for revision_cleanup module."""
+"""Unit tests for revision_cleanup module (tag-based cleanup)."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timedelta
-import json
 import pytest
-
-from google.cloud.run_v2 import (
-    TrafficTarget,
-    Service,
-    TrafficTargetAllocationType,
-)
 
 from policyengine_api_tagger.api.revision_cleanup import (
     RevisionCleanup,
-    DeploymentEntry,
     CleanupResult,
-    _read_manifest_sync,
-    _write_manifest_sync,
+    TagInfo,
 )
 
 
@@ -29,675 +19,442 @@ from policyengine_api_tagger.api.revision_cleanup import (
 def cleanup():
     """Create a RevisionCleanup instance for testing."""
     return RevisionCleanup(
-        bucket_name="test-bucket",
-        simulation_service_name="api-simulation",
         project_id="test-project",
         region="us-central1",
+        simulation_service_name="api-simulation",
     )
 
 
-@pytest.fixture
-def sample_manifest():
-    """
-    Create a sample manifest with 10 deployments.
-
-    Most recent deployments (lower i) have HIGHER versions, matching
-    real-world behavior where we deploy newer versions more recently.
-    - rev-0: deployed today, us=1.9.0, uk=2.9.0 (highest)
-    - rev-9: deployed 9 days ago, us=1.0.0, uk=2.0.0 (lowest)
-    """
-    now = datetime.now()
-    return [
-        DeploymentEntry(
-            revision=f"projects/test-project/locations/us-central1/services/api-simulation/revisions/rev-{i}",
-            us=f"1.{9 - i}.0",  # Higher version for more recent deployments
-            uk=f"2.{9 - i}.0",
-            deployed_at=now - timedelta(days=i),
-        )
-        for i in range(10)
-    ]
+def make_mock_traffic_entry(tag: str | None, revision: str, percent: int = 0):
+    """Create a mock traffic entry."""
+    entry = MagicMock()
+    entry.tag = tag
+    entry.revision = revision
+    entry.percent = percent
+    return entry
 
 
 # -----------------------------------------------------------------------------
-# Tests for _compare_versions
+# Tests for _parse_tag
 # -----------------------------------------------------------------------------
 
 
-class TestCompareVersions:
-    def test_equal_versions(self, cleanup):
-        assert cleanup._compare_versions("1.2.3", "1.2.3") == 0
+class TestParseTag:
+    def test_parses_us_tag(self, cleanup):
+        result = cleanup._parse_tag("country-us-model-1-459-0", "rev-abc123")
 
-    def test_greater_major_version(self, cleanup):
-        assert cleanup._compare_versions("2.0.0", "1.9.9") > 0
+        assert result is not None
+        assert result.tag == "country-us-model-1-459-0"
+        assert result.revision == "rev-abc123"
+        assert result.country == "us"
+        assert result.version == (1, 459, 0)
+        assert result.version_str == "1.459.0"
 
-    def test_greater_minor_version(self, cleanup):
-        assert cleanup._compare_versions("1.3.0", "1.2.9") > 0
+    def test_parses_uk_tag(self, cleanup):
+        result = cleanup._parse_tag("country-uk-model-2-65-9", "rev-def456")
 
-    def test_greater_patch_version(self, cleanup):
-        assert cleanup._compare_versions("1.2.4", "1.2.3") > 0
+        assert result is not None
+        assert result.tag == "country-uk-model-2-65-9"
+        assert result.revision == "rev-def456"
+        assert result.country == "uk"
+        assert result.version == (2, 65, 9)
+        assert result.version_str == "2.65.9"
 
-    def test_lesser_version(self, cleanup):
-        assert cleanup._compare_versions("1.2.3", "1.2.4") < 0
+    def test_returns_none_for_invalid_country(self, cleanup):
+        result = cleanup._parse_tag("country-fr-model-1-0-0", "rev-abc")
+        assert result is None
 
-    def test_different_length_versions(self, cleanup):
-        assert cleanup._compare_versions("1.2.3.4", "1.2.3") > 0
-        assert cleanup._compare_versions("1.2", "1.2.0") == 0
+    def test_returns_none_for_wrong_format(self, cleanup):
+        result = cleanup._parse_tag("some-random-tag", "rev-abc")
+        assert result is None
 
-    def test_invalid_version_falls_back_to_string_comparison(self, cleanup):
-        # Invalid versions fall back to string comparison
-        assert cleanup._compare_versions("abc", "abd") < 0
-        assert cleanup._compare_versions("abc", "abc") == 0
+    def test_returns_none_for_non_numeric_version(self, cleanup):
+        result = cleanup._parse_tag("country-us-model-abc-def", "rev-abc")
+        assert result is None
 
+    def test_handles_single_digit_version(self, cleanup):
+        result = cleanup._parse_tag("country-us-model-1", "rev-abc")
 
-# -----------------------------------------------------------------------------
-# Tests for _extract_revision_name
-# -----------------------------------------------------------------------------
-
-
-class TestExtractRevisionName:
-    def test_extracts_name_from_full_path(self, cleanup):
-        full_path = "projects/proj/locations/us/services/svc/revisions/rev-abc123"
-        assert cleanup._extract_revision_name(full_path) == "rev-abc123"
-
-    def test_returns_name_as_is_if_no_slashes(self, cleanup):
-        name = "rev-abc123"
-        assert cleanup._extract_revision_name(name) == "rev-abc123"
-
-
-# -----------------------------------------------------------------------------
-# Tests for _revision_in_keep_set
-# -----------------------------------------------------------------------------
-
-
-class TestRevisionInKeepSet:
-    def test_matches_full_path_against_full_path(self, cleanup):
-        keep_set = {"projects/proj/locations/us/services/svc/revisions/rev-abc"}
-        assert cleanup._revision_in_keep_set(
-            "projects/proj/locations/us/services/svc/revisions/rev-abc",
-            keep_set,
-        )
-
-    def test_matches_name_against_full_path(self, cleanup):
-        keep_set = {"projects/proj/locations/us/services/svc/revisions/rev-abc"}
-        assert cleanup._revision_in_keep_set("rev-abc", keep_set)
-
-    def test_matches_full_path_against_name(self, cleanup):
-        keep_set = {"rev-abc"}
-        assert cleanup._revision_in_keep_set(
-            "projects/proj/locations/us/services/svc/revisions/rev-abc",
-            keep_set,
-        )
-
-    def test_no_match_returns_false(self, cleanup):
-        keep_set = {"rev-abc"}
-        assert not cleanup._revision_in_keep_set("rev-xyz", keep_set)
+        assert result is not None
+        assert result.version == (1,)
+        assert result.version_str == "1"
 
 
 # -----------------------------------------------------------------------------
-# Tests for _determine_revisions_to_keep
+# Tests for _analyze_tags
 # -----------------------------------------------------------------------------
 
 
-class TestDetermineRevisionsToKeep:
-    def test_keeps_last_n_deployments(self, cleanup, sample_manifest):
-        result = cleanup._determine_revisions_to_keep(sample_manifest, keep_count=5)
-
-        # Should keep rev-0 through rev-4 (5 most recent by deployed_at)
-        for i in range(5):
-            rev_path = f"projects/test-project/locations/us-central1/services/api-simulation/revisions/rev-{i}"
-            assert rev_path in result, f"Expected rev-{i} to be kept"
-
-        # Should not keep rev-5 through rev-9
-        for i in range(5, 10):
-            rev_path = f"projects/test-project/locations/us-central1/services/api-simulation/revisions/rev-{i}"
-            assert rev_path not in result, f"Expected rev-{i} to not be kept"
-
-    def test_empty_manifest_returns_empty_set(self, cleanup):
-        result = cleanup._determine_revisions_to_keep([], keep_count=5)
-        assert result == set()
-
-    def test_fewer_deployments_than_keep_count(self, cleanup):
-        manifest = [
-            DeploymentEntry(
-                revision="rev-0",
-                us="1.0.0",
-                uk="2.0.0",
-                deployed_at=datetime.now(),
-            ),
-            DeploymentEntry(
-                revision="rev-1",
-                us="1.1.0",
-                uk="2.1.0",
-                deployed_at=datetime.now() - timedelta(days=1),
-            ),
-        ]
-        result = cleanup._determine_revisions_to_keep(manifest, keep_count=5)
-
-        assert "rev-0" in result
-        assert "rev-1" in result
-        assert len(result) == 2
-
-    def test_safeguard_keeps_highest_us_version(self, cleanup):
-        """Even if not in last N, the highest US version should be kept."""
-        now = datetime.now()
-        manifest = [
-            # Most recent deployment with lower US version
-            DeploymentEntry(
-                revision="rev-recent",
-                us="1.0.0",
-                uk="2.0.0",
-                deployed_at=now,
-            ),
-            # Old deployment with highest US version
-            DeploymentEntry(
-                revision="rev-old-high-us",
-                us="99.0.0",
-                uk="2.0.0",
-                deployed_at=now - timedelta(days=100),
-            ),
-        ]
-
-        result = cleanup._determine_revisions_to_keep(manifest, keep_count=1)
-
-        # Both should be kept: recent (in top 1) and old (safeguard)
-        assert "rev-recent" in result
-        assert "rev-old-high-us" in result
-
-    def test_safeguard_keeps_highest_uk_version(self, cleanup):
-        """Even if not in last N, the highest UK version should be kept."""
-        now = datetime.now()
-        manifest = [
-            # Most recent deployment with lower UK version
-            DeploymentEntry(
-                revision="rev-recent",
-                us="1.0.0",
-                uk="2.0.0",
-                deployed_at=now,
-            ),
-            # Old deployment with highest UK version
-            DeploymentEntry(
-                revision="rev-old-high-uk",
-                us="1.0.0",
-                uk="99.0.0",
-                deployed_at=now - timedelta(days=100),
-            ),
-        ]
-
-        result = cleanup._determine_revisions_to_keep(manifest, keep_count=1)
-
-        # Both should be kept: recent (in top 1) and old (safeguard)
-        assert "rev-recent" in result
-        assert "rev-old-high-uk" in result
-
-    def test_safeguard_keeps_both_highest_us_and_uk(self, cleanup):
-        """If highest US and UK are on different old revisions, both are kept."""
-        now = datetime.now()
-        manifest = [
-            DeploymentEntry(
-                revision="rev-recent",
-                us="1.0.0",
-                uk="1.0.0",
-                deployed_at=now,
-            ),
-            DeploymentEntry(
-                revision="rev-high-us",
-                us="99.0.0",
-                uk="1.0.0",
-                deployed_at=now - timedelta(days=100),
-            ),
-            DeploymentEntry(
-                revision="rev-high-uk",
-                us="1.0.0",
-                uk="99.0.0",
-                deployed_at=now - timedelta(days=101),
-            ),
-        ]
-
-        # With keep_count=2, both safeguards fit exactly
-        result = cleanup._determine_revisions_to_keep(manifest, keep_count=2)
-
-        # Both safeguarded revisions must be kept
-        assert "rev-high-us" in result
-        assert "rev-high-uk" in result
-        assert len(result) == 2
-
-    def test_safeguard_exceeds_keep_count_when_necessary(self, cleanup):
-        """When safeguards require more than keep_count, we keep all safeguards."""
-        now = datetime.now()
-        manifest = [
-            DeploymentEntry(
-                revision="rev-recent",
-                us="1.0.0",
-                uk="1.0.0",
-                deployed_at=now,
-            ),
-            DeploymentEntry(
-                revision="rev-high-us",
-                us="99.0.0",
-                uk="1.0.0",
-                deployed_at=now - timedelta(days=100),
-            ),
-            DeploymentEntry(
-                revision="rev-high-uk",
-                us="1.0.0",
-                uk="99.0.0",
-                deployed_at=now - timedelta(days=101),
-            ),
-        ]
-
-        # With keep_count=1, safeguards still require 2 revisions
-        result = cleanup._determine_revisions_to_keep(manifest, keep_count=1)
-
-        # Both safeguards are kept even though keep_count=1
-        assert "rev-high-us" in result
-        assert "rev-high-uk" in result
-        assert len(result) == 2  # Safeguards exceed keep_count
-
-    def test_same_revision_has_highest_us_and_uk(self, cleanup):
-        """If same revision has both highest US and UK, it's not duplicated."""
-        now = datetime.now()
-        manifest = [
-            DeploymentEntry(
-                revision="rev-recent",
-                us="99.0.0",
-                uk="99.0.0",
-                deployed_at=now,
-            ),
-            DeploymentEntry(
-                revision="rev-old",
-                us="1.0.0",
-                uk="1.0.0",
-                deployed_at=now - timedelta(days=100),
-            ),
-        ]
-
-        result = cleanup._determine_revisions_to_keep(manifest, keep_count=1)
-
-        assert "rev-recent" in result
-        assert len(result) == 1  # Only rev-recent, not duplicated
-
-    def test_keeps_exactly_n_with_uniform_versions(self, cleanup):
-        """
-        With 15 deployments where all have same UK version (US-only progression),
-        keep=5 returns exactly 5 revisions.
-
-        This tests the scenario where no safeguard adds extra revisions because
-        the highest US version is in the most recent deployment.
-        """
-        now = datetime.now()
-        manifest = [
-            DeploymentEntry(
-                revision=f"rev-{i}",
-                us=f"1.{14 - i}.0",  # Most recent (i=0) has highest US (1.14.0)
-                uk="2.0.0",  # All have same UK version
-                deployed_at=now - timedelta(days=i),
-            )
-            for i in range(15)
-        ]
-
-        result = cleanup._determine_revisions_to_keep(manifest, keep_count=5)
-
-        # Should keep exactly 5: the 5 most recent (rev-0 through rev-4)
-        assert len(result) == 5
-        for i in range(5):
-            assert f"rev-{i}" in result
-        for i in range(5, 15):
-            assert f"rev-{i}" not in result
-
-    def test_keeps_exactly_n_with_old_uk_safeguard(self, cleanup):
-        """
-        With 15 deployments: 14 with increasing US versions (same UK),
-        and 1 old deployment with the highest UK version.
-        keep=5 returns exactly 5 revisions: the old UK + 4 most recent.
-
-        This tests the safeguard functionality where an old deployment
-        must be kept, displacing one of the recent deployments.
-        """
-        now = datetime.now()
-
-        # 14 recent deployments with increasing US, same UK
-        manifest = [
-            DeploymentEntry(
-                revision=f"rev-{i}",
-                us=f"1.{13 - i}.0",  # Most recent (i=0) has highest US (1.13.0)
-                uk="2.0.0",  # All have same UK version
-                deployed_at=now - timedelta(days=i),
-            )
-            for i in range(14)
-        ]
-
-        # 1 old deployment with highest UK version
-        manifest.append(
-            DeploymentEntry(
-                revision="rev-old-uk",
-                us="0.1.0",  # Old, low US version
-                uk="2.1.0",  # Highest UK version (safeguarded)
-                deployed_at=now - timedelta(days=100),
-            )
-        )
-
-        result = cleanup._determine_revisions_to_keep(manifest, keep_count=5)
-
-        # Should keep exactly 5:
-        # - rev-old-uk (safeguard: highest UK)
-        # - rev-0 (safeguard: highest US, also most recent)
-        # - rev-1, rev-2, rev-3 (fill remaining 3 slots)
-        assert len(result) == 5
-
-        # The old UK deployment must be kept (safeguard)
-        assert "rev-old-uk" in result
-
-        # The most recent 4 deployments should be kept
-        # (rev-0 has highest US, so it's safeguarded too, but still counts)
-        assert "rev-0" in result
-        assert "rev-1" in result
-        assert "rev-2" in result
-        assert "rev-3" in result
-
-        # rev-4 should NOT be kept (only 5 slots total)
-        assert "rev-4" not in result
-
-
-# -----------------------------------------------------------------------------
-# Tests for _remove_old_tags
-# -----------------------------------------------------------------------------
-
-
-class TestRemoveOldTags:
+class TestAnalyzeTags:
     @pytest.mark.asyncio
-    @patch("policyengine_api_tagger.api.revision_cleanup.ServicesAsyncClient")
-    async def test_removes_tags_for_old_revisions(self, MockClient, cleanup):
-        mock_client = AsyncMock()
-        MockClient.return_value = mock_client
-
-        service = Service()
-        service.uri = "https://api-simulation.run.app"
-        service.traffic = [
-            # Main traffic (100%) - should be kept
-            TrafficTarget(percent=100, revision="rev-latest"),
-            # Tagged revision in keep set - should be kept
-            TrafficTarget(percent=0, revision="rev-keep", tag="country-us-model-1-0-0"),
-            # Tagged revision NOT in keep set - should be removed
-            TrafficTarget(percent=0, revision="rev-old", tag="country-us-model-0-9-0"),
+    async def test_identifies_newest_us_and_uk_tags(self, cleanup):
+        """Should correctly identify newest US and UK tags as safeguards."""
+        mock_service = MagicMock()
+        mock_service.traffic = [
+            make_mock_traffic_entry("country-us-model-1-100-0", "rev-us-old"),
+            make_mock_traffic_entry("country-us-model-1-459-0", "rev-us-new"),
+            make_mock_traffic_entry("country-uk-model-2-50-0", "rev-uk-old"),
+            make_mock_traffic_entry("country-uk-model-2-65-9", "rev-uk-new"),
+            make_mock_traffic_entry(None, "rev-main", percent=100),  # Main traffic
         ]
-        mock_client.get_service.return_value = service
 
-        revisions_to_keep = {"rev-latest", "rev-keep"}
-        tags_removed = await cleanup._remove_old_tags(revisions_to_keep)
+        with patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_service
 
-        assert tags_removed == ["country-us-model-0-9-0"]
-        mock_client.update_service.assert_called_once()
+            (
+                service,
+                all_tags,
+                tags_to_keep,
+                newest_us,
+                newest_uk,
+                tags_removed,
+                errors,
+            ) = await cleanup._analyze_tags(keep_count=40)
 
-        # Verify the updated traffic only has the kept entries
-        call_args = mock_client.update_service.call_args
-        updated_service = call_args[0][0].service
-        assert len(updated_service.traffic) == 2
+        assert newest_us is not None
+        assert newest_us.tag == "country-us-model-1-459-0"
+        assert newest_uk is not None
+        assert newest_uk.tag == "country-uk-model-2-65-9"
+        assert len(errors) == 0
 
     @pytest.mark.asyncio
-    @patch("policyengine_api_tagger.api.revision_cleanup.ServicesAsyncClient")
-    async def test_keeps_traffic_with_nonzero_percent(self, MockClient, cleanup):
-        """Traffic with percent > 0 should always be kept."""
-        mock_client = AsyncMock()
-        MockClient.return_value = mock_client
-
-        service = Service()
-        service.uri = "https://api-simulation.run.app"
-        service.traffic = [
-            # Main traffic (100%) - should be kept even if revision not in keep set
-            TrafficTarget(percent=100, revision="rev-not-in-keep-set"),
-            # Canary deployment (10%) - should be kept
-            TrafficTarget(percent=10, revision="rev-canary"),
+    async def test_keeps_safeguards_plus_newest(self, cleanup):
+        """Should keep safeguards + next newest tags up to keep_count."""
+        mock_service = MagicMock()
+        mock_service.traffic = [
+            make_mock_traffic_entry("country-us-model-1-100-0", "rev-1"),
+            make_mock_traffic_entry("country-us-model-1-200-0", "rev-2"),
+            make_mock_traffic_entry("country-us-model-1-300-0", "rev-3"),
+            make_mock_traffic_entry("country-us-model-1-400-0", "rev-4"),  # Newest US
+            make_mock_traffic_entry("country-uk-model-2-50-0", "rev-5"),
+            make_mock_traffic_entry("country-uk-model-2-60-0", "rev-6"),  # Newest UK
         ]
-        mock_client.get_service.return_value = service
 
-        revisions_to_keep = {"rev-other"}  # Neither revision in keep set
-        tags_removed = await cleanup._remove_old_tags(revisions_to_keep)
+        with patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_service
 
-        assert tags_removed == []
-        mock_client.update_service.assert_not_called()
+            (
+                service,
+                all_tags,
+                tags_to_keep,
+                newest_us,
+                newest_uk,
+                tags_removed,
+                errors,
+            ) = await cleanup._analyze_tags(keep_count=4)
+
+        # Should keep: newest US, newest UK, then next 2 newest by version
+        assert len(tags_to_keep) == 4
+        kept_tags = [t.tag for t in tags_to_keep]
+
+        # Safeguards must be first
+        assert "country-us-model-1-400-0" in kept_tags
+        assert "country-uk-model-2-60-0" in kept_tags
+
+        # Should remove oldest
+        assert len(tags_removed) == 2
 
     @pytest.mark.asyncio
-    @patch("policyengine_api_tagger.api.revision_cleanup.ServicesAsyncClient")
-    async def test_no_tags_to_remove(self, MockClient, cleanup):
-        mock_client = AsyncMock()
-        MockClient.return_value = mock_client
-
-        service = Service()
-        service.uri = "https://api-simulation.run.app"
-        service.traffic = [
-            TrafficTarget(percent=100, revision="rev-latest"),
-            TrafficTarget(percent=0, revision="rev-keep", tag="country-us-model-1-0-0"),
+    async def test_handles_keep_count_less_than_2(self, cleanup):
+        """Should enforce minimum keep_count of 2."""
+        mock_service = MagicMock()
+        mock_service.traffic = [
+            make_mock_traffic_entry("country-us-model-1-400-0", "rev-us"),
+            make_mock_traffic_entry("country-uk-model-2-60-0", "rev-uk"),
         ]
-        mock_client.get_service.return_value = service
 
-        revisions_to_keep = {"rev-latest", "rev-keep"}
-        tags_removed = await cleanup._remove_old_tags(revisions_to_keep)
+        with patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_service
 
-        assert tags_removed == []
-        mock_client.update_service.assert_not_called()
+            (
+                service,
+                all_tags,
+                tags_to_keep,
+                newest_us,
+                newest_uk,
+                tags_removed,
+                errors,
+            ) = await cleanup._analyze_tags(keep_count=1)  # Should become 2
+
+        # Should still keep both safeguards
+        assert len(tags_to_keep) == 2
+
+    @pytest.mark.asyncio
+    async def test_handles_no_tags(self, cleanup):
+        """Should handle service with no tags gracefully."""
+        mock_service = MagicMock()
+        mock_service.traffic = [
+            make_mock_traffic_entry(None, "rev-main", percent=100),
+        ]
+
+        with patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_service
+
+            (
+                service,
+                all_tags,
+                tags_to_keep,
+                newest_us,
+                newest_uk,
+                tags_removed,
+                errors,
+            ) = await cleanup._analyze_tags(keep_count=40)
+
+        assert len(all_tags) == 0
+        assert len(tags_to_keep) == 0
+        assert newest_us is None
+        assert newest_uk is None
+
+    @pytest.mark.asyncio
+    async def test_handles_only_us_tags(self, cleanup):
+        """Should handle service with only US tags."""
+        mock_service = MagicMock()
+        mock_service.traffic = [
+            make_mock_traffic_entry("country-us-model-1-100-0", "rev-1"),
+            make_mock_traffic_entry("country-us-model-1-200-0", "rev-2"),
+        ]
+
+        with patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_service
+
+            (
+                service,
+                all_tags,
+                tags_to_keep,
+                newest_us,
+                newest_uk,
+                tags_removed,
+                errors,
+            ) = await cleanup._analyze_tags(keep_count=40)
+
+        assert newest_us is not None
+        assert newest_us.tag == "country-us-model-1-200-0"
+        assert newest_uk is None
+
+    @pytest.mark.asyncio
+    async def test_handles_service_error(self, cleanup):
+        """Should handle service fetch errors gracefully."""
+        with patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = Exception("Cloud Run API error")
+
+            (
+                service,
+                all_tags,
+                tags_to_keep,
+                newest_us,
+                newest_uk,
+                tags_removed,
+                errors,
+            ) = await cleanup._analyze_tags(keep_count=40)
+
+        assert service is None
+        assert len(errors) == 1
+        assert "Failed to get service" in errors[0]
 
 
 # -----------------------------------------------------------------------------
-# Tests for _cleanup_metadata_files
+# Tests for preview
 # -----------------------------------------------------------------------------
 
 
-class TestCleanupMetadataFiles:
+class TestPreview:
     @pytest.mark.asyncio
-    async def test_deletes_metadata_for_old_revisions(self, cleanup):
+    async def test_returns_cleanup_result_without_changes(self, cleanup):
+        """Preview should return what would happen without making changes."""
+        mock_service = MagicMock()
+        mock_service.traffic = [
+            make_mock_traffic_entry("country-us-model-1-100-0", "rev-1"),
+            make_mock_traffic_entry("country-us-model-1-200-0", "rev-2"),
+            make_mock_traffic_entry("country-uk-model-2-50-0", "rev-3"),
+        ]
+
+        with patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_service
+
+            result = await cleanup.preview(keep_count=2)
+
+        assert isinstance(result, CleanupResult)
+        assert result.total_tags_found == 3
+        assert result.newest_us_tag == "country-us-model-1-200-0"
+        assert result.newest_uk_tag == "country-uk-model-2-50-0"
+        # With keep=2, should remove oldest US tag
+        assert len(result.tags_kept) == 2
+        assert len(result.tags_removed) == 1
+
+    @pytest.mark.asyncio
+    async def test_preview_does_not_call_update(self, cleanup):
+        """Preview should NOT call _update_service_traffic."""
+        mock_service = MagicMock()
+        mock_service.traffic = [
+            make_mock_traffic_entry("country-us-model-1-100-0", "rev-1"),
+            make_mock_traffic_entry("country-us-model-1-200-0", "rev-2"),
+        ]
+
         with (
+            patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get,
             patch.object(
-                cleanup, "_list_metadata_files", new_callable=AsyncMock
-            ) as mock_list,
-            patch.object(
-                cleanup, "_read_metadata_file", new_callable=AsyncMock
-            ) as mock_read,
-            patch.object(
-                cleanup, "_delete_metadata_file", new_callable=AsyncMock
-            ) as mock_delete,
+                cleanup, "_update_service_traffic", new_callable=AsyncMock
+            ) as mock_update,
         ):
-            mock_list.return_value = [
-                "us.1.0.0.json",  # Keep
-                "us.0.9.0.json",  # Delete
-                "uk.2.0.0.json",  # Keep
-                "live.json",  # Skip (special file)
-                "deployments.json",  # Skip (special file)
-            ]
+            mock_get.return_value = mock_service
 
-            def read_side_effect(filename):
-                if filename == "us.1.0.0.json":
-                    return {"revision": "rev-keep"}
-                elif filename == "us.0.9.0.json":
-                    return {"revision": "rev-old"}
-                elif filename == "uk.2.0.0.json":
-                    return {"revision": "rev-keep"}
-                return None
+            await cleanup.preview(keep_count=1)
 
-            mock_read.side_effect = read_side_effect
-
-            revisions_to_keep = {"rev-keep"}
-            deleted = await cleanup._cleanup_metadata_files(revisions_to_keep)
-
-            assert deleted == ["us.0.9.0.json"]
-            mock_delete.assert_called_once_with("us.0.9.0.json")
-
-    @pytest.mark.asyncio
-    async def test_skips_special_files(self, cleanup):
-        with (
-            patch.object(
-                cleanup, "_list_metadata_files", new_callable=AsyncMock
-            ) as mock_list,
-            patch.object(
-                cleanup, "_read_metadata_file", new_callable=AsyncMock
-            ) as mock_read,
-            patch.object(
-                cleanup, "_delete_metadata_file", new_callable=AsyncMock
-            ) as mock_delete,
-        ):
-            mock_list.return_value = [
-                "live.json",
-                "deployments.json",
-            ]
-
-            deleted = await cleanup._cleanup_metadata_files({"rev-keep"})
-
-            assert deleted == []
-            mock_read.assert_not_called()
-            mock_delete.assert_not_called()
+        # CRITICAL: update should NOT be called
+        mock_update.assert_not_called()
 
 
 # -----------------------------------------------------------------------------
-# Tests for cleanup (full flow)
+# Tests for cleanup
 # -----------------------------------------------------------------------------
 
 
 class TestCleanup:
     @pytest.mark.asyncio
-    async def test_full_cleanup_flow(self, cleanup, sample_manifest):
+    async def test_calls_update_when_tags_to_remove(self, cleanup):
+        """Cleanup should call update when there are tags to remove."""
+        mock_service = MagicMock()
+        mock_service.traffic = [
+            make_mock_traffic_entry("country-us-model-1-100-0", "rev-1"),
+            make_mock_traffic_entry("country-us-model-1-200-0", "rev-2"),
+            make_mock_traffic_entry("country-uk-model-2-50-0", "rev-3"),
+        ]
+
         with (
+            patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get,
             patch.object(
-                cleanup, "_read_manifest", new_callable=AsyncMock
-            ) as mock_read_manifest,
-            patch.object(
-                cleanup, "_remove_old_tags", new_callable=AsyncMock
-            ) as mock_remove_tags,
-            patch.object(
-                cleanup, "_cleanup_metadata_files", new_callable=AsyncMock
-            ) as mock_cleanup_files,
-            patch.object(
-                cleanup, "_write_manifest", new_callable=AsyncMock
-            ) as mock_write_manifest,
+                cleanup, "_update_service_traffic", new_callable=AsyncMock
+            ) as mock_update,
         ):
-            mock_read_manifest.return_value = sample_manifest[:6]  # 6 deployments
-            mock_remove_tags.return_value = ["tag-1", "tag-2"]
-            mock_cleanup_files.return_value = ["us.old.json"]
+            mock_get.return_value = mock_service
 
-            result = await cleanup.cleanup(keep_count=5)
+            result = await cleanup.cleanup(keep_count=2)
 
-            assert len(result.revisions_kept) == 5
-            assert result.tags_removed == ["tag-1", "tag-2"]
-            assert result.metadata_files_deleted == ["us.old.json"]
-            assert result.errors == []
-
-            # Verify manifest was written with only kept revisions
-            mock_write_manifest.assert_called_once()
+        # Should call update since there are tags to remove
+        mock_update.assert_called_once()
+        assert len(result.tags_removed) == 1
 
     @pytest.mark.asyncio
-    async def test_cleanup_with_no_manifest(self, cleanup):
-        with patch.object(
-            cleanup, "_read_manifest", new_callable=AsyncMock
-        ) as mock_read_manifest:
-            mock_read_manifest.return_value = []
+    async def test_does_not_call_update_when_nothing_to_remove(self, cleanup):
+        """Cleanup should not call update when all tags are kept."""
+        mock_service = MagicMock()
+        mock_service.traffic = [
+            make_mock_traffic_entry("country-us-model-1-200-0", "rev-1"),
+            make_mock_traffic_entry("country-uk-model-2-50-0", "rev-2"),
+        ]
 
-            result = await cleanup.cleanup(keep_count=5)
+        with (
+            patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get,
+            patch.object(
+                cleanup, "_update_service_traffic", new_callable=AsyncMock
+            ) as mock_update,
+        ):
+            mock_get.return_value = mock_service
 
-            assert result.revisions_kept == []
-            assert result.tags_removed == []
-            assert result.metadata_files_deleted == []
-            assert "No deployment manifest found" in result.errors
+            result = await cleanup.cleanup(keep_count=40)  # Keep all
+
+        # Should NOT call update since nothing to remove
+        mock_update.assert_not_called()
+        assert len(result.tags_removed) == 0
 
     @pytest.mark.asyncio
-    async def test_cleanup_handles_errors_gracefully(self, cleanup, sample_manifest):
+    async def test_handles_update_failure(self, cleanup):
+        """Cleanup should handle update failures gracefully."""
+        mock_service = MagicMock()
+        mock_service.traffic = [
+            make_mock_traffic_entry("country-us-model-1-100-0", "rev-1"),
+            make_mock_traffic_entry("country-us-model-1-200-0", "rev-2"),
+            make_mock_traffic_entry("country-us-model-1-300-0", "rev-3"),
+            make_mock_traffic_entry("country-uk-model-2-50-0", "rev-4"),
+        ]
+
         with (
+            patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get,
             patch.object(
-                cleanup, "_read_manifest", new_callable=AsyncMock
-            ) as mock_read_manifest,
-            patch.object(
-                cleanup, "_remove_old_tags", new_callable=AsyncMock
-            ) as mock_remove_tags,
-            patch.object(
-                cleanup, "_cleanup_metadata_files", new_callable=AsyncMock
-            ) as mock_cleanup_files,
-            patch.object(
-                cleanup, "_write_manifest", new_callable=AsyncMock
-            ) as mock_write_manifest,
+                cleanup, "_update_service_traffic", new_callable=AsyncMock
+            ) as mock_update,
         ):
-            mock_read_manifest.return_value = sample_manifest[:3]
-            mock_remove_tags.side_effect = Exception("Cloud Run API error")
-            mock_cleanup_files.return_value = []
+            mock_get.return_value = mock_service
+            mock_update.side_effect = Exception("Update failed")
 
-            result = await cleanup.cleanup(keep_count=5)
+            # keep=2 means keep safeguards only, remove the other 2
+            result = await cleanup.cleanup(keep_count=2)
 
-            # Should continue despite error
-            assert len(result.revisions_kept) > 0
-            assert "Failed to remove tags" in result.errors[0]
-            mock_cleanup_files.assert_called_once()  # Should still attempt cleanup
+        # Should return error and report no tags removed
+        assert len(result.errors) == 1
+        assert "Failed to update service traffic" in result.errors[0]
+        assert len(result.tags_removed) == 0  # Nothing actually removed
+
+    @pytest.mark.asyncio
+    async def test_preserves_main_traffic_entries(self, cleanup):
+        """Update should preserve traffic entries with percent > 0."""
+        mock_service = MagicMock()
+        mock_service.traffic = [
+            make_mock_traffic_entry("country-us-model-1-100-0", "rev-1"),
+            make_mock_traffic_entry("country-us-model-1-200-0", "rev-2"),
+            make_mock_traffic_entry("country-us-model-1-300-0", "rev-3"),
+            make_mock_traffic_entry("country-uk-model-2-50-0", "rev-4"),
+            make_mock_traffic_entry(None, "rev-main", percent=100),  # Main traffic
+        ]
+
+        captured_tags_to_keep = []
+
+        async def capture_update(service, tags_to_keep):
+            captured_tags_to_keep.extend(tags_to_keep)
+
+        with (
+            patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get,
+            patch.object(
+                cleanup, "_update_service_traffic", side_effect=capture_update
+            ) as mock_update,
+        ):
+            mock_get.return_value = mock_service
+
+            # keep=2 means only safeguards, should remove 2 tags
+            await cleanup.cleanup(keep_count=2)
+
+        # The tags_to_keep passed to update should only include tagged entries
+        # Main traffic (percent=100) handling is in _update_service_traffic itself
+        mock_update.assert_called_once()
+        # Should have passed 2 tags to keep (newest US + newest UK)
+        assert len(captured_tags_to_keep) == 2
 
 
 # -----------------------------------------------------------------------------
-# Tests for manifest read/write functions
+# Tests for version comparison
 # -----------------------------------------------------------------------------
 
 
-class TestManifestReadWrite:
-    def test_read_manifest_returns_empty_on_missing_file(self):
-        with patch(
-            "policyengine_api_tagger.api.revision_cleanup.storage.Client"
-        ) as MockClient:
-            mock_client = MagicMock()
-            MockClient.return_value = mock_client
-            mock_bucket = MagicMock()
-            mock_client.bucket.return_value = mock_bucket
-            mock_blob = MagicMock()
-            mock_bucket.blob.return_value = mock_blob
-            mock_blob.exists.return_value = False
+class TestVersionComparison:
+    @pytest.mark.asyncio
+    async def test_sorts_versions_correctly(self, cleanup):
+        """Should sort versions numerically, not lexicographically."""
+        mock_service = MagicMock()
+        # These would sort wrong lexicographically: 1-9-0 > 1-10-0 > 1-100-0
+        mock_service.traffic = [
+            make_mock_traffic_entry("country-us-model-1-9-0", "rev-1"),
+            make_mock_traffic_entry("country-us-model-1-100-0", "rev-2"),
+            make_mock_traffic_entry("country-us-model-1-10-0", "rev-3"),
+        ]
 
-            result = _read_manifest_sync("test-bucket")
+        with patch.object(cleanup, "_get_service", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_service
 
-            assert result == []
+            (
+                service,
+                all_tags,
+                tags_to_keep,
+                newest_us,
+                newest_uk,
+                tags_removed,
+                errors,
+            ) = await cleanup._analyze_tags(keep_count=2)
 
-    def test_read_manifest_parses_json(self):
-        with patch(
-            "policyengine_api_tagger.api.revision_cleanup.storage.Client"
-        ) as MockClient:
-            mock_client = MagicMock()
-            MockClient.return_value = mock_client
-            mock_bucket = MagicMock()
-            mock_client.bucket.return_value = mock_bucket
-            mock_blob = MagicMock()
-            mock_bucket.blob.return_value = mock_blob
-            mock_blob.exists.return_value = True
-            mock_blob.download_as_text.return_value = json.dumps(
-                [
-                    {
-                        "revision": "rev-1",
-                        "us": "1.0.0",
-                        "uk": "2.0.0",
-                        "deployed_at": "2025-01-01T00:00:00Z",
-                    }
-                ]
-            )
+        # 1.100.0 > 1.10.0 > 1.9.0 numerically
+        assert newest_us.tag == "country-us-model-1-100-0"
 
-            result = _read_manifest_sync("test-bucket")
-
-            assert len(result) == 1
-            assert result[0].revision == "rev-1"
-            assert result[0].us == "1.0.0"
-
-    def test_write_manifest_uses_atomic_pattern(self):
-        with patch(
-            "policyengine_api_tagger.api.revision_cleanup.storage.Client"
-        ) as MockClient:
-            mock_client = MagicMock()
-            MockClient.return_value = mock_client
-            mock_bucket = MagicMock()
-            mock_client.bucket.return_value = mock_bucket
-            mock_temp_blob = MagicMock()
-            mock_bucket.blob.return_value = mock_temp_blob
-
-            entries = [
-                DeploymentEntry(
-                    revision="rev-1",
-                    us="1.0.0",
-                    uk="2.0.0",
-                    deployed_at=datetime.now(),
-                )
-            ]
-
-            _write_manifest_sync("test-bucket", entries)
-
-            # Should write to temp, then copy
-            mock_temp_blob.upload_from_string.assert_called_once()
-            mock_bucket.copy_blob.assert_called_once()
-            # Should clean up temp
-            mock_temp_blob.delete.assert_called_once()
+        # With keep=2, should keep 1.100.0 and 1.10.0, remove 1.9.0
+        kept_tags = [t.tag for t in tags_to_keep]
+        assert "country-us-model-1-100-0" in kept_tags
+        assert "country-us-model-1-10-0" in kept_tags
+        assert "country-us-model-1-9-0" in tags_removed
