@@ -114,6 +114,16 @@ resource "google_service_account_iam_member" "cloudrun_act_as_simulation" {
   member             = "serviceAccount:${module.cloud_run_tagger_api.sa_email}"
 }
 
+# Grant permission to read from Artifact Registry
+# This is required when updating Cloud Run service traffic - GCP validates access to container images
+resource "google_artifact_registry_repository_iam_member" "tagger_artifact_reader" {
+  project    = var.project_id
+  location   = var.region
+  repository = "api-v2"
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${module.cloud_run_tagger_api.sa_email}"
+}
+
 module "cloud_run_simulation_api" {
   source = "./modules/fastapi_cloudrun"
 
