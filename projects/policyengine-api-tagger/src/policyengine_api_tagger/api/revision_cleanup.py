@@ -13,7 +13,13 @@ The manifest is NOT touched - it's kept for historical record.
 import re
 import logging
 from pydantic import BaseModel
-from google.cloud.run_v2 import ServicesAsyncClient, Service, UpdateServiceRequest
+from google.cloud.run_v2 import (
+    ServicesAsyncClient,
+    Service,
+    UpdateServiceRequest,
+    TrafficTarget,
+    TrafficTargetAllocationType,
+)
 
 log = logging.getLogger(__name__)
 
@@ -132,10 +138,9 @@ class RevisionCleanup:
 
         # Add the tags we want to keep (with percent=0)
         for tag_info in tags_to_keep:
-            from google.cloud.run_v2 import TrafficTarget
-
             new_traffic.append(
                 TrafficTarget(
+                    type_=TrafficTargetAllocationType.TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION,
                     percent=0,
                     revision=tag_info.revision,
                     tag=tag_info.tag,
