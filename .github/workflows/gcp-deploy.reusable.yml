@@ -198,7 +198,7 @@ jobs:
         python ../../../scripts/cleanup_old_revisions.py \
           "$TAGGER_URL" \
           "${{ steps.tagger-token.outputs.id_token }}" \
-          40
+          5
 
   integ_test:
     name: Run integration test
