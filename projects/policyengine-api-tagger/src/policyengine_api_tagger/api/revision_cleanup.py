@@ -274,7 +274,7 @@ class RevisionCleanup:
             errors,
         )
 
-    async def preview(self, keep_count: int = 40) -> CleanupResult:
+    async def preview(self, keep_count: int = 5) -> CleanupResult:
         """
         Preview what cleanup would do without making changes.
 
@@ -313,7 +313,7 @@ class RevisionCleanup:
             errors=errors,
         )
 
-    async def cleanup(self, keep_count: int = 40) -> CleanupResult:
+    async def cleanup(self, keep_count: int = 5) -> CleanupResult:
         """
         Clean up old traffic tags, keeping the specified number.
 
