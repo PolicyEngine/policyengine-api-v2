@@ -1,5 +1,5 @@
 """
-Configuration utilities for Modal image building.
+Pre-load models at image build time for fast cold starts.
 """
 
 import logging

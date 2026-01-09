@@ -8,7 +8,7 @@ import modal
 import logging
 import os
 
-from .config_utils import snapshot_models
+from .utils import snapshot_models
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
