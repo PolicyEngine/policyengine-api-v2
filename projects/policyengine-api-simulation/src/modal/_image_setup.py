@@ -1,12 +1,15 @@
 """
-Pre-load models at image build time for fast cold starts.
-"""
+Standalone image setup functions.
 
-import logging
+These functions are executed during Modal image build and must not
+import any other modules from this package to avoid dependency issues.
+"""
 
 
 def snapshot_models():
     """Pre-load models at image build time for fast cold starts."""
+    import logging
+
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
 
