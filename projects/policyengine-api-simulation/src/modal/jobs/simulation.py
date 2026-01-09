@@ -23,13 +23,20 @@ def run_simulation(params: dict) -> dict:
     Called via gateway's direct function dispatch.
     Returns dict for JSON serialization.
     """
-    from policyengine.simulation import Simulation, SimulationOptions
-
     logger.info(f"Starting simulation for country: {params.get('country', 'unknown')}")
 
-    options = SimulationOptions.model_validate(params)
-    simulation = Simulation(**options.model_dump())
-    result = simulation.calculate_economy_comparison()
+    # TODO: Implement actual simulation logic
+    # from policyengine.simulation import Simulation, SimulationOptions
+    # options = SimulationOptions.model_validate(params)
+    # simulation = Simulation(**options.model_dump())
+    # result = simulation.calculate_economy_comparison()
+    # return result.model_dump()
 
-    logger.info("Simulation complete")
-    return result.model_dump()
+    result = {
+        "status": "placeholder",
+        "message": "Simulation placeholder - not yet implemented",
+        "params_received": params,
+    }
+
+    logger.info("Simulation complete (placeholder)")
+    return result
