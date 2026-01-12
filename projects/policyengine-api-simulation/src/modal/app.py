@@ -17,8 +17,9 @@ app = modal.App("policyengine-simulation")
 US_VERSION = os.environ.get("POLICYENGINE_US_VERSION", "1.459.0")
 UK_VERSION = os.environ.get("POLICYENGINE_UK_VERSION", "2.65.9")
 
-# GCP credentials secret
+# Secrets
 gcp_secret = modal.Secret.from_name("gcp-credentials")
+logfire_secret = modal.Secret.from_name("policyengine-logfire")
 
 # Heavy image with model snapshot for simulation
 simulation_image = (
@@ -28,6 +29,7 @@ simulation_image = (
         f"policyengine-uk=={UK_VERSION}",
         "policyengine==0.8.1",
         "tables>=3.10.2",
+        "logfire",
     )
     .add_local_python_source("src.modal", copy=True)
     .run_function(snapshot_models)
@@ -44,23 +46,53 @@ gateway_image = (
 )
 
 
+def configure_logfire(service_name: str = "policyengine-simulation"):
+    """Configure Logfire for observability. Call at start of each function."""
+    import logfire
+
+    token = os.environ.get("LOGFIRE_TOKEN", "")
+    if not token:
+        return
+
+    logfire.configure(
+        service_name=service_name,
+        token=token,
+        environment=os.environ.get("LOGFIRE_ENVIRONMENT", "production"),
+        console=False,
+    )
+
+
 @app.function(
     image=simulation_image,
     cpu=8.0,
     memory=32768,
     timeout=3600,
     retries=0,
-    secrets=[gcp_secret],
+    secrets=[gcp_secret, logfire_secret],
 )
 def run_simulation(params: dict) -> dict:
     """
     Execute economic simulation.
 
     Imports the snapshotted implementation at runtime.
+    Logs input params and output result to Logfire for observability.
     """
+    import logfire
+
     from src.modal.simulation import run_simulation_impl
 
-    return run_simulation_impl(params)
+    configure_logfire()
+
+    try:
+        with logfire.span(
+            "run_simulation",
+            input_params=params,
+        ) as span:
+            result = run_simulation_impl(params)
+            span.set_attribute("output_result", result)
+            return result
+    finally:
+        logfire.force_flush()
 
 
 @app.function(image=gateway_image)
