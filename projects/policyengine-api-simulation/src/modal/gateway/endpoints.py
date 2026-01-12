@@ -9,7 +9,13 @@ import modal
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from src.modal.gateway.models import JobStatusResponse, JobSubmitResponse, SimulationRequest
+from src.modal.gateway.models import (
+    JobStatusResponse,
+    JobSubmitResponse,
+    PingRequest,
+    PingResponse,
+    SimulationRequest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -134,3 +140,12 @@ async def get_country_versions(country: str):
 async def health():
     """Health check endpoint."""
     return {"status": "healthy"}
+
+
+@router.post("/ping", response_model=PingResponse)
+async def ping(request: PingRequest) -> PingResponse:
+    """
+    Verify the API is able to receive and process requests.
+    Matches the policyengine_fastapi.ping endpoint for test compatibility.
+    """
+    return PingResponse(incremented=request.value + 1)

@@ -18,7 +18,9 @@ US_VERSION = os.environ.get("POLICYENGINE_US_VERSION", "1.459.0")
 UK_VERSION = os.environ.get("POLICYENGINE_UK_VERSION", "2.65.9")
 
 # Secrets
-gcp_secret = modal.Secret.from_name("gcp-credentials")
+# GCP credentials are shared across environments (always from main)
+gcp_secret = modal.Secret.from_name("gcp-credentials", environment_name="main")
+# Logfire secret is environment-specific
 logfire_secret = modal.Secret.from_name("policyengine-logfire")
 
 # Heavy image with model snapshot for simulation

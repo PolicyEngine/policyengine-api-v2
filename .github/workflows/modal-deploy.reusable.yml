@@ -1,0 +1,104 @@
+name: Reusable Modal deploy workflow
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+        description: 'The environment to deploy to (e.g., beta, prod)'
+      modal_environment:
+        required: true
+        type: string
+        description: 'The Modal environment name (e.g., staging, main)'
+    outputs:
+      simulation_api_url:
+        description: 'The deployed simulation API URL'
+        value: ${{ jobs.deploy.outputs.simulation_api_url }}
+
+jobs:
+  deploy:
+    name: Deploy to Modal
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      simulation_api_url: ${{ steps.get-url.outputs.simulation_api_url }}
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Make scripts executable
+      run: chmod +x .github/scripts/*.sh
+
+    - name: Install dependencies
+      working-directory: projects/policyengine-api-simulation
+      run: uv sync
+
+    - name: Extract package versions
+      id: versions
+      run: .github/scripts/modal-extract-versions.sh projects/policyengine-api-simulation
+
+    - name: Sync Modal secrets from GitHub
+      working-directory: projects/policyengine-api-simulation
+      env:
+        MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+        MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        LOGFIRE_TOKEN: ${{ secrets.LOGFIRE_TOKEN }}
+        GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
+      run: ../../.github/scripts/modal-sync-secrets.sh "${{ inputs.modal_environment }}" "${{ inputs.environment }}"
+
+    - name: Deploy simulation API to Modal
+      working-directory: projects/policyengine-api-simulation
+      env:
+        MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+        MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        POLICYENGINE_US_VERSION: ${{ steps.versions.outputs.us_version }}
+        POLICYENGINE_UK_VERSION: ${{ steps.versions.outputs.uk_version }}
+      run: ../../.github/scripts/modal-deploy-app.sh "${{ inputs.modal_environment }}" src/modal/app.py
+
+    - name: Get deployed URL
+      id: get-url
+      working-directory: projects/policyengine-api-simulation
+      env:
+        MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+        MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      run: ../../.github/scripts/modal-get-url.sh "${{ inputs.modal_environment }}"
+
+    - name: Verify deployment health
+      run: .github/scripts/modal-health-check.sh "${{ steps.get-url.outputs.simulation_api_url }}"
+
+  integ_test:
+    name: Run integration tests
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Make scripts executable
+      run: chmod +x .github/scripts/*.sh
+
+    - name: Generate API clients
+      run: ./scripts/generate-clients.sh
+
+    - name: Run simulation integration tests
+      run: .github/scripts/modal-run-integ-tests.sh "${{ inputs.environment }}" "${{ needs.deploy.outputs.simulation_api_url }}"

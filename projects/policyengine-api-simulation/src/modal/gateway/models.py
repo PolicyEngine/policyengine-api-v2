@@ -31,3 +31,15 @@ class JobStatusResponse(BaseModel):
     status: str
     result: Optional[dict] = None
     error: Optional[str] = None
+
+
+class PingRequest(BaseModel):
+    """Request model for ping endpoint."""
+
+    value: int
+
+
+class PingResponse(BaseModel):
+    """Response model for ping endpoint."""
+
+    incremented: int

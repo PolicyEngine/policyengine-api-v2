@@ -1,0 +1,90 @@
+name: Deploy Simulation API to Modal
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "projects/policyengine-api-simulation/**"
+      - ".github/workflows/modal-deploy*.yml"
+      - ".github/scripts/modal-*.sh"
+  workflow_dispatch:
+    inputs:
+      skip_beta:
+        description: 'Skip beta deployment and deploy directly to prod'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: modal-deploy-main
+
+jobs:
+  setup_environments:
+    name: Setup Modal environments
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Make scripts executable
+      run: chmod +x .github/scripts/*.sh
+
+    - name: Install dependencies
+      working-directory: projects/policyengine-api-simulation
+      run: uv sync
+
+    - name: Ensure Modal environments exist
+      working-directory: projects/policyengine-api-simulation
+      env:
+        MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+        MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      run: ../../.github/scripts/modal-setup-environments.sh
+
+  deploy_beta:
+    name: Deploy to beta
+    needs: [setup_environments]
+    if: ${{ !inputs.skip_beta }}
+    uses: ./.github/workflows/modal-deploy.reusable.yml
+    with:
+      environment: beta
+      modal_environment: staging
+    secrets: inherit
+
+  deploy_prod:
+    name: Deploy to production
+    needs: [deploy_beta]
+    if: ${{ always() && (needs.deploy_beta.result == 'success' || inputs.skip_beta) }}
+    uses: ./.github/workflows/modal-deploy.reusable.yml
+    with:
+      environment: prod
+      modal_environment: main
+    secrets: inherit
+
+  summary:
+    name: Deployment summary
+    needs: [deploy_beta, deploy_prod]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Make scripts executable
+      run: chmod +x .github/scripts/*.sh
+
+    - name: Report status
+      run: |
+        .github/scripts/modal-deployment-summary.sh \
+          "${{ needs.deploy_beta.result }}" \
+          "${{ needs.deploy_beta.outputs.simulation_api_url }}" \
+          "${{ needs.deploy_prod.result }}" \
+          "${{ needs.deploy_prod.outputs.simulation_api_url }}"
