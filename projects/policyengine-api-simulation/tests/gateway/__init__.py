@@ -1,0 +1,1 @@
+"""Gateway endpoint tests."""
