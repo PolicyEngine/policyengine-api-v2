@@ -9,7 +9,7 @@ import modal
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from .models import JobStatusResponse, JobSubmitResponse, SimulationRequest
+from src.modal.gateway.models import JobStatusResponse, JobSubmitResponse, SimulationRequest
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +44,12 @@ def get_app_name(country: str, version: Optional[str]) -> tuple[str, str]:
     return app_name, resolved_version
 
 
-@router.post("/simulate", response_model=JobSubmitResponse)
+@router.post("/simulate/economy/comparison", response_model=JobSubmitResponse)
 async def submit_simulation(request: SimulationRequest):
     """
     Submit a simulation job.
 
+    Matches the existing Cloud Run API endpoint path.
     Routes to the appropriate app based on country and version params.
     Returns immediately with job_id for polling.
     """
