@@ -11,7 +11,7 @@ import os
 from src.modal._image_setup import snapshot_models
 
 # App definition
-app = modal.App("policyengine-sim")
+app = modal.App("policyengine-simulation")
 
 # Get versions from environment or use defaults
 US_VERSION = os.environ.get("POLICYENGINE_US_VERSION", "1.459.0")
@@ -29,13 +29,18 @@ simulation_image = (
         "policyengine==0.8.1",
         "tables>=3.10.2",
     )
+    .add_local_python_source("src.modal", copy=True)
     .run_function(snapshot_models)
 )
 
 # Lightweight image for gateway
-gateway_image = modal.Image.debian_slim(python_version="3.13").pip_install(
-    "fastapi>=0.115.0",
-    "pydantic>=2.0",
+gateway_image = (
+    modal.Image.debian_slim(python_version="3.13")
+    .pip_install(
+        "fastapi>=0.115.0",
+        "pydantic>=2.0",
+    )
+    .add_local_python_source("src.modal", copy=True)
 )
 
 
