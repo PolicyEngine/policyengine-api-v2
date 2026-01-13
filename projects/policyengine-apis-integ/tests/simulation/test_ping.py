@@ -61,9 +61,9 @@ def test_ping_concurrent_requests(client: Client | AuthenticatedClient):
 
     # And - all responses should have correct incremented values
     for value, response, error in results:
-        assert isinstance(
-            response, PingResponse
-        ), f"Request {value} did not return PingResponse"
-        assert (
-            response.incremented == value + 1
-        ), f"Request {value} returned wrong increment: expected {value + 1}, got {response.incremented}"
+        assert isinstance(response, PingResponse), (
+            f"Request {value} did not return PingResponse"
+        )
+        assert response.incremented == value + 1, (
+            f"Request {value} returned wrong increment: expected {value + 1}, got {response.incremented}"
+        )

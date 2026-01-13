@@ -14,7 +14,9 @@ import modal
 
 def main():
     parser = argparse.ArgumentParser(description="Update version registries")
-    parser.add_argument("--app-name", required=True, help="App name (e.g., policyengine-sim-v42)")
+    parser.add_argument(
+        "--app-name", required=True, help="App name (e.g., policyengine-sim-v42)"
+    )
     parser.add_argument("--us-version", required=True, help="US package version")
     parser.add_argument("--uk-version", required=True, help="UK package version")
     args = parser.parse_args()
