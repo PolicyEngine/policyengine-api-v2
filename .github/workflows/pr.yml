@@ -132,7 +132,9 @@ jobs:
         cd projects/policyengine-apis-integ
         uv sync --extra test
         # Run tests that don't require GCP credentials
-        uv run pytest tests/ -v -m "not requires_gcp"
+        # Modal staging tests run against deployed staging environment
+        simulation_integ_test_base_url="https://policyengine-staging--policyengine-simulation-gateway-web-app.modal.run" \
+          uv run pytest tests/ -v -m "not requires_gcp"
     
     - name: Show service logs on failure
       if: failure()
