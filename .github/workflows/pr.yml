@@ -131,8 +131,8 @@ jobs:
       run: |
         cd projects/policyengine-apis-integ
         uv sync --extra test
-        # Run tests that don't require GCP credentials
-        uv run pytest tests/ -v -m "not requires_gcp"
+        # Run tests against local Docker services (exclude GCP and Modal staging tests)
+        uv run pytest tests/ -v -m "not requires_gcp and not beta_only"
     
     - name: Show service logs on failure
       if: failure()
