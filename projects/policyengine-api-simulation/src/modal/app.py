@@ -1,8 +1,10 @@
 """
-PolicyEngine Simulation - Modal App Definition
+PolicyEngine Simulation - Versioned Modal App
 
-All Modal wiring in one place. This file is only fully processed at deploy time.
-At runtime, containers just execute the snapshotted simulation code.
+This app contains the heavy simulation workload with snapshotted models.
+Each deployment creates a versioned app (e.g., policyengine-simulation-us1-459-0-uk2-65-9).
+
+The gateway app (policyengine-simulation-gateway) routes requests to these versioned apps.
 """
 
 import modal
@@ -51,16 +53,6 @@ simulation_image = (
     )
     .add_local_python_source("src.modal", copy=True)
     .run_function(snapshot_models)
-)
-
-# Lightweight image for gateway
-gateway_image = (
-    modal.Image.debian_slim(python_version="3.13")
-    .pip_install(
-        "fastapi>=0.115.0",
-        "pydantic>=2.0",
-    )
-    .add_local_python_source("src.modal", copy=True)
 )
 
 
@@ -112,21 +104,3 @@ def run_simulation(params: dict) -> dict:
             return result
     finally:
         logfire.force_flush()
-
-
-@app.function(image=gateway_image)
-@modal.asgi_app()
-def web_app():
-    """
-    FastAPI gateway for simulation job submission and polling.
-    """
-    from fastapi import FastAPI
-    from src.modal.gateway.endpoints import router
-
-    api = FastAPI(
-        title="PolicyEngine Simulation API",
-        description="Submit and poll simulation jobs",
-        version="1.0.0",
-    )
-    api.include_router(router)
-    return api

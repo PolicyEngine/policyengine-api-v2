@@ -199,8 +199,7 @@ def test_calculate_uk_model(
             "reform": {
                 "gov.hmrc.income_tax.rates.uk[0].rate": {"2023-01-01.2100-12-31": 0.21}
             },
-            "subsample": 200,
-            "data": "gs://policyengine-uk-data/synthetic_frs_2022.h5",
+            # No subsample - UKMultiYearDataset lacks .name attribute required by subsample method
         }
     )
 
