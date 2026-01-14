@@ -50,5 +50,3 @@ echo "Deployment complete!"
 echo "  Gateway app: policyengine-simulation-gateway"
 echo "  Simulation app: $SIMULATION_APP_NAME"
 echo "========================================"
-
-, 
