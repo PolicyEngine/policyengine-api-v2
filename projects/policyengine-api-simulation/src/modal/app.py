@@ -10,12 +10,28 @@ import os
 
 from src.modal._image_setup import snapshot_models
 
-# App definition
-app = modal.App("policyengine-simulation")
-
 # Get versions from environment or use defaults
 US_VERSION = os.environ.get("POLICYENGINE_US_VERSION", "1.459.0")
 UK_VERSION = os.environ.get("POLICYENGINE_UK_VERSION", "2.65.9")
+
+
+def get_app_name(us_version: str, uk_version: str) -> str:
+    """
+    Generate versioned app name from package versions.
+
+    Replaces dots with dashes for URL safety.
+    Example: us1.459.0, uk2.65.9 -> policyengine-simulation-us1-459-0-uk2-65-9
+    """
+    us_safe = us_version.replace(".", "-")
+    uk_safe = uk_version.replace(".", "-")
+    return f"policyengine-simulation-us{us_safe}-uk{uk_safe}"
+
+
+# App name can be overridden via environment variable, otherwise generated from versions
+APP_NAME = os.environ.get("MODAL_APP_NAME", get_app_name(US_VERSION, UK_VERSION))
+
+# App definition with versioned name
+app = modal.App(APP_NAME)
 
 # Secrets
 # GCP credentials are shared across environments (always from main)
@@ -70,7 +86,7 @@ def configure_logfire(service_name: str = "policyengine-simulation"):
     memory=32768,
     timeout=3600,
     retries=0,
-    concurrency_limit=30,
+    max_containers=30,
     secrets=[gcp_secret, logfire_secret],
 )
 def run_simulation(params: dict) -> dict:
