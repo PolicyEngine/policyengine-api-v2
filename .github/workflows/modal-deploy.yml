@@ -4,10 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - "projects/policyengine-api-simulation/**"
-      - ".github/workflows/modal-deploy*.yml"
-      - ".github/scripts/modal-*.sh"
   workflow_dispatch:
     inputs:
       skip_beta:
