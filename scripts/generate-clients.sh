@@ -19,7 +19,12 @@ generate_client() {
     # Install build dependencies if not already installed
     uv sync --extra build
     
-    uv run python -m policyengine_api_${SERVICE//-/_}.generate_openapi
+    # Use gateway's OpenAPI generator for simulation service (Modal-based)
+    if [ "$SERVICE" = "simulation" ]; then
+        uv run python -m src.modal.gateway.generate_openapi
+    else
+        uv run python -m policyengine_api_${SERVICE//-/_}.generate_openapi
+    fi
     
     # Check if OpenAPI spec was created
     if [ ! -f "artifacts/openapi.json" ]; then
@@ -30,15 +35,25 @@ generate_client() {
     # Generate Python client
     echo "  Generating Python client..."
     mkdir -p artifacts/clients
-    uv run openapi-python-client generate \
-        --path artifacts/openapi.json \
-        --output-path artifacts/clients/python \
-        --overwrite
-    
-    # Update client package name
-    if [ -f "artifacts/clients/python/pyproject.toml" ]; then
-        sed -i.bak "s/^name = .*/name = \"policyengine_api_${SERVICE//-/_}_client\"/" artifacts/clients/python/pyproject.toml
-        rm artifacts/clients/python/pyproject.toml.bak
+
+    # Use config file if it exists (for package name override)
+    if [ -f "openapi-python-client.yaml" ]; then
+        uv run openapi-python-client generate \
+            --path artifacts/openapi.json \
+            --output-path artifacts/clients/python \
+            --config openapi-python-client.yaml \
+            --overwrite
+    else
+        uv run openapi-python-client generate \
+            --path artifacts/openapi.json \
+            --output-path artifacts/clients/python \
+            --overwrite
+
+        # Update client package name if no config
+        if [ -f "artifacts/clients/python/pyproject.toml" ]; then
+            sed -i.bak "s/^name = .*/name = \"policyengine_api_${SERVICE//-/_}_client\"/" artifacts/clients/python/pyproject.toml
+            rm artifacts/clients/python/pyproject.toml.bak
+        fi
     fi
     
     echo "  ✅ Client generated for ${SERVICE}"

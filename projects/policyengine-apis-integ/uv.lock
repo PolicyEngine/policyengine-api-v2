@@ -436,7 +436,7 @@ test = [{ name = "backoff", specifier = ">=2.2.1" }]
 
 [[package]]
 name = "policyengine-api-simulation-client"
-version = "0.1.0"
+version = "1.0.0"
 source = { directory = "../policyengine-api-simulation/artifacts/clients/python" }
 dependencies = [
     { name = "attrs" },
