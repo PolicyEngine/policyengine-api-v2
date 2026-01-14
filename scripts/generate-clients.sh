@@ -19,7 +19,12 @@ generate_client() {
     # Install build dependencies if not already installed
     uv sync --extra build
     
-    uv run python -m policyengine_api_${SERVICE//-/_}.generate_openapi
+    # Use gateway's OpenAPI generator for simulation service (Modal-based)
+    if [ "$SERVICE" = "simulation" ]; then
+        uv run python -m src.modal.gateway.generate_openapi
+    else
+        uv run python -m policyengine_api_${SERVICE//-/_}.generate_openapi
+    fi
     
     # Check if OpenAPI spec was created
     if [ ! -f "artifacts/openapi.json" ]; then
