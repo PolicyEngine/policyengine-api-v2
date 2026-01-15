@@ -129,10 +129,8 @@ def run_national_with_breakdowns(params: dict) -> dict:
     """
     import logfire
 
-    from src.modal.orchestration import (
-        TEST_STATE_CODES,
-        run_national_orchestration,
-    )
+    from src.modal.orchestration import run_national_orchestration
+    from src.modal.utils.state_codes import TEST_STATE_CODES
 
     configure_logfire()
 
