@@ -47,7 +47,7 @@ simulation_image = (
     .pip_install(
         f"policyengine-us=={US_VERSION}",
         f"policyengine-uk=={UK_VERSION}",
-        "policyengine==0.8.1",
+        "policyengine==0.10.0",
         "tables>=3.10.2",
         "logfire",
     )
@@ -101,6 +101,58 @@ def run_simulation(params: dict) -> dict:
         ) as span:
             result = run_simulation_impl(params)
             span.set_attribute("output_result", result)
+            return result
+    finally:
+        logfire.force_flush()
+
+
+@app.function(
+    image=simulation_image,
+    cpu=2.0,
+    memory=4096,
+    timeout=7200,  # 2 hours to wait for all 52 jobs
+    retries=0,
+    secrets=[gcp_secret, logfire_secret],
+)
+def run_national_with_breakdowns(params: dict) -> dict:
+    """
+    Orchestrate parallel simulations and aggregate results.
+
+    Spawns:
+    - 1 national ECPS simulation (region="us")
+    - State-level simulations (51 states or 10 test states if _test_mode=True)
+
+    Each spawned job runs in its own container via run_simulation.
+    Returns combined national results with congressional district breakdowns.
+
+    If _test_mode=True in params, runs only 10 test states instead of all 51.
+    """
+    import logfire
+
+    from src.modal.orchestration import (
+        TEST_STATE_CODES,
+        run_national_orchestration,
+    )
+
+    configure_logfire()
+
+    # Check for test mode
+    test_mode = params.pop("_test_mode", False)
+    state_codes = TEST_STATE_CODES if test_mode else None
+
+    try:
+        with logfire.span(
+            "run_national_with_breakdowns",
+            input_params=params,
+            test_mode=test_mode,
+        ) as span:
+            result = run_national_orchestration(params, run_simulation, state_codes)
+            span.set_attribute(
+                "total_districts",
+                len(
+                    result.get("congressional_district_impact", {}).get("districts", [])
+                ),
+            )
             return result
     finally:
         logfire.force_flush()
