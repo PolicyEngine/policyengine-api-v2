@@ -1,5 +1,5 @@
 [project]
-name = "policyengine-api-full-integ"
+name = "policyengine-api-integ"
 version = "0.1.0"
 readme = "README.md"
 authors = [
@@ -9,10 +9,8 @@ license = {file = "../../LICENSE"}
 requires-python = ">=3.13, <4.0"
 dependencies = [
     "pytest (>=8.3.4,<9.0.0)",
-    "policyengine_api_full_client",
     "policyengine_api_simulation_client",
     "pydantic-settings (>=2.8.1,<3.0.0)",
-    "google-cloud-workflows>=1.18.1",
 ]
 
 [project.optional-dependencies]
@@ -25,12 +23,10 @@ pythonpath = [
 ]
 testpaths = ["tests"]
 markers = [
-    "requires_gcp: mark test as requiring GCP credentials and workflow access",
     "beta_only: mark test as only safe to run against beta environment (not prod)",
 ]
 
 [tool.uv.sources]
-policyengine_api_full_client = { path = "../policyengine-api-full/artifacts/clients/python" }
 policyengine_api_simulation_client = { path = "../policyengine-api-simulation/artifacts/clients/python" }
 
 [tool.pyright]
