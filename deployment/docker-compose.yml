@@ -1,55 +1,16 @@
 services:
-  api-full:
-    build:
-      context: ..
-      dockerfile: projects/policyengine-api-full/Dockerfile
-    environment:
-      - ENVIRONMENT=desktop
-      - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
-      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-beta-api-v2}
-    volumes:
-      - ~/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro
-      - ../projects/policyengine-api-full/src:/app/projects/policyengine-api-full/src
-      - ../libs:/app/libs
-    ports:
-      - "8081:8080"
-    command: sh -c "cd src && uv run uvicorn policyengine_api_full.main:app --reload --host 0.0.0.0 --port 8080"
-    networks:
-      - policyengine
-
   api-simulation:
     build:
       context: ..
       dockerfile: projects/policyengine-api-simulation/Dockerfile
     environment:
       - ENVIRONMENT=desktop
-      - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
-      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-beta-api-v2}
     volumes:
-      - ~/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro
       - ../projects/policyengine-api-simulation/src:/app/projects/policyengine-api-simulation/src
       - ../libs:/app/libs
     ports:
       - "8082:8080"
     command: sh -c "cd src && uv run uvicorn policyengine_api_simulation.main:app --reload --host 0.0.0.0 --port 8080"
-    networks:
-      - policyengine
-
-  api-tagger:
-    build:
-      context: ..
-      dockerfile: projects/policyengine-api-tagger/Dockerfile
-    environment:
-      - ENVIRONMENT=desktop
-      - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
-      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-beta-api-v2}
-    volumes:
-      - ~/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro
-      - ../projects/policyengine-api-tagger/src:/app/projects/policyengine-api-tagger/src
-      - ../libs:/app/libs
-    ports:
-      - "8083:8080"
-    command: sh -c "cd src && uv run uvicorn policyengine_api_tagger.main:app --reload --host 0.0.0.0 --port 8080"
     networks:
       - policyengine
 
