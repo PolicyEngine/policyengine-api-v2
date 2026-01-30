@@ -138,9 +138,12 @@ class TestModalDeploymentSummary:
 
         result = subprocess.run(
             [
-                "bash", str(self.script),
-                "success", "https://beta.example.com",
-                "success", "https://prod.example.com",
+                "bash",
+                str(self.script),
+                "success",
+                "https://beta.example.com",
+                "success",
+                "https://prod.example.com",
             ],
             capture_output=True,
             text=True,
@@ -165,9 +168,12 @@ class TestModalDeploymentSummary:
 
         result = subprocess.run(
             [
-                "bash", str(self.script),
-                "skipped", "",
-                "success", "https://prod.example.com",
+                "bash",
+                str(self.script),
+                "skipped",
+                "",
+                "success",
+                "https://prod.example.com",
             ],
             capture_output=True,
             text=True,
@@ -360,4 +366,6 @@ class TestAllScriptsHaveShebang:
                 capture_output=True,
                 text=True,
             )
-            assert result.returncode == 0, f"{script.name} has syntax errors: {result.stderr}"
+            assert result.returncode == 0, (
+                f"{script.name} has syntax errors: {result.stderr}"
+            )

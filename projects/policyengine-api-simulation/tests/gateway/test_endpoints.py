@@ -1,17 +1,13 @@
 """
-Unit tests for gateway endpoints, specifically the national-with-breakdowns routing logic.
+Unit tests for gateway endpoints.
 
-Tests verify the endpoint correctly detects and routes requests
-for national-with-breakdowns simulations.
+Tests verify the endpoint correctly resolves app names and routes
+simulation requests.
 """
 
 import pytest
 from fastapi.testclient import TestClient
 
-from src.modal.gateway.endpoints import (
-    NATIONAL_WITH_BREAKDOWNS,
-    NATIONAL_WITH_BREAKDOWNS_TEST,
-)
 from tests.fixtures.endpoints import mock_modal  # noqa: F401 - pytest fixture
 
 
@@ -103,9 +99,7 @@ class TestGetAppName:
         from src.modal.gateway.endpoints import get_app_name
 
         # Given
-        mock_modal["dicts"]["simulation-api-us-versions"] = {
-            "1.459.0": "some-app"
-        }
+        mock_modal["dicts"]["simulation-api-us-versions"] = {"1.459.0": "some-app"}
 
         # When / Then
         with pytest.raises(ValueError, match="Unknown version"):
@@ -115,100 +109,13 @@ class TestGetAppName:
 class TestSubmitSimulationEndpoint:
     """Tests for POST /simulate/economy/comparison endpoint."""
 
-    def test__given_national_with_breakdowns_data__then_routes_to_orchestration(
-        self, mock_modal, client: TestClient
-    ):
-        """
-        Given a request with data='national-with-breakdowns'
-        When the simulation is submitted
-        Then routes to run_national_with_breakdowns function.
-        """
-        # Given
-        mock_modal["dicts"]["simulation-api-us-versions"] = {
-            "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
-        }
-
-        request_body = {
-            "country": "us",
-            "scope": "macro",
-            "reform": {"some.param": {"2024-01-01.2100-12-31": True}},
-            "data": NATIONAL_WITH_BREAKDOWNS,
-        }
-
-        # When
-        response = client.post("/simulate/economy/comparison", json=request_body)
-
-        # Then
-        assert response.status_code == 200
-        assert mock_modal["func"].last_from_name_call == (
-            "policyengine-simulation-us1-500-0-uk2-66-0",
-            "run_national_with_breakdowns",
-        )
-
-    def test__given_national_with_breakdowns_test_data__then_adds_test_mode_flag(
-        self, mock_modal, client: TestClient
-    ):
-        """
-        Given a request with data='national-with-breakdowns-test'
-        When the simulation is submitted
-        Then adds _test_mode=True to the payload.
-        """
-        # Given
-        mock_modal["dicts"]["simulation-api-us-versions"] = {
-            "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
-        }
-
-        request_body = {
-            "country": "us",
-            "scope": "macro",
-            "reform": {},
-            "data": NATIONAL_WITH_BREAKDOWNS_TEST,
-        }
-
-        # When
-        response = client.post("/simulate/economy/comparison", json=request_body)
-
-        # Then
-        assert response.status_code == 200
-        assert mock_modal["func"].last_payload["_test_mode"] is True
-
-    def test__given_national_with_breakdowns_for_uk__then_returns_400(
-        self, mock_modal, client: TestClient
-    ):
-        """
-        Given a UK request with data='national-with-breakdowns'
-        When the simulation is submitted
-        Then returns 400 Bad Request.
-        """
-        # Given
-        mock_modal["dicts"]["simulation-api-uk-versions"] = {
-            "latest": "2.66.0",
-            "2.66.0": "policyengine-simulation-us1-500-0-uk2-66-0",
-        }
-
-        request_body = {
-            "country": "uk",
-            "scope": "macro",
-            "reform": {},
-            "data": NATIONAL_WITH_BREAKDOWNS,
-        }
-
-        # When
-        response = client.post("/simulate/economy/comparison", json=request_body)
-
-        # Then
-        assert response.status_code == 400
-        assert "only supported for country='us'" in response.json()["detail"]
-
     def test__given_regular_data_value__then_routes_to_run_simulation(
         self, mock_modal, client: TestClient
     ):
         """
-        Given a request with regular data value (not national-with-breakdowns)
+        Given a request with a data value
         When the simulation is submitted
-        Then routes to regular run_simulation function.
+        Then routes to run_simulation function.
         """
         # Given
         mock_modal["dicts"]["simulation-api-us-versions"] = {

@@ -50,10 +50,6 @@ def get_app_name(country: str, version: Optional[str]) -> tuple[str, str]:
     return app_name, resolved_version
 
 
-NATIONAL_WITH_BREAKDOWNS = "national-with-breakdowns"
-NATIONAL_WITH_BREAKDOWNS_TEST = "national-with-breakdowns-test"
-
-
 @router.post("/simulate/economy/comparison", response_model=JobSubmitResponse)
 async def submit_simulation(request: SimulationRequest):
     """
@@ -62,57 +58,18 @@ async def submit_simulation(request: SimulationRequest):
     Matches the existing Cloud Run API endpoint path.
     Routes to the appropriate app based on country and version params.
     Returns immediately with job_id for polling.
-
-    Special handling for data="national-with-breakdowns":
-    - Only supported for country="us"
-    - Spawns 52 parallel simulations (1 national + 51 states)
-    - Returns aggregated results with congressional district breakdowns
-
-    Special handling for data="national-with-breakdowns-test":
-    - Only supported for country="us"
-    - Spawns 11 parallel simulations (1 national + 10 test states)
-    - Returns aggregated results with congressional district breakdowns
     """
     try:
         app_name, resolved_version = get_app_name(request.country, request.version)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Check for national-with-breakdowns special cases
     payload = request.model_dump(exclude={"version"})
-    data_value = payload.get("data")
-    is_national_breakdowns = data_value in (
-        NATIONAL_WITH_BREAKDOWNS,
-        NATIONAL_WITH_BREAKDOWNS_TEST,
-    )
 
-    if is_national_breakdowns:
-        if request.country.lower() != "us":
-            raise HTTPException(
-                status_code=400,
-                detail="national-with-breakdowns is only supported for country='us'",
-            )
-
-        # Add test_mode flag to payload for orchestration to use
-        if data_value == NATIONAL_WITH_BREAKDOWNS_TEST:
-            payload["_test_mode"] = True
-            logger.info(
-                f"Routing {request.country}:{resolved_version} to {app_name} "
-                f"(national-with-breakdowns-test orchestration - 10 states)"
-            )
-        else:
-            logger.info(
-                f"Routing {request.country}:{resolved_version} to {app_name} "
-                f"(national-with-breakdowns orchestration - all states)"
-            )
-
-        func_name = "run_national_with_breakdowns"
-    else:
-        logger.info(f"Routing {request.country}:{resolved_version} to app {app_name}")
-        func_name = "run_simulation"
+    logger.info(f"Routing {request.country}:{resolved_version} to app {app_name}")
 
     # Get function reference from the target app
-    sim_func = modal.Function.from_name(app_name, func_name)
+    sim_func = modal.Function.from_name(app_name, "run_simulation")
 
     # Spawn the job (returns immediately)
     call = sim_func.spawn(payload)
