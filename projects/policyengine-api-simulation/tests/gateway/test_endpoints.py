@@ -99,9 +99,7 @@ class TestGetAppName:
         from src.modal.gateway.endpoints import get_app_name
 
         # Given
-        mock_modal["dicts"]["simulation-api-us-versions"] = {
-            "1.459.0": "some-app"
-        }
+        mock_modal["dicts"]["simulation-api-us-versions"] = {"1.459.0": "some-app"}
 
         # When / Then
         with pytest.raises(ValueError, match="Unknown version"):

@@ -152,9 +152,7 @@ class TestLogfireSpanPattern:
             pass
 
         # Then
-        mock_logfire.span.assert_called_once_with(
-            "run_simulation", input_params=params
-        )
+        mock_logfire.span.assert_called_once_with("run_simulation", input_params=params)
 
     def test_span_captures_output_result(self, mock_logfire, mock_span):
         """

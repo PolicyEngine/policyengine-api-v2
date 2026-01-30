@@ -104,5 +104,3 @@ def run_simulation(params: dict) -> dict:
             return result
     finally:
         logfire.force_flush()
-
-
