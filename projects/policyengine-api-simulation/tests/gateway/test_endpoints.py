@@ -1,8 +1,8 @@
 """
-Unit tests for gateway endpoints, specifically the national-with-breakdowns routing logic.
+Unit tests for gateway endpoints.
 
-Tests verify the endpoint correctly detects and routes requests
-for national-with-breakdowns simulations.
+Tests verify the endpoint correctly resolves app names and routes
+simulation requests.
 """
 
 import pytest
@@ -115,9 +115,9 @@ class TestSubmitSimulationEndpoint:
         self, mock_modal, client: TestClient
     ):
         """
-        Given a request with regular data value (not national-with-breakdowns)
+        Given a request with a data value
         When the simulation is submitted
-        Then routes to regular run_simulation function.
+        Then routes to run_simulation function.
         """
         # Given
         mock_modal["dicts"]["simulation-api-us-versions"] = {
