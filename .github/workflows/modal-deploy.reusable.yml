@@ -23,6 +23,7 @@ jobs:
     environment: ${{ inputs.environment }}
     outputs:
       simulation_api_url: ${{ steps.get-url.outputs.simulation_api_url }}
+      us_version: ${{ steps.versions.outputs.us_version }}
 
     steps:
     - name: Checkout repo
@@ -101,4 +102,4 @@ jobs:
       run: ./scripts/generate-clients.sh
 
     - name: Run simulation integration tests
-      run: .github/scripts/modal-run-integ-tests.sh "${{ inputs.environment }}" "${{ needs.deploy.outputs.simulation_api_url }}"
+      run: .github/scripts/modal-run-integ-tests.sh "${{ inputs.environment }}" "${{ needs.deploy.outputs.simulation_api_url }}" "${{ needs.deploy.outputs.us_version }}"

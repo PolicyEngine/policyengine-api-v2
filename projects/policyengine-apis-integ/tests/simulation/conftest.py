@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     access_token: str | None = None
     timeout_in_millis: int = 600_000  # 10 minutes for full simulations
     poll_interval_seconds: float = 5.0
-    us_model_version: str = "1.459.0"
+    us_model_version: str = "1.562.3"
 
     model_config = SettingsConfigDict(env_prefix="simulation_integ_test_")
 
