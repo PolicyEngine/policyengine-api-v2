@@ -13,7 +13,7 @@ import os
 from src.modal._image_setup import snapshot_models
 
 # Get versions from environment or use defaults
-US_VERSION = os.environ.get("POLICYENGINE_US_VERSION", "1.459.0")
+US_VERSION = os.environ.get("POLICYENGINE_US_VERSION", "1.562.3")
 UK_VERSION = os.environ.get("POLICYENGINE_UK_VERSION", "2.65.9")
 
 
