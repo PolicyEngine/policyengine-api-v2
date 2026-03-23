@@ -78,7 +78,7 @@ def configure_logfire(service_name: str = "policyengine-simulation"):
     memory=32768,
     timeout=3600,
     retries=0,
-    max_containers=30,
+    max_containers=100,
     secrets=[gcp_secret, logfire_secret],
 )
 def run_simulation(params: dict) -> dict:
