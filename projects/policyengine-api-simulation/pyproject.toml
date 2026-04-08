@@ -16,7 +16,7 @@ dependencies = [
     "pydantic-settings (>=2.7.1,<3.0.0)",
     "opentelemetry-instrumentation-fastapi (>=0.51b0,<0.52)",
     "policyengine-fastapi",
-    "policyengine==0.12.1",
+    "policyengine @ git+https://github.com/PolicyEngine/policyengine.py@98ab5aaca35e0f12aabdd3962fec830cbd3a8343",
     "policyengine-core>=3.23.5",
     "policyengine-uk>=2.22.8",
     "policyengine-us>=1.370.2",
@@ -27,6 +27,9 @@ dependencies = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/policyengine_api_simulation", "src/policyengine_api"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.uv.sources]
 policyengine-fastapi = { path = "../../libs/policyengine-fastapi", editable = true }

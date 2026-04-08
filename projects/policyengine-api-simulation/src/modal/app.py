@@ -47,7 +47,7 @@ simulation_image = (
     .pip_install(
         f"policyengine-us=={US_VERSION}",
         f"policyengine-uk=={UK_VERSION}",
-        "policyengine>=0.10.1,<1",
+        "policyengine @ git+https://github.com/PolicyEngine/policyengine.py@98ab5aaca35e0f12aabdd3962fec830cbd3a8343",
         "tables>=3.10.2",
         "logfire",
     )
