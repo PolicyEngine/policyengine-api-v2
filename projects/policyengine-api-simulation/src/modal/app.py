@@ -11,10 +11,12 @@ import modal
 import os
 
 from src.modal._image_setup import snapshot_models
+from src.modal.policyengine_dependency import get_policyengine_dependency
 
 # Get versions from environment or use defaults
 US_VERSION = os.environ.get("POLICYENGINE_US_VERSION", "1.562.3")
 UK_VERSION = os.environ.get("POLICYENGINE_UK_VERSION", "2.65.9")
+POLICYENGINE_DEPENDENCY = get_policyengine_dependency()
 
 
 def get_app_name(us_version: str, uk_version: str) -> str:
@@ -47,7 +49,7 @@ simulation_image = (
     .pip_install(
         f"policyengine-us=={US_VERSION}",
         f"policyengine-uk=={UK_VERSION}",
-        "policyengine==0.13.0",
+        POLICYENGINE_DEPENDENCY,
         "tables>=3.10.2",
         "logfire",
     )

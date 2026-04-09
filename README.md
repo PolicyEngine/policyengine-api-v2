@@ -38,6 +38,18 @@ The repository contains three main API services:
 
 Each service generates OpenAPI specs and Python client libraries for integration testing.
 
+For society-wide report output, the request path is still:
+
+`app-v2 -> policyengine-api (legacy api-v1 broker) -> policyengine-api-v2 simulation service -> policyengine.py`
+
+That distinction matters because a frontend change may still need a simulation deploy even when `app-v2` does not call `api-v2` directly.
+
+### `policyengine` compatibility policy
+
+- `projects/policyengine-api-simulation` intentionally tracks the `policyengine` `0.x` maintenance line.
+- Do not bump it to `1+` without an explicit migration plan for the legacy broker and integration suite.
+- The simulation project's `pyproject.toml` is the source of truth for the pinned `policyengine` version; the Modal image reads from that file rather than repeating a separate hardcoded pin.
+
 ## Development workflow
 
 ### Making changes
