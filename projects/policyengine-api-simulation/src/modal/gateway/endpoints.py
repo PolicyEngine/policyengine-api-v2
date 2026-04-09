@@ -3,6 +3,7 @@ FastAPI endpoints for the Gateway API.
 """
 
 import logging
+from time import perf_counter
 from typing import Optional
 
 import modal
@@ -16,8 +17,16 @@ from src.modal.gateway.models import (
     PingResponse,
     SimulationRequest,
 )
+from src.modal.observability import (
+    build_lifecycle_event,
+    build_metric_attributes,
+    duration_since_requested_at,
+    get_observability,
+)
 
 logger = logging.getLogger(__name__)
+observability = get_observability("policyengine-simulation-gateway")
+JOB_TELEMETRY_DICT_NAME = "simulation-api-job-telemetry"
 
 router = APIRouter()
 
@@ -50,6 +59,10 @@ def get_app_name(country: str, version: Optional[str]) -> tuple[str, str]:
     return app_name, resolved_version
 
 
+def get_job_telemetry_registry():
+    return modal.Dict.from_name(JOB_TELEMETRY_DICT_NAME, create_if_missing=True)
+
+
 @router.post(
     "/simulate/economy/comparison",
     response_model=JobSubmitResponse,
@@ -63,41 +76,115 @@ async def submit_simulation(request: SimulationRequest):
     Routes to the appropriate app based on country and version params.
     Returns immediately with job_id for polling.
     """
-    try:
-        app_name, resolved_version = get_app_name(request.country, request.version)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    payload = request.model_dump(
-        exclude={"version", "telemetry"},
-        mode="json",
+    request_start = perf_counter()
+    telemetry_payload = (
+        request.telemetry.model_dump(mode="json") if request.telemetry else None
     )
-    run_id = request.telemetry.run_id if request.telemetry else None
-    if request.telemetry is not None:
-        payload["_telemetry"] = request.telemetry.model_dump(mode="json")
+    parent_traceparent = None if request.telemetry is None else request.telemetry.traceparent
 
-    logger.info(
-        "Routing %s:%s to app %s (run_id=%s)",
-        request.country,
-        resolved_version,
-        app_name,
-        run_id,
-    )
+    with observability.span(
+        "gateway.submit_simulation",
+        build_metric_attributes(
+            telemetry_payload,
+            service="policyengine-simulation-gateway",
+            country=request.country,
+        ),
+        parent_traceparent=parent_traceparent,
+    ) as span:
+        current_traceparent = span.get_traceparent() or parent_traceparent
+        if telemetry_payload is not None and current_traceparent:
+            telemetry_payload["traceparent"] = current_traceparent
 
-    # Get function reference from the target app
-    sim_func = modal.Function.from_name(app_name, "run_simulation")
+        observability.emit_lifecycle_event(
+            build_lifecycle_event(
+                stage="gateway.received",
+                status="received",
+                service="policyengine-simulation-gateway",
+                telemetry=telemetry_payload,
+                country=request.country,
+            )
+        )
 
-    # Spawn the job (returns immediately)
-    call = sim_func.spawn(payload)
+        try:
+            app_name, resolved_version = get_app_name(request.country, request.version)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
-    return JobSubmitResponse(
-        job_id=call.object_id,
-        status="submitted",
-        poll_url=f"/jobs/{call.object_id}",
-        country=request.country,
-        version=resolved_version,
-        run_id=run_id,
-    )
+        payload = request.model_dump(
+            exclude={"version", "telemetry"},
+            mode="json",
+        )
+        if request.telemetry is not None:
+            payload["_telemetry"] = {
+                **request.telemetry.model_dump(mode="json"),
+                "traceparent": current_traceparent,
+            }
+            telemetry_payload = payload["_telemetry"]
+
+        run_id = None if telemetry_payload is None else telemetry_payload.get("run_id")
+        observability.emit_lifecycle_event(
+            build_lifecycle_event(
+                stage="gateway.version_resolved",
+                status="ok",
+                service="policyengine-simulation-gateway",
+                telemetry=telemetry_payload,
+                country=request.country,
+                country_package_version=resolved_version,
+                modal_app_name=app_name,
+                details={"version": resolved_version},
+            )
+        )
+
+        logger.info(
+            "Routing %s:%s to app %s (run_id=%s)",
+            request.country,
+            resolved_version,
+            app_name,
+            run_id,
+        )
+
+        # Get function reference from the target app
+        sim_func = modal.Function.from_name(app_name, "run_simulation")
+
+        # Spawn the job (returns immediately)
+        call = sim_func.spawn(payload)
+        registry_payload = dict(telemetry_payload or {})
+        registry_payload.update(
+            {
+                "job_id": call.object_id,
+                "country": request.country,
+                "country_package_version": resolved_version,
+                "modal_app_name": app_name,
+            }
+        )
+        get_job_telemetry_registry()[call.object_id] = registry_payload
+        observability.emit_counter(
+            "policyengine.simulation.run.count",
+            attributes=build_metric_attributes(
+                registry_payload,
+                service="policyengine-simulation-gateway",
+                status="submitted",
+            ),
+        )
+        observability.emit_lifecycle_event(
+            build_lifecycle_event(
+                stage="gateway.spawned",
+                status="submitted",
+                service="policyengine-simulation-gateway",
+                telemetry=registry_payload,
+                duration_seconds=perf_counter() - request_start,
+                details={"job_id": call.object_id},
+            )
+        )
+
+        return JobSubmitResponse(
+            job_id=call.object_id,
+            status="submitted",
+            poll_url=f"/jobs/{call.object_id}",
+            country=request.country,
+            version=resolved_version,
+            run_id=run_id,
+        )
 
 
 @router.get("/jobs/{job_id}")
@@ -111,24 +198,106 @@ async def get_job_status(job_id: str):
         - 500 with status="failed" and error on failure
         - 404 if job_id not found
     """
+    telemetry = None
     try:
-        call = modal.FunctionCall.from_id(job_id)
+        telemetry = dict(get_job_telemetry_registry().get(job_id) or {})
     except Exception:
-        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+        telemetry = None
 
-    try:
-        result = call.get(timeout=0)
-        return JobStatusResponse(status="complete", result=result)
-    except TimeoutError:
-        return JSONResponse(
-            status_code=202,
-            content={"status": "running", "result": None, "error": None},
+    with observability.span(
+        "gateway.get_job_status",
+        build_metric_attributes(
+            telemetry,
+            service="policyengine-simulation-gateway",
+        ),
+        parent_traceparent=None if telemetry is None else telemetry.get("traceparent"),
+    ) as span:
+        current_traceparent = span.get_traceparent()
+        if telemetry is not None and current_traceparent:
+            telemetry["traceparent"] = current_traceparent
+
+        observability.emit_lifecycle_event(
+            build_lifecycle_event(
+                stage="result.polled",
+                status="polling",
+                service="policyengine-simulation-gateway",
+                telemetry=telemetry,
+                job_id=job_id,
+            )
         )
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={"status": "failed", "result": None, "error": str(e)},
-        )
+        try:
+            call = modal.FunctionCall.from_id(job_id)
+        except Exception:
+            raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+
+        try:
+            result = call.get(timeout=0)
+            duration = duration_since_requested_at(telemetry)
+            observability.emit_lifecycle_event(
+                build_lifecycle_event(
+                    stage="result.returned",
+                    status="complete",
+                    service="policyengine-simulation-gateway",
+                    telemetry=telemetry,
+                    job_id=job_id,
+                    duration_seconds=duration,
+                )
+            )
+            if duration is not None:
+                observability.emit_histogram(
+                    "policyengine.simulation.run.duration.seconds",
+                    duration,
+                    attributes=build_metric_attributes(
+                        telemetry,
+                        service="policyengine-simulation-gateway",
+                        status="complete",
+                    ),
+                )
+            return JobStatusResponse(
+                status="complete",
+                run_id=None if telemetry is None else telemetry.get("run_id"),
+                result=result,
+            )
+        except TimeoutError:
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "status": "running",
+                    "run_id": None if telemetry is None else telemetry.get("run_id"),
+                    "result": None,
+                    "error": None,
+                },
+            )
+        except Exception as e:
+            duration = duration_since_requested_at(telemetry)
+            observability.emit_counter(
+                "policyengine.simulation.failure.count",
+                attributes=build_metric_attributes(
+                    telemetry,
+                    service="policyengine-simulation-gateway",
+                    status="failed",
+                ),
+            )
+            observability.emit_lifecycle_event(
+                build_lifecycle_event(
+                    stage="result.failed",
+                    status="failed",
+                    service="policyengine-simulation-gateway",
+                    telemetry=telemetry,
+                    job_id=job_id,
+                    duration_seconds=duration,
+                    details={"error": str(e)},
+                )
+            )
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "failed",
+                    "run_id": None if telemetry is None else telemetry.get("run_id"),
+                    "result": None,
+                    "error": str(e),
+                },
+            )
 
 
 @router.get("/versions")

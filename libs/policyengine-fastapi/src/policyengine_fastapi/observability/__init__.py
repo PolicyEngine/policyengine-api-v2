@@ -9,6 +9,7 @@ service has materially different runtime or release needs.
 
 from .config import (
     ObservabilityConfig as ObservabilityConfig,
+    parse_bool as parse_bool,
     parse_header_value_pairs as parse_header_value_pairs,
 )
 from .contracts import (
@@ -28,10 +29,12 @@ from .emitters import (
     Observability as Observability,
     NoOpObservability as NoOpObservability,
     NoOpSpan as NoOpSpan,
+    OtlpObservability as OtlpObservability,
 )
 from .provider import (
     build_observability as build_observability,
     get_observability as get_observability,
+    reset_observability_cache as reset_observability_cache,
 )
 from .stages import (
     SimulationStage as SimulationStage,

@@ -231,3 +231,82 @@ class TestSubmitSimulationEndpoint:
         data = response.json()
         assert data["run_id"] == "run-123"
         assert mock_modal["func"].last_payload["_telemetry"]["run_id"] == "run-123"
+        assert (
+            mock_modal["dicts"]["simulation-api-job-telemetry"]["mock-job-id-123"][
+                "run_id"
+            ]
+            == "run-123"
+        )
+
+
+class TestGetJobStatusEndpoint:
+    """Tests for GET /jobs/{job_id}."""
+
+    def test__given_running_job__then_returns_running_response_with_run_id(
+        self, mock_modal, client: TestClient
+    ):
+        from tests.fixtures.endpoints import MockFunctionCall
+
+        mock_modal["dicts"]["simulation-api-job-telemetry"] = {
+            "mock-job-id-123": {"run_id": "run-123"}
+        }
+        mock_modal["function_calls"]["mock-job-id-123"] = MockFunctionCall(
+            object_id="mock-job-id-123",
+            is_running=True,
+        )
+
+        response = client.get("/jobs/mock-job-id-123")
+
+        assert response.status_code == 202
+        assert response.json() == {
+            "status": "running",
+            "run_id": "run-123",
+            "result": None,
+            "error": None,
+        }
+
+    def test__given_complete_job__then_returns_result_with_run_id(
+        self, mock_modal, client: TestClient
+    ):
+        from tests.fixtures.endpoints import MockFunctionCall
+
+        mock_modal["dicts"]["simulation-api-job-telemetry"] = {
+            "mock-job-id-123": {"run_id": "run-123"}
+        }
+        mock_modal["function_calls"]["mock-job-id-123"] = MockFunctionCall(
+            object_id="mock-job-id-123",
+            result={"budget": {"reform": 1200}},
+        )
+
+        response = client.get("/jobs/mock-job-id-123")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "complete",
+            "run_id": "run-123",
+            "result": {"budget": {"reform": 1200}},
+            "error": None,
+        }
+
+    def test__given_failed_job__then_returns_error_with_run_id(
+        self, mock_modal, client: TestClient
+    ):
+        from tests.fixtures.endpoints import MockFunctionCall
+
+        mock_modal["dicts"]["simulation-api-job-telemetry"] = {
+            "mock-job-id-123": {"run_id": "run-123"}
+        }
+        mock_modal["function_calls"]["mock-job-id-123"] = MockFunctionCall(
+            object_id="mock-job-id-123",
+            error=RuntimeError("Simulation failed"),
+        )
+
+        response = client.get("/jobs/mock-job-id-123")
+
+        assert response.status_code == 500
+        assert response.json() == {
+            "status": "failed",
+            "run_id": "run-123",
+            "result": None,
+            "error": "Simulation failed",
+        }

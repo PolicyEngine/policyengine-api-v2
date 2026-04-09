@@ -48,6 +48,7 @@ class JobStatusResponse(BaseModel):
     """Response model for job status polling."""
 
     status: str
+    run_id: Optional[str] = None
     result: Optional[dict] = None
     error: Optional[str] = None
 

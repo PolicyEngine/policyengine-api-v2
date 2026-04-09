@@ -8,4 +8,5 @@ from .observability import (
     TracerCaptureMode as TracerCaptureMode,
     build_observability as build_observability,
     get_observability as get_observability,
+    reset_observability_cache as reset_observability_cache,
 )
