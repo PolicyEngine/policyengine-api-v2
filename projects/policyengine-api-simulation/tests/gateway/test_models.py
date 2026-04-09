@@ -172,6 +172,25 @@ class TestSimulationRequest:
         assert dumped["region"] == "enhanced_us"
         assert dumped["reform"] == {"some.parameter": {"2024-01-01": True}}
 
+    def test_simulation_request_accepts_typed_telemetry_envelope(self):
+        """
+        Given a telemetry envelope
+        When creating a SimulationRequest
+        Then the envelope is validated and preserved.
+        """
+        request = SimulationRequest(
+            country="us",
+            _telemetry={
+                "run_id": "run-123",
+                "process_id": "proc-123",
+                "capture_mode": "disabled",
+            },
+        )
+
+        assert request.telemetry is not None
+        assert request.telemetry.run_id == "run-123"
+        assert request.telemetry.process_id == "proc-123"
+
 
 class TestJobSubmitResponse:
     """Tests for JobSubmitResponse model."""
