@@ -8,7 +8,7 @@ simulation requests.
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.fixtures.endpoints import mock_modal  # noqa: F401 - pytest fixture
+pytest_plugins = ["tests.fixtures.endpoints"]
 
 
 class TestGetAppName:
@@ -200,3 +200,34 @@ class TestSubmitSimulationEndpoint:
         assert data["job_id"] == "mock-job-id-123"
         assert data["poll_url"] == "/jobs/mock-job-id-123"
         assert data["status"] == "submitted"
+
+    def test__given_submission_with_telemetry__then_preserves_run_id(
+        self, mock_modal, client: TestClient
+    ):
+        """
+        Given a simulation submission with internal telemetry metadata
+        When the request completes
+        Then the spawned payload preserves telemetry and the response echoes run_id.
+        """
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+        }
+
+        request_body = {
+            "country": "us",
+            "scope": "macro",
+            "reform": {},
+            "_telemetry": {
+                "run_id": "run-123",
+                "process_id": "proc-123",
+                "capture_mode": "disabled",
+            },
+        }
+
+        response = client.post("/simulate/economy/comparison", json=request_body)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["run_id"] == "run-123"
+        assert mock_modal["func"].last_payload["_telemetry"]["run_id"] == "run-123"
