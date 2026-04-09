@@ -229,6 +229,12 @@ class TestSubmitSimulationEndpoint:
         data = response.json()
         assert data["run_id"] == "run-123"
         assert mock_modal["func"].last_payload["_telemetry"]["run_id"] == "run-123"
+        assert (
+            mock_modal["dicts"]["simulation-api-job-telemetry"]["mock-job-id-123"][
+                "run_id"
+            ]
+            == "run-123"
+        )
 
     def test__given_submission_with_data__then_returns_resolved_bundle_metadata(
         self, mock_modal, client: TestClient

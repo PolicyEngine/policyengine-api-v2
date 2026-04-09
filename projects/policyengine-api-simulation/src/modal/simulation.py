@@ -9,10 +9,12 @@ import json
 import logging
 import os
 import tempfile
+from typing import Any
 
 # Module-level imports - these are SNAPSHOTTED at image build time
 from policyengine.simulation import Simulation, SimulationOptions
 
+from src.modal.observability import build_lifecycle_event
 from src.modal.telemetry import split_internal_payload
 
 logger = logging.getLogger(__name__)
@@ -65,7 +67,11 @@ def setup_gcp_credentials():
         logger.warning("No GCP credentials found in environment variables")
 
 
-def run_simulation_impl(params: dict) -> dict:
+def run_simulation_impl(
+    params: dict,
+    observability: Any = None,
+    telemetry_context: dict[str, Any] | None = None,
+) -> dict:
     """
     Execute economic simulation.
 
@@ -74,8 +80,20 @@ def run_simulation_impl(params: dict) -> dict:
     """
     # Set up GCP credentials if needed
     setup_gcp_credentials()
+    if observability is not None:
+        observability.emit_lifecycle_event(
+            build_lifecycle_event(
+                stage="worker.credentials.ready",
+                status="ok",
+                service="policyengine-simulation-worker",
+                telemetry=telemetry_context,
+            )
+        )
 
     simulation_params, telemetry, metadata = split_internal_payload(params)
+    event_telemetry = (
+        telemetry.model_dump(mode="json") if telemetry is not None else telemetry_context
+    )
 
     logger.info(
         "Starting simulation for country=%s run_id=%s process_id=%s",
@@ -88,15 +106,52 @@ def run_simulation_impl(params: dict) -> dict:
 
     # Validate and create simulation options
     options = SimulationOptions.model_validate(simulation_params)
+    if observability is not None:
+        observability.emit_lifecycle_event(
+            build_lifecycle_event(
+                stage="worker.options.validated",
+                status="ok",
+                service="policyengine-simulation-worker",
+                telemetry=event_telemetry,
+            )
+        )
     logger.info("Initialising simulation from input")
 
     # Create simulation instance
     simulation = Simulation(**options.model_dump())
+    if observability is not None:
+        observability.emit_lifecycle_event(
+            build_lifecycle_event(
+                stage="worker.simulation.constructed",
+                status="ok",
+                service="policyengine-simulation-worker",
+                telemetry=event_telemetry,
+            )
+        )
     logger.info("Calculating comparison")
 
     # Run the economy comparison calculation
     result = simulation.calculate_economy_comparison()
+    if observability is not None:
+        observability.emit_lifecycle_event(
+            build_lifecycle_event(
+                stage="worker.comparison.calculated",
+                status="ok",
+                service="policyengine-simulation-worker",
+                telemetry=event_telemetry,
+            )
+        )
     logger.info("Comparison complete")
 
     # Use mode='json' to ensure numpy arrays are converted to lists
-    return result.model_dump(mode="json")
+    serialized = result.model_dump(mode="json")
+    if observability is not None:
+        observability.emit_lifecycle_event(
+            build_lifecycle_event(
+                stage="worker.result.serialized",
+                status="ok",
+                service="policyengine-simulation-worker",
+                telemetry=event_telemetry,
+            )
+        )
+    return serialized
