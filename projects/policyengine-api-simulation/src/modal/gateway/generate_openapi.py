@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 
 from fastapi import FastAPI
+from policyengine_fastapi.observability import VersionCatalogSnapshot
 
 from src.modal.gateway.models import (
     JobStatusResponse,
@@ -75,9 +76,22 @@ def create_openapi_app() -> FastAPI:
         """List all available versions for all countries."""
         raise NotImplementedError("Stub for OpenAPI generation")
 
+    @app.get("/versions/catalog")
+    async def list_version_catalog() -> dict[str, VersionCatalogSnapshot]:
+        """List normalized version-catalog snapshots for all countries."""
+        raise NotImplementedError("Stub for OpenAPI generation")
+
     @app.get("/versions/{country}")
     async def get_country_versions(country: str) -> dict:
         """Get available versions for a specific country."""
+        raise NotImplementedError("Stub for OpenAPI generation")
+
+    @app.get(
+        "/versions/catalog/{country}",
+        response_model=VersionCatalogSnapshot,
+    )
+    async def get_country_version_catalog(country: str) -> VersionCatalogSnapshot:
+        """Get the normalized version-catalog snapshot for a specific country."""
         raise NotImplementedError("Stub for OpenAPI generation")
 
     @app.get("/health")

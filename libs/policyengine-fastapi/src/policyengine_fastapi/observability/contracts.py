@@ -108,3 +108,21 @@ class VersionStageMetricResponse(ObservabilityModel):
     country: str
     window: dict[str, datetime]
     versions: list[VersionStageMetrics] = Field(default_factory=list)
+
+
+class LaunchedVersionRecord(ObservabilityModel):
+    country: str
+    country_package_version: str
+    modal_app_name: str
+    registry_name: str
+    is_latest: bool = False
+    is_active: bool = True
+
+
+class VersionCatalogSnapshot(ObservabilityModel):
+    country: str
+    registry_name: str
+    environment: str | None = None
+    latest_version: str | None = None
+    fetched_at: datetime
+    versions: list[LaunchedVersionRecord] = Field(default_factory=list)

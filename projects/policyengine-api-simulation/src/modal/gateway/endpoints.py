@@ -8,7 +8,9 @@ from typing import Optional
 import modal
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
+from policyengine_fastapi.observability import VersionCatalogSnapshot
 
+from policyengine_api_simulation.version_catalog import VersionCatalogService
 from src.modal.gateway.models import (
     JobStatusResponse,
     JobSubmitResponse,
@@ -31,6 +33,16 @@ observability = get_observability("policyengine-simulation-gateway")
 JOB_TELEMETRY_DICT_NAME = "simulation-api-job-telemetry"
 
 router = APIRouter()
+version_catalog_service = VersionCatalogService(
+    loader=lambda dict_name, environment: modal.Dict.from_name(
+        dict_name,
+        environment_name=environment,
+    ),
+)
+
+
+def get_version_catalog_service() -> VersionCatalogService:
+    return version_catalog_service
 
 
 def get_app_name(country: str, version: Optional[str]) -> tuple[str, str]:
@@ -308,13 +320,13 @@ async def get_job_status(job_id: str):
 @router.get("/versions")
 async def list_versions():
     """List all available versions for all countries."""
-    us_dict = modal.Dict.from_name("simulation-api-us-versions")
-    uk_dict = modal.Dict.from_name("simulation-api-uk-versions")
+    return get_version_catalog_service().get_all_registries()
 
-    return {
-        "us": dict(us_dict),
-        "uk": dict(uk_dict),
-    }
+
+@router.get("/versions/catalog")
+async def list_version_catalog() -> dict[str, VersionCatalogSnapshot]:
+    """List normalized version-catalog snapshots for all countries."""
+    return get_version_catalog_service().get_all_snapshots()
 
 
 @router.get("/versions/{country}")
@@ -324,8 +336,16 @@ async def get_country_versions(country: str):
     if country_lower not in ("us", "uk"):
         raise HTTPException(status_code=404, detail=f"Unknown country: {country}")
 
-    version_dict = modal.Dict.from_name(f"simulation-api-{country_lower}-versions")
-    return dict(version_dict)
+    return get_version_catalog_service().get_country_registry(country_lower)
+
+
+@router.get("/versions/catalog/{country}", response_model=VersionCatalogSnapshot)
+async def get_country_version_catalog(country: str) -> VersionCatalogSnapshot:
+    """Get the normalized version-catalog snapshot for a specific country."""
+    try:
+        return get_version_catalog_service().get_country_snapshot(country)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error))
 
 
 @router.get("/health")

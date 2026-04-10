@@ -18,11 +18,20 @@ class MockDict:
             raise KeyError(key)
         return self._data[key]
 
+    def __iter__(self):
+        return iter(self._data)
+
+    def __len__(self):
+        return len(self._data)
+
     def __setitem__(self, key: str, value):
         self._data[key] = value
 
     def get(self, key: str, default=None):
         return self._data.get(key, default)
+
+    def items(self):
+        return self._data.items()
 
     @classmethod
     def from_name(cls, name: str):
@@ -132,6 +141,7 @@ def mock_modal(monkeypatch):
 
     # Patch the modal import in the endpoints module
     monkeypatch.setattr(endpoints, "modal", MockModal)
+    endpoints.get_version_catalog_service().reset_cache()
 
     return {
         "func": mock_func,

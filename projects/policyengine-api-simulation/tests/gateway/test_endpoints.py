@@ -310,3 +310,80 @@ class TestGetJobStatusEndpoint:
             "result": None,
             "error": "Simulation failed",
         }
+
+
+class TestVersionEndpoints:
+    def test__list_versions__returns_raw_registries(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.632.5",
+            "1.632.5": "policyengine-simulation-us1-632-5-uk2-78-0",
+        }
+        mock_modal["dicts"]["simulation-api-uk-versions"] = {
+            "latest": "2.78.0",
+            "2.78.0": "policyengine-simulation-us1-632-5-uk2-78-0",
+        }
+
+        response = client.get("/versions")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "us": {
+                "latest": "1.632.5",
+                "1.632.5": "policyengine-simulation-us1-632-5-uk2-78-0",
+            },
+            "uk": {
+                "latest": "2.78.0",
+                "2.78.0": "policyengine-simulation-us1-632-5-uk2-78-0",
+            },
+        }
+
+    def test__list_version_catalog__returns_normalized_snapshots(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.632.5",
+            "1.606.1": "policyengine-simulation-us1-606-1-uk2-75-2",
+            "1.632.5": "policyengine-simulation-us1-632-5-uk2-78-0",
+        }
+        mock_modal["dicts"]["simulation-api-uk-versions"] = {
+            "latest": "2.78.0",
+            "2.78.0": "policyengine-simulation-us1-632-5-uk2-78-0",
+        }
+
+        response = client.get("/versions/catalog")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["us"]["latest_version"] == "1.632.5"
+        assert payload["us"]["versions"][0]["country_package_version"] == "1.632.5"
+        assert payload["us"]["versions"][0]["is_latest"] is True
+        assert payload["uk"]["latest_version"] == "2.78.0"
+
+    def test__get_country_version_catalog__returns_normalized_country_snapshot(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.632.5",
+            "1.632.5": "policyengine-simulation-us1-632-5-uk2-78-0",
+        }
+
+        response = client.get("/versions/catalog/us")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["country"] == "us"
+        assert payload["registry_name"] == "simulation-api-us-versions"
+        assert payload["latest_version"] == "1.632.5"
+        assert payload["versions"][0]["modal_app_name"].startswith(
+            "policyengine-simulation-us1-632-5"
+        )
+
+    def test__get_country_version_catalog__rejects_unknown_country(
+        self, client: TestClient
+    ):
+        response = client.get("/versions/catalog/ca")
+
+        assert response.status_code == 404
+        assert "Unknown country" in response.json()["detail"]

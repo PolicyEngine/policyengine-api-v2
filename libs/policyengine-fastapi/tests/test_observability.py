@@ -4,6 +4,7 @@ from opentelemetry.sdk._logs.export import LogExportResult
 from opentelemetry.sdk.metrics.export import MetricExportResult
 from opentelemetry.sdk.trace.export import SpanExportResult
 from policyengine_fastapi.observability import (
+    LaunchedVersionRecord,
     NoOpObservability,
     ObservabilityConfig,
     OtlpObservability,
@@ -15,6 +16,7 @@ from policyengine_fastapi.observability import (
     SimulationTimelineEntry,
     TracerArtifactManifest,
     TracerCaptureMode,
+    VersionCatalogSnapshot,
     VersionStageMetricResponse,
     build_observability,
     generate_run_id,
@@ -107,10 +109,26 @@ def test_contract_models__serialize_expected_shapes():
         country="us",
         window={"from": timestamp, "to": timestamp},
     )
+    version_catalog = VersionCatalogSnapshot(
+        country="us",
+        registry_name="simulation-api-us-versions",
+        latest_version="1.632.5",
+        fetched_at=timestamp,
+        versions=[
+            LaunchedVersionRecord(
+                country="us",
+                country_package_version="1.632.5",
+                modal_app_name="policyengine-simulation-us1-632-5-uk2-78-0",
+                registry_name="simulation-api-us-versions",
+                is_latest=True,
+            )
+        ],
+    )
 
     dumped_event = event.model_dump(mode="json")
     dumped_response = response.model_dump(mode="json")
     dumped_version_metrics = version_metrics.model_dump(mode="json")
+    dumped_version_catalog = version_catalog.model_dump(mode="json")
 
     assert dumped_event["stage"] == "worker.simulation.constructed"
     assert dumped_response["timeline"][0]["stage"] == "request.accepted"
@@ -119,6 +137,7 @@ def test_contract_models__serialize_expected_shapes():
         == "threshold"
     )
     assert dumped_version_metrics["versions"] == []
+    assert dumped_version_catalog["versions"][0]["is_latest"] is True
 
 
 def test_telemetry_envelope__serializes_expected_defaults():

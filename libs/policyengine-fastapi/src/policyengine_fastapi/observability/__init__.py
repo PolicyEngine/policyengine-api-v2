@@ -13,12 +13,14 @@ from .config import (
     parse_header_value_pairs as parse_header_value_pairs,
 )
 from .contracts import (
+    LaunchedVersionRecord as LaunchedVersionRecord,
     SimulationCompositeTraceResponse as SimulationCompositeTraceResponse,
     SimulationLifecycleEvent as SimulationLifecycleEvent,
     SimulationRunSummary as SimulationRunSummary,
     SimulationTelemetryEnvelope as SimulationTelemetryEnvelope,
     SimulationTimelineEntry as SimulationTimelineEntry,
     TracerArtifactManifest as TracerArtifactManifest,
+    VersionCatalogSnapshot as VersionCatalogSnapshot,
     VersionStageMetricResponse as VersionStageMetricResponse,
 )
 from .correlation import (
