@@ -15,6 +15,10 @@ from src.modal._image_setup import snapshot_models
 from src.modal.observability import (
     build_lifecycle_event,
     build_metric_attributes,
+    build_span_attributes,
+    QUEUE_DURATION_METRIC_NAME,
+    FAILURE_COUNT_METRIC_NAME,
+    duration_since_requested_at,
     get_observability,
     parse_bool,
 )
@@ -130,6 +134,18 @@ def run_simulation(params: dict) -> dict:
         service="policyengine-simulation-worker",
     )
     start = perf_counter()
+    queue_duration = duration_since_requested_at(telemetry)
+    if queue_duration is not None:
+        observability.emit_histogram(
+            QUEUE_DURATION_METRIC_NAME,
+            queue_duration,
+            attributes=build_metric_attributes(
+                telemetry,
+                service="policyengine-simulation-worker",
+                stage="worker.started",
+                status="running",
+            ),
+        )
 
     observability.emit_lifecycle_event(
         build_lifecycle_event(
@@ -137,6 +153,7 @@ def run_simulation(params: dict) -> dict:
             status="running",
             service="policyengine-simulation-worker",
             telemetry=telemetry,
+            details={"queue_duration_seconds": queue_duration},
         )
     )
 
@@ -147,10 +164,18 @@ def run_simulation(params: dict) -> dict:
     try:
         with observability.span(
             "run_simulation",
-            metric_attributes,
+            build_span_attributes(
+                telemetry,
+                service="policyengine-simulation-worker",
+            ),
             parent_traceparent=telemetry.get("traceparent"),
         ) as otel_span:
             otel_span.set_attribute("run_id", telemetry.get("run_id"))
+            if queue_duration is not None:
+                otel_span.set_attribute(
+                    "queue_duration_seconds",
+                    queue_duration,
+                )
             current_traceparent = otel_span.get_traceparent()
             if current_traceparent:
                 telemetry["traceparent"] = current_traceparent
@@ -187,8 +212,12 @@ def run_simulation(params: dict) -> dict:
     except Exception as exc:
         duration = perf_counter() - start
         observability.emit_counter(
-            "policyengine.simulation.failure.count",
-            attributes={**metric_attributes, "status": "failed"},
+            FAILURE_COUNT_METRIC_NAME,
+            attributes={
+                **metric_attributes,
+                "stage": "result.failed",
+                "status": "failed",
+            },
         )
         observability.emit_lifecycle_event(
             build_lifecycle_event(

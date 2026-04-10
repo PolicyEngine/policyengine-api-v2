@@ -3,7 +3,6 @@ FastAPI endpoints for the Gateway API.
 """
 
 import logging
-from time import perf_counter
 from typing import Optional
 
 import modal
@@ -21,8 +20,11 @@ from src.modal.gateway.models import (
 from src.modal.observability import (
     build_lifecycle_event,
     build_metric_attributes,
+    build_span_attributes,
     duration_since_requested_at,
+    FAILURE_COUNT_METRIC_NAME,
     get_observability,
+    observe_stage,
 )
 
 logger = logging.getLogger(__name__)
@@ -141,7 +143,6 @@ async def submit_simulation(request: SimulationRequest):
     Routes to the appropriate app based on country and version params.
     Returns immediately with job_id for polling.
     """
-    request_start = perf_counter()
     telemetry_payload = (
         request.telemetry.model_dump(mode="json") if request.telemetry else None
     )
@@ -151,7 +152,7 @@ async def submit_simulation(request: SimulationRequest):
 
     with observability.span(
         "gateway.submit_simulation",
-        build_metric_attributes(
+        build_span_attributes(
             telemetry_payload,
             service="policyengine-simulation-gateway",
             country=request.country,
@@ -165,7 +166,7 @@ async def submit_simulation(request: SimulationRequest):
         observability.emit_lifecycle_event(
             build_lifecycle_event(
                 stage="gateway.received",
-                status="received",
+                status="accepted",
                 service="policyengine-simulation-gateway",
                 telemetry=telemetry_payload,
                 country=request.country,
@@ -173,7 +174,22 @@ async def submit_simulation(request: SimulationRequest):
         )
 
         try:
-            app_name, resolved_version = get_app_name(request.country, request.version)
+            with observe_stage(
+                observability,
+                stage="gateway.version_resolved",
+                service="policyengine-simulation-gateway",
+                telemetry=telemetry_payload,
+                details={"requested_version": request.version},
+            ) as stage_observation:
+                app_name, resolved_version = get_app_name(
+                    request.country, request.version
+                )
+                stage_observation.details.update(
+                    {
+                        "version": resolved_version,
+                        "modal_app_name": app_name,
+                    }
+                )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
@@ -189,20 +205,6 @@ async def submit_simulation(request: SimulationRequest):
             }
             telemetry_payload = payload["_telemetry"]
             run_id = telemetry_payload.get("run_id")
-
-        observability.emit_lifecycle_event(
-            build_lifecycle_event(
-                stage="gateway.version_resolved",
-                status="ok",
-                service="policyengine-simulation-gateway",
-                telemetry=telemetry_payload,
-                country=request.country,
-                country_package_version=resolved_version,
-                modal_app_name=app_name,
-                details={"version": resolved_version},
-            )
-        )
-
         logger.info(
             "Routing %s:%s to app %s (run_id=%s)",
             request.country,
@@ -211,26 +213,41 @@ async def submit_simulation(request: SimulationRequest):
             run_id,
         )
 
-        sim_func = modal.Function.from_name(app_name, "run_simulation")
-        call = sim_func.spawn(payload)
+        with observe_stage(
+            observability,
+            stage="gateway.spawned",
+            service="policyengine-simulation-gateway",
+            telemetry=telemetry_payload,
+            success_status="submitted",
+            record_failure_counter=True,
+            details={"version": resolved_version},
+        ) as stage_observation:
+            # Get function reference from the target app
+            sim_func = modal.Function.from_name(app_name, "run_simulation")
 
-        bundle = _build_policyengine_bundle(request.country, resolved_version, payload)
-        _job_metadata_store()[call.object_id] = _serialize_job_metadata(
-            app_name,
-            bundle,
-            run_id,
-        )
-
-        registry_payload = dict(telemetry_payload or {})
-        registry_payload.update(
-            {
-                "job_id": call.object_id,
-                "country": request.country,
-                "country_package_version": resolved_version,
-                "modal_app_name": app_name,
-            }
-        )
-        get_job_telemetry_registry()[call.object_id] = registry_payload
+            # Spawn the job (returns immediately)
+            call = sim_func.spawn(payload)
+            registry_payload = dict(telemetry_payload or {})
+            registry_payload.update(
+                {
+                    "job_id": call.object_id,
+                    "country": request.country,
+                    "country_package_version": resolved_version,
+                    "modal_app_name": app_name,
+                }
+            )
+            get_job_telemetry_registry()[call.object_id] = registry_payload
+            bundle = _build_policyengine_bundle(
+                request.country,
+                resolved_version,
+                payload,
+            )
+            _job_metadata_store()[call.object_id] = _serialize_job_metadata(
+                app_name,
+                bundle,
+                run_id,
+            )
+            stage_observation.details.update({"job_id": call.object_id})
 
         observability.emit_counter(
             "policyengine.simulation.run.count",
@@ -239,16 +256,6 @@ async def submit_simulation(request: SimulationRequest):
                 service="policyengine-simulation-gateway",
                 status="submitted",
             ),
-        )
-        observability.emit_lifecycle_event(
-            build_lifecycle_event(
-                stage="gateway.spawned",
-                status="submitted",
-                service="policyengine-simulation-gateway",
-                telemetry=registry_payload,
-                duration_seconds=perf_counter() - request_start,
-                details={"job_id": call.object_id},
-            )
         )
 
         return JobSubmitResponse(
@@ -282,7 +289,7 @@ async def get_job_status(job_id: str):
 
     with observability.span(
         "gateway.get_job_status",
-        build_metric_attributes(
+        build_span_attributes(
             telemetry,
             service="policyengine-simulation-gateway",
         ),
@@ -348,10 +355,11 @@ async def get_job_status(job_id: str):
         except Exception as e:
             duration = duration_since_requested_at(telemetry)
             observability.emit_counter(
-                "policyengine.simulation.failure.count",
+                FAILURE_COUNT_METRIC_NAME,
                 attributes=build_metric_attributes(
                     telemetry,
                     service="policyengine-simulation-gateway",
+                    stage="result.failed",
                     status="failed",
                 ),
             )
