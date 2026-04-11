@@ -51,6 +51,8 @@ class ObservabilityConfig:
     artifact_prefix: str = "simulation-observability"
     tracer_capture_mode: TracerCaptureMode = TracerCaptureMode.DISABLED
     slow_run_threshold_seconds: float = 30.0
+    tracer_success_sample_rate: float = 0.0
+    tracer_include_computation_log: bool = False
 
     @classmethod
     def disabled(cls, service_name: str = "policyengine-observability"):
@@ -88,5 +90,12 @@ class ObservabilityConfig:
             ),
             slow_run_threshold_seconds=float(
                 os.getenv(f"{prefix}SLOW_RUN_THRESHOLD_SECONDS", "30.0")
+            ),
+            tracer_success_sample_rate=float(
+                os.getenv(f"{prefix}TRACER_SUCCESS_SAMPLE_RATE", "0.0")
+            ),
+            tracer_include_computation_log=parse_bool(
+                os.getenv(f"{prefix}TRACER_INCLUDE_COMPUTATION_LOG"),
+                False,
             ),
         )

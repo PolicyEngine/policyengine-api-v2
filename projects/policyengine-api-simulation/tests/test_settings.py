@@ -18,6 +18,8 @@ def test_settings_default_observability_config_is_disabled():
     assert config.otlp_headers == {}
     assert config.tracer_capture_mode == TracerCaptureMode.DISABLED
     assert config.slow_run_threshold_seconds == 30.0
+    assert config.tracer_success_sample_rate == 0.0
+    assert config.tracer_include_computation_log is False
 
 
 def test_settings_expose_observability_config(monkeypatch):
@@ -34,6 +36,8 @@ def test_settings_expose_observability_config(monkeypatch):
     monkeypatch.setenv("OBSERVABILITY_ARTIFACT_PREFIX", "diagnostics")
     monkeypatch.setenv("OBSERVABILITY_TRACER_CAPTURE_MODE", "threshold")
     monkeypatch.setenv("OBSERVABILITY_SLOW_RUN_THRESHOLD_SECONDS", "45.5")
+    monkeypatch.setenv("OBSERVABILITY_TRACER_SUCCESS_SAMPLE_RATE", "0.15")
+    monkeypatch.setenv("OBSERVABILITY_TRACER_INCLUDE_COMPUTATION_LOG", "true")
 
     get_settings.cache_clear()
     try:
@@ -56,3 +60,5 @@ def test_settings_expose_observability_config(monkeypatch):
     assert config.artifact_prefix == "diagnostics"
     assert config.tracer_capture_mode == TracerCaptureMode.THRESHOLD
     assert config.slow_run_threshold_seconds == 45.5
+    assert config.tracer_success_sample_rate == 0.15
+    assert config.tracer_include_computation_log is True

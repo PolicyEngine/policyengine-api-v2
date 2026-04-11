@@ -45,6 +45,8 @@ class AppSettings(BaseSettings):
         TracerCaptureMode.DISABLED
     )
     observability_slow_run_threshold_seconds: float = 30.0
+    observability_tracer_success_sample_rate: float = 0.0
+    observability_tracer_include_computation_log: bool = False
 
     model_config = SettingsConfigDict(env_file=".env")
 
@@ -71,6 +73,10 @@ class AppSettings(BaseSettings):
             artifact_prefix=self.observability_artifact_prefix,
             tracer_capture_mode=self.observability_tracer_capture_mode,
             slow_run_threshold_seconds=self.observability_slow_run_threshold_seconds,
+            tracer_success_sample_rate=self.observability_tracer_success_sample_rate,
+            tracer_include_computation_log=(
+                self.observability_tracer_include_computation_log
+            ),
         )
 
 

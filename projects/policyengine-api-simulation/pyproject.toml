@@ -23,6 +23,7 @@ dependencies = [
     "tables>=3.10.2",
     "modal>=0.73.0",
     "logfire>=3.0.0",
+    "google-cloud-storage>=3.1.1",
 ]
 
 [tool.hatch.build.targets.wheel]

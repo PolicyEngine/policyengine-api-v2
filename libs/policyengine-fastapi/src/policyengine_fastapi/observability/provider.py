@@ -34,6 +34,8 @@ def _cache_key(config: ObservabilityConfig) -> tuple:
         config.artifact_prefix,
         config.tracer_capture_mode.value,
         config.slow_run_threshold_seconds,
+        config.tracer_success_sample_rate,
+        config.tracer_include_computation_log,
     )
 
 

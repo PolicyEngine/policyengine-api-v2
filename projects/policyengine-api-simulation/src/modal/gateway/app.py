@@ -23,6 +23,8 @@ gateway_image = (
         "opentelemetry-exporter-otlp-proto-http>=1.30.0,<2.0.0",
     )
     .add_local_python_source("src.modal", copy=True)
+    .add_local_python_source("policyengine_api_simulation", copy=True)
+    .add_local_python_source("policyengine_fastapi", copy=True)
 )
 
 

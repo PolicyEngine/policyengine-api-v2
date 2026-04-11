@@ -88,8 +88,14 @@ def test_contract_models__serialize_expected_shapes():
         run_id="run-123",
         scenario="baseline",
         capture_mode=TracerCaptureMode.THRESHOLD,
-        artifact_format="policyengine.flat_trace.v1",
+        artifact_format="policyengine.tracer.bundle.v1",
         storage_uri="gs://bucket/run-123/trace.json.gz",
+        summary_uri="gs://bucket/run-123/performance-summary.json",
+        branch_names=["baseline"],
+        artifacts={
+            "flat_trace": "gs://bucket/run-123/trace.json.gz",
+            "performance_summary": "gs://bucket/run-123/performance-summary.json",
+        },
         generated_at=timestamp,
     )
     response = SimulationCompositeTraceResponse(
@@ -136,6 +142,9 @@ def test_contract_models__serialize_expected_shapes():
         dumped_response["tracer"]["baseline"]["manifest"]["capture_mode"]
         == "threshold"
     )
+    assert dumped_response["tracer"]["baseline"]["manifest"]["branch_names"] == [
+        "baseline"
+    ]
     assert dumped_version_metrics["versions"] == []
     assert dumped_version_catalog["versions"][0]["is_latest"] is True
 

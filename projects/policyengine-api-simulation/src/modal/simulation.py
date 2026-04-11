@@ -9,13 +9,20 @@ import json
 import logging
 import os
 import tempfile
+from time import perf_counter
 from typing import Any
 
 # Module-level imports - these are SNAPSHOTTED at image build time
 from policyengine.simulation import Simulation, SimulationOptions
 
+from src.modal.artifact_store import build_artifact_store
 from src.modal.observability import observe_stage
 from src.modal.telemetry import split_internal_payload
+from src.modal.tracer_capture import (
+    export_tracer_diagnostics,
+    resolve_capture_mode,
+    should_trace_simulation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,11 +85,35 @@ def run_simulation_impl(
     Pure implementation with no Modal dependencies.
     Accepts SimulationOptions as a dict and returns EconomyComparison as a dict.
     """
-    # Set up GCP credentials if needed
+    start = perf_counter()
     simulation_params, telemetry, metadata = split_internal_payload(params)
-    event_telemetry = (
-        telemetry.model_dump(mode="json") if telemetry is not None else telemetry_context
+    event_telemetry = dict(
+        telemetry.model_dump(mode="json")
+        if telemetry is not None
+        else (telemetry_context or {})
     )
+    observability_config = None if observability is None else getattr(
+        observability, "config", None
+    )
+    capture_mode = resolve_capture_mode(
+        None if telemetry is None else telemetry.capture_mode,
+        None
+        if observability_config is None
+        else observability_config.tracer_capture_mode,
+    )
+    if capture_mode:
+        event_telemetry["capture_mode"] = capture_mode
+    trace_enabled = should_trace_simulation(capture_mode)
+    artifact_store = build_artifact_store(
+        None if observability_config is None else observability_config.artifact_bucket,
+        prefix=(
+            "simulation-observability"
+            if observability_config is None
+            else observability_config.artifact_prefix
+        ),
+    )
+    simulation = None
+    failed = False
 
     if observability is not None:
         with observe_stage(
@@ -120,6 +151,9 @@ def run_simulation_impl(
     logger.info("Initialising simulation from input")
 
     # Create simulation instance
+    simulation_kwargs = options.model_dump()
+    if trace_enabled:
+        simulation_kwargs["trace"] = True
     if observability is not None:
         with observe_stage(
             observability,
@@ -128,35 +162,81 @@ def run_simulation_impl(
             telemetry=event_telemetry,
             record_failure_counter=True,
         ):
-            simulation = Simulation(**options.model_dump())
+            simulation = Simulation(**simulation_kwargs)
     else:
-        simulation = Simulation(**options.model_dump())
+        simulation = Simulation(**simulation_kwargs)
     logger.info("Calculating comparison")
 
-    # Run the economy comparison calculation
-    if observability is not None:
-        with observe_stage(
-            observability,
-            stage="worker.comparison.calculated",
-            service="policyengine-simulation-worker",
-            telemetry=event_telemetry,
-            record_failure_counter=True,
-        ):
+    try:
+        # Run the economy comparison calculation
+        if observability is not None:
+            with observe_stage(
+                observability,
+                stage="worker.comparison.calculated",
+                service="policyengine-simulation-worker",
+                telemetry=event_telemetry,
+                record_failure_counter=True,
+            ):
+                result = simulation.calculate_economy_comparison()
+        else:
             result = simulation.calculate_economy_comparison()
-    else:
-        result = simulation.calculate_economy_comparison()
-    logger.info("Comparison complete")
+        logger.info("Comparison complete")
 
-    # Use mode='json' to ensure numpy arrays are converted to lists
-    if observability is not None:
-        with observe_stage(
-            observability,
-            stage="worker.result.serialized",
-            service="policyengine-simulation-worker",
-            telemetry=event_telemetry,
-            record_failure_counter=True,
-        ):
+        # Use mode='json' to ensure numpy arrays are converted to lists
+        if observability is not None:
+            with observe_stage(
+                observability,
+                stage="worker.result.serialized",
+                service="policyengine-simulation-worker",
+                telemetry=event_telemetry,
+                record_failure_counter=True,
+            ):
+                serialized = result.model_dump(mode="json")
+        else:
             serialized = result.model_dump(mode="json")
-    else:
-        serialized = result.model_dump(mode="json")
-    return serialized
+        return serialized
+    except Exception:
+        failed = True
+        raise
+    finally:
+        if observability is not None and simulation is not None and trace_enabled:
+            try:
+                with observe_stage(
+                    observability,
+                    stage="worker.tracer.exported",
+                    service="policyengine-simulation-worker",
+                    telemetry=event_telemetry,
+                    record_failure_counter=True,
+                    details={"capture_mode": capture_mode},
+                ) as stage_observation:
+                    _, tracer_details = export_tracer_diagnostics(
+                        simulation=simulation,
+                        observability=observability,
+                        telemetry=event_telemetry,
+                        service="policyengine-simulation-worker",
+                        capture_mode=capture_mode,
+                        run_duration_seconds=perf_counter() - start,
+                        failed=failed,
+                        artifact_store=artifact_store,
+                        slow_run_threshold_seconds=(
+                            30.0
+                            if observability_config is None
+                            else observability_config.slow_run_threshold_seconds
+                        ),
+                        success_sample_rate=(
+                            0.0
+                            if observability_config is None
+                            else observability_config.tracer_success_sample_rate
+                        ),
+                        include_computation_log=(
+                            False
+                            if observability_config is None
+                            else observability_config.tracer_include_computation_log
+                        ),
+                    )
+                    stage_observation.details.update(tracer_details)
+            except Exception:
+                logger.exception(
+                    "Tracer export failed for run_id=%s",
+                    None if telemetry is None else telemetry.run_id,
+                )

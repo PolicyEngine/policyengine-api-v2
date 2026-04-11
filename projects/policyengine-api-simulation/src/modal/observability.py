@@ -14,6 +14,7 @@ import socket
 from time import perf_counter
 from typing import Any, Mapping
 
+from policyengine_fastapi.observability import TracerArtifactManifest
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
     OTLPMetricExporter,
@@ -145,6 +146,12 @@ class RuntimeObservabilityConfig:
     environment: str
     otlp_endpoint: str | None
     otlp_headers: dict[str, str]
+    artifact_bucket: str | None
+    artifact_prefix: str
+    tracer_capture_mode: str
+    slow_run_threshold_seconds: float
+    tracer_success_sample_rate: float
+    tracer_include_computation_log: bool
 
     @classmethod
     def from_env(
@@ -163,6 +170,25 @@ class RuntimeObservabilityConfig:
             otlp_endpoint=os.getenv("OBSERVABILITY_OTLP_ENDPOINT"),
             otlp_headers=parse_header_value_pairs(
                 os.getenv("OBSERVABILITY_OTLP_HEADERS")
+            ),
+            artifact_bucket=os.getenv("OBSERVABILITY_ARTIFACT_BUCKET"),
+            artifact_prefix=os.getenv(
+                "OBSERVABILITY_ARTIFACT_PREFIX",
+                "simulation-observability",
+            ),
+            tracer_capture_mode=os.getenv(
+                "OBSERVABILITY_TRACER_CAPTURE_MODE",
+                "disabled",
+            ),
+            slow_run_threshold_seconds=float(
+                os.getenv("OBSERVABILITY_SLOW_RUN_THRESHOLD_SECONDS", "30.0")
+            ),
+            tracer_success_sample_rate=float(
+                os.getenv("OBSERVABILITY_TRACER_SUCCESS_SAMPLE_RATE", "0.0")
+            ),
+            tracer_include_computation_log=parse_bool(
+                os.getenv("OBSERVABILITY_TRACER_INCLUDE_COMPUTATION_LOG"),
+                False,
             ),
         )
 
@@ -215,6 +241,11 @@ class OTelSpan(AbstractContextManager["OTelSpan"]):
 
 
 class NoOpObservability:
+    def __init__(self, config: RuntimeObservabilityConfig | None = None):
+        self.config = config or RuntimeObservabilityConfig.from_env(
+            "policyengine-observability"
+        )
+
     def emit_lifecycle_event(self, payload: dict[str, Any]) -> None:
         return None
 
@@ -241,6 +272,11 @@ class NoOpObservability:
         parent_traceparent: str | None = None,
     ) -> NoOpSpan:
         return NoOpSpan()
+
+    def record_artifact_manifest(
+        self, manifest: TracerArtifactManifest | dict[str, Any]
+    ) -> None:
+        return None
 
     def flush(self) -> None:
         return None
@@ -326,6 +362,20 @@ class RuntimeObservability:
     def emit_lifecycle_event(self, payload: dict[str, Any]) -> None:
         self.lifecycle_logger.info(payload)
 
+    def record_artifact_manifest(
+        self, manifest: TracerArtifactManifest | dict[str, Any]
+    ) -> None:
+        if isinstance(manifest, TracerArtifactManifest):
+            manifest_payload = manifest.model_dump(mode="json")
+        else:
+            manifest_payload = dict(manifest)
+        self.lifecycle_logger.info(
+            {
+                "event_name": "simulation.tracer.artifact_manifest",
+                "manifest": manifest_payload,
+            }
+        )
+
     def emit_counter(
         self,
         name: str,
@@ -391,13 +441,19 @@ def get_observability(
         config.environment,
         config.otlp_endpoint,
         tuple(sorted(config.otlp_headers.items())),
+        config.artifact_bucket,
+        config.artifact_prefix,
+        config.tracer_capture_mode,
+        config.slow_run_threshold_seconds,
+        config.tracer_success_sample_rate,
+        config.tracer_include_computation_log,
     )
     cached = _CACHE.get(key)
     if cached is not None:
         return cached
 
     if not config.enabled:
-        built: RuntimeObservability | NoOpObservability = NoOpObservability()
+        built = NoOpObservability(config=config)
     else:
         built = RuntimeObservability(config)
     _CACHE[key] = built

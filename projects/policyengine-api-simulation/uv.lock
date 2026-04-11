@@ -1719,6 +1719,7 @@ name = "policyengine-simulation-api-project"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "google-cloud-storage" },
     { name = "logfire" },
     { name = "modal" },
     { name = "opentelemetry-instrumentation-fastapi" },
@@ -1747,6 +1748,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'build'", specifier = ">=25.1.0" },
+    { name = "google-cloud-storage", specifier = ">=3.1.1" },
     { name = "logfire", specifier = ">=3.0.0" },
     { name = "modal", specifier = ">=0.73.0" },
     { name = "openapi-python-client", marker = "extra == 'build'", specifier = ">=0.21.6" },

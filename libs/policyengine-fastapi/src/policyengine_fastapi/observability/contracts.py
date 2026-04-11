@@ -46,6 +46,8 @@ class TracerArtifactManifest(CorrelatedRunFields):
     artifact_format: str
     storage_uri: str
     summary_uri: str | None = None
+    branch_names: list[str] = Field(default_factory=list)
+    artifacts: dict[str, str] = Field(default_factory=dict)
     node_count: int = 0
     root_count: int = 0
     max_depth: int = 0

@@ -60,11 +60,14 @@ simulation_image = (
         f"policyengine-uk=={UK_VERSION}",
         "policyengine==0.13.0",
         "tables>=3.10.2",
+        "google-cloud-storage>=3.1.1",
         "logfire",
         "opentelemetry-sdk>=1.30.0,<2.0.0",
         "opentelemetry-exporter-otlp-proto-http>=1.30.0,<2.0.0",
     )
     .add_local_python_source("src.modal", copy=True)
+    .add_local_python_source("policyengine_api_simulation", copy=True)
+    .add_local_python_source("policyengine_fastapi", copy=True)
     .run_function(snapshot_models)
 )
 
@@ -122,6 +125,9 @@ def run_simulation(params: dict) -> dict:
     telemetry.update(
         {
             "country": params.get("country"),
+            "country_package_name": (
+                "policyengine-us" if params.get("country") == "us" else "policyengine-uk"
+            ),
             "country_package_version": (
                 US_VERSION if params.get("country") == "us" else UK_VERSION
             ),
@@ -129,6 +135,9 @@ def run_simulation(params: dict) -> dict:
             "modal_app_name": APP_NAME,
         }
     )
+    configured_capture_mode = getattr(observability.config, "tracer_capture_mode", "disabled")
+    if telemetry.get("capture_mode") in (None, "disabled") and configured_capture_mode != "disabled":
+        telemetry["capture_mode"] = configured_capture_mode
     metric_attributes = build_metric_attributes(
         telemetry,
         service="policyengine-simulation-worker",
