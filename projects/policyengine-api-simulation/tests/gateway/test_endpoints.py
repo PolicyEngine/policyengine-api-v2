@@ -236,6 +236,54 @@ class TestSubmitSimulationEndpoint:
             "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
         }
 
+    def test__given_submission_with_alias_data__then_bundle_dataset_stays_unresolved(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+        }
+
+        request_body = {
+            "country": "us",
+            "scope": "macro",
+            "reform": {},
+            "data": "enhanced_cps_2024",
+        }
+
+        response = client.post("/simulate/economy/comparison", json=request_body)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert (
+            data["policyengine_bundle"]["dataset"]
+            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+        )
+
+    def test__given_submission_with_uk_alias_data__then_bundle_dataset_is_versioned_uri(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-uk-versions"] = {
+            "latest": "2.66.0",
+            "2.66.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+        }
+
+        request_body = {
+            "country": "uk",
+            "scope": "macro",
+            "reform": {},
+            "data": "enhanced_frs",
+        }
+
+        response = client.post("/simulate/economy/comparison", json=request_body)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert (
+            data["policyengine_bundle"]["dataset"]
+            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3"
+        )
+
     def test__given_submitted_job__then_job_status_includes_bundle_metadata(
         self, mock_modal, client: TestClient
     ):

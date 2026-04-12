@@ -22,6 +22,22 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 JOB_METADATA_DICT_NAME = "simulation-api-job-metadata"
+DATASET_URIS = {
+    "us": {
+        "enhanced_cps": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
+        "enhanced_cps_2024": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
+        "cps": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.77.0",
+        "cps_2023": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.77.0",
+        "pooled_cps": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.77.0",
+        "pooled_3_year_cps_2023": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.77.0",
+    },
+    "uk": {
+        "enhanced_frs": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3",
+        "enhanced_frs_2023_24": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3",
+        "frs": "hf://policyengine/policyengine-uk-data-private/frs_2023_24.h5@1.40.3",
+        "frs_2023_24": "hf://policyengine/policyengine-uk-data-private/frs_2023_24.h5@1.40.3",
+    },
+}
 
 
 def _job_metadata_store():
@@ -29,17 +45,22 @@ def _job_metadata_store():
 
 
 def _build_policyengine_bundle(
-    resolved_version: str, payload: dict
+    country: str, resolved_version: str, payload: dict
 ) -> PolicyEngineBundle:
+    dataset = payload.get("data")
+    if isinstance(dataset, str) and "://" in dataset:
+        resolved_dataset = dataset
+    elif isinstance(dataset, str):
+        resolved_dataset = DATASET_URIS.get(country.lower(), {}).get(dataset)
+    else:
+        resolved_dataset = None
     return PolicyEngineBundle(
         model_version=resolved_version,
-        dataset=payload.get("data"),
+        dataset=resolved_dataset,
     )
 
 
-def _serialize_job_metadata(
-    resolved_app_name: str, bundle: PolicyEngineBundle
-) -> dict:
+def _serialize_job_metadata(resolved_app_name: str, bundle: PolicyEngineBundle) -> dict:
     return {
         "resolved_app_name": resolved_app_name,
         "policyengine_bundle": bundle.model_dump(),
@@ -98,7 +119,7 @@ async def submit_simulation(request: SimulationRequest):
     # Spawn the job (returns immediately)
     call = sim_func.spawn(payload)
 
-    bundle = _build_policyengine_bundle(resolved_version, payload)
+    bundle = _build_policyengine_bundle(request.country, resolved_version, payload)
     job_metadata = _serialize_job_metadata(app_name, bundle)
     _job_metadata_store()[call.object_id] = job_metadata
 
@@ -133,7 +154,9 @@ async def get_job_status(job_id: str):
 
     try:
         result = call.get(timeout=0)
-        return JobStatusResponse(status="complete", result=result, **(job_metadata or {}))
+        return JobStatusResponse(
+            status="complete", result=result, **(job_metadata or {})
+        )
     except TimeoutError:
         return JSONResponse(
             status_code=202,
