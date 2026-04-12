@@ -51,7 +51,7 @@ def _build_policyengine_bundle(
     if isinstance(dataset, str) and "://" in dataset:
         resolved_dataset = dataset
     elif isinstance(dataset, str):
-        resolved_dataset = DATASET_URIS.get(country.lower(), {}).get(dataset)
+        resolved_dataset = DATASET_URIS.get(country.lower(), {}).get(dataset, dataset)
     else:
         resolved_dataset = None
     return PolicyEngineBundle(

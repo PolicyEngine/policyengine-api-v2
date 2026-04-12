@@ -284,6 +284,27 @@ class TestSubmitSimulationEndpoint:
             == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3"
         )
 
+    def test__given_submission_with_unknown_alias_data__then_bundle_dataset_is_preserved(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+        }
+
+        request_body = {
+            "country": "us",
+            "scope": "macro",
+            "reform": {},
+            "data": "custom_dataset_label",
+        }
+
+        response = client.post("/simulate/economy/comparison", json=request_body)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["policyengine_bundle"]["dataset"] == "custom_dataset_label"
+
     def test__given_submitted_job__then_job_status_includes_bundle_metadata(
         self, mock_modal, client: TestClient
     ):
