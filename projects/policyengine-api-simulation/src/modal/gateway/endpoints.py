@@ -60,10 +60,15 @@ def _build_policyengine_bundle(
     )
 
 
-def _serialize_job_metadata(resolved_app_name: str, bundle: PolicyEngineBundle) -> dict:
+def _serialize_job_metadata(
+    resolved_app_name: str,
+    bundle: PolicyEngineBundle,
+    run_id: str | None = None,
+) -> dict:
     return {
         "resolved_app_name": resolved_app_name,
         "policyengine_bundle": bundle.model_dump(),
+        "run_id": run_id,
     }
 
 
@@ -136,7 +141,7 @@ async def submit_simulation(request: SimulationRequest):
     call = sim_func.spawn(payload)
 
     bundle = _build_policyengine_bundle(request.country, resolved_version, payload)
-    job_metadata = _serialize_job_metadata(app_name, bundle)
+    job_metadata = _serialize_job_metadata(app_name, bundle, run_id)
     _job_metadata_store()[call.object_id] = job_metadata
 
     return JobSubmitResponse(
@@ -151,7 +156,11 @@ async def submit_simulation(request: SimulationRequest):
     )
 
 
-@router.get("/jobs/{job_id}")
+@router.get(
+    "/jobs/{job_id}",
+    response_model=JobStatusResponse,
+    response_model_exclude_none=True,
+)
 async def get_job_status(job_id: str):
     """
     Poll for job status.

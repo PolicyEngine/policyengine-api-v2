@@ -63,6 +63,7 @@ class JobStatusResponse(BaseModel):
     error: Optional[str] = None
     resolved_app_name: Optional[str] = None
     policyengine_bundle: Optional[PolicyEngineBundle] = None
+    run_id: Optional[str] = None
 
 
 class PingRequest(BaseModel):
