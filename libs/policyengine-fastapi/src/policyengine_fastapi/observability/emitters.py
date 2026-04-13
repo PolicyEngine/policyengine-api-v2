@@ -43,9 +43,7 @@ class OTelSpan(AbstractContextManager["OTelSpan"]):
         if self._span is not None:
             self._span.set_attribute(key, _normalize_attribute_value(value))
 
-    def add_event(
-        self, name: str, attributes: Mapping[str, Any] | None = None
-    ) -> None:
+    def add_event(self, name: str, attributes: Mapping[str, Any] | None = None) -> None:
         if self._span is not None:
             self._span.add_event(name, _normalize_attributes(attributes))
 
@@ -195,9 +193,7 @@ class OtlpObservability:
             self.histogram_cache[name] = histogram
         histogram.record(value, attributes=_normalize_attributes(attributes))
 
-    def record_artifact_manifest(
-        self, manifest: TracerArtifactManifest
-    ) -> None:
+    def record_artifact_manifest(self, manifest: TracerArtifactManifest) -> None:
         self.lifecycle_logger.info(
             {
                 "event_name": "simulation.tracer.artifact_manifest",
@@ -205,9 +201,7 @@ class OtlpObservability:
             }
         )
 
-    def span(
-        self, name: str, attributes: Mapping[str, Any] | None = None
-    ) -> OTelSpan:
+    def span(self, name: str, attributes: Mapping[str, Any] | None = None) -> OTelSpan:
         return OTelSpan(
             self.tracer.start_as_current_span(
                 name,

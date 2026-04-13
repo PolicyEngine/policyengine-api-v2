@@ -72,9 +72,7 @@ class ObservabilityConfig:
             service_name=os.getenv(f"{prefix}SERVICE_NAME", service_name),
             environment=os.getenv(f"{prefix}ENVIRONMENT", environment),
             otlp_endpoint=os.getenv(f"{prefix}OTLP_ENDPOINT"),
-            otlp_headers=parse_header_value_pairs(
-                os.getenv(f"{prefix}OTLP_HEADERS")
-            ),
+            otlp_headers=parse_header_value_pairs(os.getenv(f"{prefix}OTLP_HEADERS")),
             artifact_bucket=os.getenv(f"{prefix}ARTIFACT_BUCKET"),
             artifact_prefix=os.getenv(
                 f"{prefix}ARTIFACT_PREFIX",

@@ -81,7 +81,9 @@ def run_simulation_impl(
     # Set up GCP credentials if needed
     simulation_params, telemetry, metadata = split_internal_payload(params)
     event_telemetry = (
-        telemetry.model_dump(mode="json") if telemetry is not None else telemetry_context
+        telemetry.model_dump(mode="json")
+        if telemetry is not None
+        else telemetry_context
     )
 
     if observability is not None:

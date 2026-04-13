@@ -1,4 +1,4 @@
 - bump: patch
   changes:
     changed:
-      - Bumped policyengine-core minimum version to 3.23.5 for pandas 3.0 compatibility
+      - Added baseline Grafana-compatible OTLP observability and stage timing telemetry for the simulation gateway and worker.

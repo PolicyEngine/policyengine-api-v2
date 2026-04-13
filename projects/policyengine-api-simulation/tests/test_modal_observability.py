@@ -89,9 +89,7 @@ def test_build_span_attributes__preserves_high_cardinality_trace_context():
 
 
 def test_duration_since_requested_at__returns_elapsed_seconds():
-    requested_at = (
-        datetime.now(UTC) - timedelta(seconds=5)
-    ).isoformat()
+    requested_at = (datetime.now(UTC) - timedelta(seconds=5)).isoformat()
 
     duration = duration_since_requested_at({"requested_at": requested_at})
 
