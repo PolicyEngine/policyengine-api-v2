@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from .internal_observability import create_router as create_internal_observability_router
 from .simulation import create_router
 
 """
@@ -13,3 +14,4 @@ def initialize(app: FastAPI):
     and jwt settings.
     """
     app.include_router(create_router())
+    app.include_router(create_internal_observability_router())

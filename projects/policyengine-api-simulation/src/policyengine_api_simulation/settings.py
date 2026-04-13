@@ -47,12 +47,32 @@ class AppSettings(BaseSettings):
     observability_slow_run_threshold_seconds: float = 30.0
     observability_tracer_success_sample_rate: float = 0.0
     observability_tracer_include_computation_log: bool = False
+    observability_internal_api_token: str | None = None
+    observability_loki_base_url: str | None = None
+    observability_loki_headers: str = ""
+    observability_tempo_base_url: str | None = None
+    observability_tempo_headers: str = ""
+    observability_prometheus_base_url: str | None = None
+    observability_prometheus_headers: str = ""
+    observability_version_catalog_environment: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env")
 
     @field_validator("observability_otlp_headers", mode="before")
     @classmethod
     def strip_observability_otlp_headers(cls, value):
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator(
+        "observability_loki_headers",
+        "observability_tempo_headers",
+        "observability_prometheus_headers",
+        mode="before",
+    )
+    @classmethod
+    def strip_observability_backend_headers(cls, value):
         if isinstance(value, str):
             return value.strip()
         return value
