@@ -1,4 +1,4 @@
-"""Pytest fixtures for gateway tests."""
+"""Shared fixtures for gateway tests."""
 
 import pytest
 from fastapi import FastAPI

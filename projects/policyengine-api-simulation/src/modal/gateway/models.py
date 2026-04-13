@@ -3,7 +3,9 @@ Pydantic models for the Gateway API.
 """
 
 from typing import Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
+
+from src.modal.telemetry import TelemetryEnvelope
 
 
 class SimulationRequest(BaseModel):
@@ -11,8 +13,24 @@ class SimulationRequest(BaseModel):
 
     country: str
     version: Optional[str] = None
+    telemetry: TelemetryEnvelope | None = None
 
-    model_config = ConfigDict(extra="allow")  # Pass through all other fields
+    model_config = ConfigDict(
+        extra="allow",
+        populate_by_name=True,
+    )  # Pass through all other fields
+
+    @model_validator(mode="before")
+    @classmethod
+    def move_internal_telemetry_alias(cls, value):
+        if not isinstance(value, dict):
+            return value
+        if "telemetry" in value or "_telemetry" not in value:
+            return value
+
+        normalized = dict(value)
+        normalized["telemetry"] = normalized.pop("_telemetry")
+        return normalized
 
 
 class PolicyEngineBundle(BaseModel):
@@ -34,6 +52,7 @@ class JobSubmitResponse(BaseModel):
     version: str
     resolved_app_name: str
     policyengine_bundle: PolicyEngineBundle
+    run_id: Optional[str] = None
 
 
 class JobStatusResponse(BaseModel):
@@ -44,6 +63,7 @@ class JobStatusResponse(BaseModel):
     error: Optional[str] = None
     resolved_app_name: Optional[str] = None
     policyengine_bundle: Optional[PolicyEngineBundle] = None
+    run_id: Optional[str] = None
 
 
 class PingRequest(BaseModel):

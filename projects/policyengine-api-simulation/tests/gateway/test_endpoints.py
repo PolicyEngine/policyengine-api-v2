@@ -8,8 +8,6 @@ simulation requests.
 import pytest
 from fastapi.testclient import TestClient
 
-pytest_plugins = ("tests.fixtures.endpoints",)
-
 
 class TestGetAppName:
     """Tests for the get_app_name helper function."""
@@ -201,6 +199,37 @@ class TestSubmitSimulationEndpoint:
         assert data["poll_url"] == "/jobs/mock-job-id-123"
         assert data["status"] == "submitted"
 
+    def test__given_submission_with_telemetry__then_preserves_run_id(
+        self, mock_modal, client: TestClient
+    ):
+        """
+        Given a simulation submission with internal telemetry metadata
+        When the request completes
+        Then the spawned payload preserves telemetry and the response echoes run_id.
+        """
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+        }
+
+        request_body = {
+            "country": "us",
+            "scope": "macro",
+            "reform": {},
+            "_telemetry": {
+                "run_id": "run-123",
+                "process_id": "proc-123",
+                "capture_mode": "disabled",
+            },
+        }
+
+        response = client.post("/simulate/economy/comparison", json=request_body)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["run_id"] == "run-123"
+        assert mock_modal["func"].last_payload["_telemetry"]["run_id"] == "run-123"
+
     def test__given_submission_with_data__then_returns_resolved_bundle_metadata(
         self, mock_modal, client: TestClient
     ):
@@ -231,8 +260,6 @@ class TestSubmitSimulationEndpoint:
         assert data["resolved_app_name"] == "policyengine-simulation-us1-500-0-uk2-66-0"
         assert data["policyengine_bundle"] == {
             "model_version": "1.500.0",
-            "policyengine_version": None,
-            "data_version": None,
             "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
         }
 
@@ -336,10 +363,36 @@ class TestSubmitSimulationEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "complete"
+        assert "run_id" not in data
         assert data["resolved_app_name"] == "policyengine-simulation-us1-500-0-uk2-66-0"
         assert data["policyengine_bundle"] == {
             "model_version": "1.500.0",
-            "policyengine_version": None,
-            "data_version": None,
             "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
         }
+
+    def test__given_submitted_job_with_telemetry__then_polling_echoes_run_id(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+        }
+
+        submit_response = client.post(
+            "/simulate/economy/comparison",
+            json={
+                "country": "us",
+                "scope": "macro",
+                "reform": {},
+                "_telemetry": {
+                    "run_id": "run-123",
+                    "process_id": "proc-123",
+                    "capture_mode": "disabled",
+                },
+            },
+        )
+
+        response = client.get(f"/jobs/{submit_response.json()['job_id']}")
+
+        assert response.status_code == 200
+        assert response.json()["run_id"] == "run-123"

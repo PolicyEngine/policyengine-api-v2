@@ -11,10 +11,8 @@ Usage:
 
 import json
 from pathlib import Path
-from typing import Optional
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
 
 from src.modal.gateway.models import (
     JobStatusResponse,

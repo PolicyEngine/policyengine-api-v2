@@ -60,10 +60,15 @@ def _build_policyengine_bundle(
     )
 
 
-def _serialize_job_metadata(resolved_app_name: str, bundle: PolicyEngineBundle) -> dict:
+def _serialize_job_metadata(
+    resolved_app_name: str,
+    bundle: PolicyEngineBundle,
+    run_id: str | None = None,
+) -> dict:
     return {
         "resolved_app_name": resolved_app_name,
         "policyengine_bundle": bundle.model_dump(),
+        "run_id": run_id,
     }
 
 
@@ -95,7 +100,11 @@ def get_app_name(country: str, version: Optional[str]) -> tuple[str, str]:
     return app_name, resolved_version
 
 
-@router.post("/simulate/economy/comparison", response_model=JobSubmitResponse)
+@router.post(
+    "/simulate/economy/comparison",
+    response_model=JobSubmitResponse,
+    response_model_exclude_none=True,
+)
 async def submit_simulation(request: SimulationRequest):
     """
     Submit a simulation job.
@@ -109,9 +118,21 @@ async def submit_simulation(request: SimulationRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    payload = request.model_dump(exclude={"version"})
+    payload = request.model_dump(
+        exclude={"version", "telemetry"},
+        mode="json",
+    )
+    run_id = request.telemetry.run_id if request.telemetry else None
+    if request.telemetry is not None:
+        payload["_telemetry"] = request.telemetry.model_dump(mode="json")
 
-    logger.info(f"Routing {request.country}:{resolved_version} to app {app_name}")
+    logger.info(
+        "Routing %s:%s to app %s (run_id=%s)",
+        request.country,
+        resolved_version,
+        app_name,
+        run_id,
+    )
 
     # Get function reference from the target app
     sim_func = modal.Function.from_name(app_name, "run_simulation")
@@ -120,7 +141,7 @@ async def submit_simulation(request: SimulationRequest):
     call = sim_func.spawn(payload)
 
     bundle = _build_policyengine_bundle(request.country, resolved_version, payload)
-    job_metadata = _serialize_job_metadata(app_name, bundle)
+    job_metadata = _serialize_job_metadata(app_name, bundle, run_id)
     _job_metadata_store()[call.object_id] = job_metadata
 
     return JobSubmitResponse(
@@ -131,10 +152,15 @@ async def submit_simulation(request: SimulationRequest):
         version=resolved_version,
         resolved_app_name=app_name,
         policyengine_bundle=bundle,
+        run_id=run_id,
     )
 
 
-@router.get("/jobs/{job_id}")
+@router.get(
+    "/jobs/{job_id}",
+    response_model=JobStatusResponse,
+    response_model_exclude_none=True,
+)
 async def get_job_status(job_id: str):
     """
     Poll for job status.

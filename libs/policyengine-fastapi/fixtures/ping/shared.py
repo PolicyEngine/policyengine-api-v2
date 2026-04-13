@@ -1,7 +1,9 @@
+"""Shared fixtures for ping endpoint tests."""
+
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from fastapi import FastAPI
 from policyengine_fastapi import ping
 from policyengine_fastapi.health import HealthRegistry
 

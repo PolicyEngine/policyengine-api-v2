@@ -13,6 +13,8 @@ import tempfile
 # Module-level imports - these are SNAPSHOTTED at image build time
 from policyengine.simulation import Simulation, SimulationOptions
 
+from src.modal.telemetry import split_internal_payload
+
 logger = logging.getLogger(__name__)
 
 
@@ -73,10 +75,19 @@ def run_simulation_impl(params: dict) -> dict:
     # Set up GCP credentials if needed
     setup_gcp_credentials()
 
-    logger.info(f"Starting simulation for country: {params.get('country', 'unknown')}")
+    simulation_params, telemetry, metadata = split_internal_payload(params)
+
+    logger.info(
+        "Starting simulation for country=%s run_id=%s process_id=%s",
+        simulation_params.get("country", "unknown"),
+        getattr(telemetry, "run_id", None),
+        getattr(telemetry, "process_id", None),
+    )
+    if metadata:
+        logger.info("Received simulation metadata keys: %s", sorted(metadata))
 
     # Validate and create simulation options
-    options = SimulationOptions.model_validate(params)
+    options = SimulationOptions.model_validate(simulation_params)
     logger.info("Initialising simulation from input")
 
     # Create simulation instance
