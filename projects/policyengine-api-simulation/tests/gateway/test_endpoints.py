@@ -262,8 +262,6 @@ class TestSubmitSimulationEndpoint:
         assert data["resolved_app_name"] == "policyengine-simulation-us1-500-0-uk2-66-0"
         assert data["policyengine_bundle"] == {
             "model_version": "1.500.0",
-            "policyengine_version": None,
-            "data_version": None,
             "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
         }
 
