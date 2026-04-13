@@ -41,9 +41,7 @@ class AppSettings(BaseSettings):
     observability_otlp_headers: str = ""
     observability_artifact_bucket: str | None = None
     observability_artifact_prefix: str = "simulation-observability"
-    observability_tracer_capture_mode: TracerCaptureMode = (
-        TracerCaptureMode.DISABLED
-    )
+    observability_tracer_capture_mode: TracerCaptureMode = TracerCaptureMode.DISABLED
     observability_slow_run_threshold_seconds: float = 30.0
 
     model_config = SettingsConfigDict(env_file=".env")
@@ -64,9 +62,7 @@ class AppSettings(BaseSettings):
             service_name=self.observability_service_name,
             environment=environment,
             otlp_endpoint=self.observability_otlp_endpoint,
-            otlp_headers=parse_header_value_pairs(
-                self.observability_otlp_headers
-            ),
+            otlp_headers=parse_header_value_pairs(self.observability_otlp_headers),
             artifact_bucket=self.observability_artifact_bucket,
             artifact_prefix=self.observability_artifact_prefix,
             tracer_capture_mode=self.observability_tracer_capture_mode,

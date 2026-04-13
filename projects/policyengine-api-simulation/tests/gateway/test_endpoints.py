@@ -8,8 +8,6 @@ simulation requests.
 import pytest
 from fastapi.testclient import TestClient
 
-pytest_plugins = ("tests.fixtures.endpoints",)
-
 
 class TestGetAppName:
     """Tests for the get_app_name helper function."""

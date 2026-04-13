@@ -1,13 +1,8 @@
-"""Tests for Logfire integration logic.
+"""Tests for Logfire integration logic."""
 
-These tests verify the behavior of configure_logfire without importing
-the actual Modal app (which has complex dependencies).
-"""
+from unittest.mock import MagicMock
 
-import os
-from unittest.mock import MagicMock, patch, call
-
-import pytest
+pytest_plugins = ("fixtures.test_logfire_integration",)
 
 
 class TestConfigureLogfireLogic:
@@ -123,21 +118,6 @@ class TestConfigureLogfireLogic:
 class TestLogfireSpanPattern:
     """Tests for the Logfire span usage pattern in run_simulation."""
 
-    @pytest.fixture
-    def mock_span(self):
-        """Create a mock span with context manager support."""
-        span = MagicMock()
-        span.__enter__ = MagicMock(return_value=span)
-        span.__exit__ = MagicMock(return_value=None)
-        return span
-
-    @pytest.fixture
-    def mock_logfire(self, mock_span):
-        """Create a mock logfire module."""
-        logfire = MagicMock()
-        logfire.span.return_value = mock_span
-        return logfire
-
     def test_span_receives_input_params(self, mock_logfire, mock_span):
         """
         Given simulation parameters
@@ -148,7 +128,7 @@ class TestLogfireSpanPattern:
         params = {"country": "us", "reform": {"test": True}}
 
         # When - replicate the run_simulation span pattern
-        with mock_logfire.span("run_simulation", input_params=params) as span:
+        with mock_logfire.span("run_simulation", input_params=params):
             pass
 
         # Then

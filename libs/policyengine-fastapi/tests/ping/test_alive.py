@@ -4,7 +4,6 @@ from policyengine_fastapi.health import (
     HealthSystemReporter,
     ProbeStatus,
 )
-import pytest
 
 
 def test_when_healthy__success_response(

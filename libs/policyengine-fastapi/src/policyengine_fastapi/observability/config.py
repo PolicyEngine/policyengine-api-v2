@@ -46,4 +46,3 @@ class ObservabilityConfig:
     @classmethod
     def disabled(cls, service_name: str = "policyengine-observability"):
         return cls(enabled=False, service_name=service_name)
-

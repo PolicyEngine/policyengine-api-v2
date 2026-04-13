@@ -102,8 +102,7 @@ def test_contract_models__serialize_expected_shapes():
     assert dumped_event["stage"] == "worker.simulation.constructed"
     assert dumped_response["timeline"][0]["stage"] == "request.accepted"
     assert (
-        dumped_response["tracer"]["baseline"]["manifest"]["capture_mode"]
-        == "threshold"
+        dumped_response["tracer"]["baseline"]["manifest"]["capture_mode"] == "threshold"
     )
     assert dumped_version_metrics["versions"] == []
 
@@ -156,9 +155,7 @@ def test_noop_observability__accepts_calls_without_side_effects():
 
     observability.emit_lifecycle_event(event)
     observability.emit_counter("policyengine.simulation.run.count")
-    observability.emit_histogram(
-        "policyengine.simulation.run.duration.seconds", 1.23
-    )
+    observability.emit_histogram("policyengine.simulation.run.duration.seconds", 1.23)
     with observability.span("run_simulation") as span:
         span.set_attribute("run_id", "run-456")
         span.add_event("simulation.completed")

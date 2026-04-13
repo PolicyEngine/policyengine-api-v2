@@ -19,9 +19,7 @@ class NoOpSpan(AbstractContextManager["NoOpSpan"]):
     def set_attribute(self, key: str, value: Any) -> None:
         return None
 
-    def add_event(
-        self, name: str, attributes: Mapping[str, Any] | None = None
-    ) -> None:
+    def add_event(self, name: str, attributes: Mapping[str, Any] | None = None) -> None:
         return None
 
 
@@ -44,9 +42,7 @@ class Observability(Protocol):
         attributes: Mapping[str, str] | None = None,
     ) -> None: ...
 
-    def record_artifact_manifest(
-        self, manifest: TracerArtifactManifest
-    ) -> None: ...
+    def record_artifact_manifest(self, manifest: TracerArtifactManifest) -> None: ...
 
     def span(
         self, name: str, attributes: Mapping[str, Any] | None = None
@@ -57,9 +53,7 @@ class Observability(Protocol):
 
 @dataclass
 class NoOpObservability:
-    config: ObservabilityConfig = field(
-        default_factory=ObservabilityConfig.disabled
-    )
+    config: ObservabilityConfig = field(default_factory=ObservabilityConfig.disabled)
 
     def emit_lifecycle_event(self, event: SimulationLifecycleEvent) -> None:
         return None
@@ -80,14 +74,10 @@ class NoOpObservability:
     ) -> None:
         return None
 
-    def record_artifact_manifest(
-        self, manifest: TracerArtifactManifest
-    ) -> None:
+    def record_artifact_manifest(self, manifest: TracerArtifactManifest) -> None:
         return None
 
-    def span(
-        self, name: str, attributes: Mapping[str, Any] | None = None
-    ) -> NoOpSpan:
+    def span(self, name: str, attributes: Mapping[str, Any] | None = None) -> NoOpSpan:
         return NoOpSpan()
 
     def flush(self) -> None:

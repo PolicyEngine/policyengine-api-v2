@@ -223,5 +223,3 @@ def test_calculate_uk_model(
     assert "budget" in economy_result
     assert "poverty" in economy_result
     assert "inequality" in economy_result
-
-

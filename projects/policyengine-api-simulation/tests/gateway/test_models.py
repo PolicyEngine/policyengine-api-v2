@@ -226,7 +226,9 @@ class TestJobSubmitResponse:
         assert response.poll_url == "/jobs/fc-abc123"
         assert response.country == "us"
         assert response.version == "1.459.0"
-        assert response.resolved_app_name == "policyengine-simulation-us1-459-0-uk2-65-9"
+        assert (
+            response.resolved_app_name == "policyengine-simulation-us1-459-0-uk2-65-9"
+        )
         assert response.policyengine_bundle.model_version == "1.459.0"
         assert response.policyengine_bundle.policyengine_version is None
         assert response.policyengine_bundle.dataset == (
@@ -298,7 +300,9 @@ class TestJobStatusResponse:
             },
         )
 
-        assert response.resolved_app_name == "policyengine-simulation-us1-459-0-uk2-65-9"
+        assert (
+            response.resolved_app_name == "policyengine-simulation-us1-459-0-uk2-65-9"
+        )
         assert response.policyengine_bundle is not None
         assert response.policyengine_bundle.dataset == (
             "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"

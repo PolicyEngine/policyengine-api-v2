@@ -6,30 +6,12 @@ Tests use subprocess to invoke the scripts and verify their behavior.
 
 import os
 import subprocess
-import tempfile
-from pathlib import Path
 
 import pytest
 
-# Path to the repository root
-REPO_ROOT = Path(__file__).parent.parent.parent.parent
-SCRIPTS_DIR = REPO_ROOT / ".github" / "scripts"
+from fixtures.test_modal_scripts import REPO_ROOT, SCRIPTS_DIR
 
-
-@pytest.fixture
-def temp_github_output():
-    """Create a temporary file to simulate GITHUB_OUTPUT."""
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
-        yield f.name
-    os.unlink(f.name)
-
-
-@pytest.fixture
-def temp_github_step_summary():
-    """Create a temporary file to simulate GITHUB_STEP_SUMMARY."""
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".md") as f:
-        yield f.name
-    os.unlink(f.name)
+pytest_plugins = ("fixtures.test_modal_scripts",)
 
 
 class TestModalExtractVersions:
@@ -339,11 +321,6 @@ class TestModalRunIntegTests:
 
 class TestAllScriptsHaveShebang:
     """Verify all scripts have proper shebang and error handling."""
-
-    @pytest.fixture
-    def all_modal_scripts(self):
-        """Get all modal-*.sh scripts."""
-        return list(SCRIPTS_DIR.glob("modal-*.sh"))
 
     def test_all_scripts_have_shebang(self, all_modal_scripts):
         """All scripts should start with #!/bin/bash."""
