@@ -12,6 +12,7 @@ import modal
 
 # Stable app name - this should rarely change
 app = modal.App("policyengine-simulation-gateway")
+observability_secret = modal.Secret.from_name("policyengine-observability")
 
 # Lightweight image for gateway - no heavy dependencies
 gateway_image = (
@@ -26,7 +27,7 @@ gateway_image = (
 )
 
 
-@app.function(image=gateway_image)
+@app.function(image=gateway_image, secrets=[observability_secret])
 @modal.asgi_app()
 def web_app():
     """

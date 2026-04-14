@@ -51,6 +51,7 @@ app = modal.App(APP_NAME)
 gcp_secret = modal.Secret.from_name("gcp-credentials", environment_name="main")
 # Logfire secret is environment-specific
 logfire_secret = modal.Secret.from_name("policyengine-logfire")
+observability_secret = modal.Secret.from_name("policyengine-observability")
 
 # Heavy image with model snapshot for simulation
 simulation_image = (
@@ -104,7 +105,7 @@ def should_use_logfire() -> bool:
     timeout=3600,
     retries=0,
     max_containers=100,
-    secrets=[gcp_secret, logfire_secret],
+    secrets=[gcp_secret, logfire_secret, observability_secret],
 )
 def run_simulation(params: dict) -> dict:
     """
