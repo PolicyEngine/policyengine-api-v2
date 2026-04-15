@@ -55,6 +55,10 @@ jobs:
         MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         LOGFIRE_TOKEN: ${{ secrets.LOGFIRE_TOKEN }}
         GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
+        OBSERVABILITY_ENABLED: ${{ vars.OBSERVABILITY_ENABLED }}
+        OBSERVABILITY_SHADOW_MODE: ${{ vars.OBSERVABILITY_SHADOW_MODE }}
+        OBSERVABILITY_OTLP_ENDPOINT: ${{ vars.OBSERVABILITY_OTLP_ENDPOINT }}
+        OBSERVABILITY_OTLP_HEADERS: ${{ secrets.OBSERVABILITY_OTLP_HEADERS }}
       run: ../../.github/scripts/modal-sync-secrets.sh "${{ inputs.modal_environment }}" "${{ inputs.environment }}"
 
     - name: Deploy simulation API to Modal

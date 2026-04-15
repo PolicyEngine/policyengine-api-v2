@@ -9,8 +9,19 @@ The gateway app (policyengine-simulation-gateway) routes requests to these versi
 
 import modal
 import os
+from time import perf_counter
 
 from src.modal._image_setup import snapshot_models
+from src.modal.observability import (
+    build_lifecycle_event,
+    build_metric_attributes,
+    build_span_attributes,
+    QUEUE_DURATION_METRIC_NAME,
+    FAILURE_COUNT_METRIC_NAME,
+    duration_since_requested_at,
+    get_observability,
+    parse_bool,
+)
 
 # Get versions from environment or use defaults
 US_VERSION = os.environ.get("POLICYENGINE_US_VERSION", "1.562.3")
@@ -40,6 +51,7 @@ app = modal.App(APP_NAME)
 gcp_secret = modal.Secret.from_name("gcp-credentials", environment_name="main")
 # Logfire secret is environment-specific
 logfire_secret = modal.Secret.from_name("policyengine-logfire")
+observability_secret = modal.Secret.from_name("policyengine-observability")
 
 # Heavy image with model snapshot for simulation
 simulation_image = (
@@ -50,6 +62,8 @@ simulation_image = (
         "policyengine==0.13.0",
         "tables>=3.10.2",
         "logfire",
+        "opentelemetry-sdk>=1.30.0,<2.0.0",
+        "opentelemetry-exporter-otlp-proto-http>=1.30.0,<2.0.0",
     )
     .add_local_python_source("src.modal", copy=True)
     .run_function(snapshot_models)
@@ -72,6 +86,18 @@ def configure_logfire(service_name: str = "policyengine-simulation"):
     )
 
 
+def should_use_logfire() -> bool:
+    token = os.environ.get("LOGFIRE_TOKEN", "")
+    if not token:
+        return False
+    if parse_bool(os.environ.get("OBSERVABILITY_ENABLED"), False) and not parse_bool(
+        os.environ.get("OBSERVABILITY_SHADOW_MODE"),
+        True,
+    ):
+        return False
+    return True
+
+
 @app.function(
     image=simulation_image,
     cpu=8.0,
@@ -79,7 +105,7 @@ def configure_logfire(service_name: str = "policyengine-simulation"):
     timeout=3600,
     retries=0,
     max_containers=100,
-    secrets=[gcp_secret, logfire_secret],
+    secrets=[gcp_secret, logfire_secret, observability_secret],
 )
 def run_simulation(params: dict) -> dict:
     """
@@ -92,15 +118,120 @@ def run_simulation(params: dict) -> dict:
 
     from src.modal.simulation import run_simulation_impl
 
-    configure_logfire()
+    observability = get_observability("policyengine-simulation-worker")
+    telemetry = dict(params.get("_telemetry") or {})
+    telemetry.update(
+        {
+            "country": params.get("country"),
+            "country_package_version": (
+                US_VERSION if params.get("country") == "us" else UK_VERSION
+            ),
+            "policyengine_version": "0.13.0",
+            "modal_app_name": APP_NAME,
+        }
+    )
+    metric_attributes = build_metric_attributes(
+        telemetry,
+        service="policyengine-simulation-worker",
+    )
+    start = perf_counter()
+    queue_duration = duration_since_requested_at(telemetry)
+    if queue_duration is not None:
+        observability.emit_histogram(
+            QUEUE_DURATION_METRIC_NAME,
+            queue_duration,
+            attributes=build_metric_attributes(
+                telemetry,
+                service="policyengine-simulation-worker",
+                stage="worker.started",
+                status="running",
+            ),
+        )
+
+    observability.emit_lifecycle_event(
+        build_lifecycle_event(
+            stage="worker.started",
+            status="running",
+            service="policyengine-simulation-worker",
+            telemetry=telemetry,
+            details={"queue_duration_seconds": queue_duration},
+        )
+    )
+
+    use_logfire = should_use_logfire()
+    if use_logfire:
+        configure_logfire()
 
     try:
-        with logfire.span(
+        with observability.span(
             "run_simulation",
-            input_params=params,
-        ) as span:
-            result = run_simulation_impl(params)
-            span.set_attribute("output_result", result)
+            build_span_attributes(
+                telemetry,
+                service="policyengine-simulation-worker",
+            ),
+            parent_traceparent=telemetry.get("traceparent"),
+        ) as otel_span:
+            otel_span.set_attribute("run_id", telemetry.get("run_id"))
+            if queue_duration is not None:
+                otel_span.set_attribute(
+                    "queue_duration_seconds",
+                    queue_duration,
+                )
+            current_traceparent = otel_span.get_traceparent()
+            if current_traceparent:
+                telemetry["traceparent"] = current_traceparent
+            if use_logfire:
+                with logfire.span(
+                    "run_simulation",
+                    input_params=params,
+                ) as span:
+                    result = run_simulation_impl(params, observability, telemetry)
+                    span.set_attribute("output_result", result)
+            else:
+                result = run_simulation_impl(params, observability, telemetry)
+
+            duration = perf_counter() - start
+            observability.emit_counter(
+                "policyengine.simulation.run.count",
+                attributes={**metric_attributes, "status": "complete"},
+            )
+            observability.emit_histogram(
+                "policyengine.simulation.run.duration.seconds",
+                duration,
+                attributes={**metric_attributes, "status": "complete"},
+            )
+            observability.emit_lifecycle_event(
+                build_lifecycle_event(
+                    stage="worker.completed",
+                    status="complete",
+                    service="policyengine-simulation-worker",
+                    telemetry=telemetry,
+                    duration_seconds=duration,
+                )
+            )
             return result
+    except Exception as exc:
+        duration = perf_counter() - start
+        observability.emit_counter(
+            FAILURE_COUNT_METRIC_NAME,
+            attributes={
+                **metric_attributes,
+                "stage": "result.failed",
+                "status": "failed",
+            },
+        )
+        observability.emit_lifecycle_event(
+            build_lifecycle_event(
+                stage="result.failed",
+                status="failed",
+                service="policyengine-simulation-worker",
+                telemetry=telemetry,
+                duration_seconds=duration,
+                details={"error": str(exc)},
+            )
+        )
+        raise
     finally:
-        logfire.force_flush()
+        observability.flush()
+        if use_logfire:
+            logfire.force_flush()

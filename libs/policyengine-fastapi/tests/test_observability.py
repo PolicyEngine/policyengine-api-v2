@@ -1,8 +1,12 @@
 from datetime import datetime, UTC
 
+from opentelemetry.sdk._logs.export import LogExportResult
+from opentelemetry.sdk.metrics.export import MetricExportResult
+from opentelemetry.sdk.trace.export import SpanExportResult
 from policyengine_fastapi.observability import (
     NoOpObservability,
     ObservabilityConfig,
+    OtlpObservability,
     SimulationCompositeTraceResponse,
     SimulationLifecycleEvent,
     SimulationRunSummary,
@@ -15,7 +19,9 @@ from policyengine_fastapi.observability import (
     build_observability,
     generate_run_id,
     get_observability,
+    parse_bool,
     parse_header_value_pairs,
+    reset_observability_cache,
     stable_config_hash,
 )
 from pydantic import ValidationError
@@ -37,6 +43,13 @@ def test_parse_header_value_pairs__raises_for_invalid_pair():
         assert "key=value" in str(error)
     else:
         raise AssertionError("Expected invalid OTLP header parsing to fail")
+
+
+def test_parse_bool__supports_common_truthy_and_falsey_values():
+    assert parse_bool("true") is True
+    assert parse_bool("YES") is True
+    assert parse_bool("0") is False
+    assert parse_bool(None, default=True) is True
 
 
 def test_observability_config_disabled__returns_disabled_defaults():
@@ -169,17 +182,86 @@ def test_observability_provider__returns_noop_for_disabled_defaults():
     assert observability.config == ObservabilityConfig.disabled()
 
 
-def test_observability_provider__preserves_supplied_config():
+def test_observability_provider__preserves_supplied_config(monkeypatch):
+    reset_observability_cache()
+    monkeypatch.setattr(
+        "opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter.export",
+        lambda self, spans: SpanExportResult.SUCCESS,
+    )
+    monkeypatch.setattr(
+        "opentelemetry.exporter.otlp.proto.http.metric_exporter.OTLPMetricExporter.export",
+        lambda self, metrics_data, timeout_millis=10000: MetricExportResult.SUCCESS,
+    )
+    monkeypatch.setattr(
+        "opentelemetry.exporter.otlp.proto.http._log_exporter.OTLPLogExporter.export",
+        lambda self, batch: LogExportResult.SUCCESS,
+    )
     config = ObservabilityConfig(
         enabled=True,
         service_name="simulation-worker",
+        otlp_endpoint="https://otlp.example",
         tracer_capture_mode=TracerCaptureMode.THRESHOLD,
     )
 
     built = build_observability(config)
     fetched = get_observability(config)
 
-    assert isinstance(built, NoOpObservability)
+    assert isinstance(built, OtlpObservability)
     assert built.config == config
-    assert isinstance(fetched, NoOpObservability)
-    assert fetched.config == config
+    assert isinstance(fetched, OtlpObservability)
+    assert fetched is built
+    built.emit_lifecycle_event(
+        SimulationLifecycleEvent(
+            event_name="simulation.stage.completed",
+            stage=SimulationStage.WORKER_COMPLETED,
+            status="ok",
+            timestamp=datetime(2026, 4, 9, 20, 0, tzinfo=UTC),
+            service="policyengine-simulation-worker",
+            run_id="run-456",
+        )
+    )
+    built.emit_counter(
+        "policyengine.simulation.run.count",
+        attributes={"status": "submitted"},
+    )
+    built.emit_histogram(
+        "policyengine.simulation.run.duration.seconds",
+        1.23,
+        attributes={"status": "complete"},
+    )
+    with built.span("run_simulation", attributes={"run_id": "run-456"}) as span:
+        span.add_event("simulation.completed")
+        assert span.get_traceparent() is not None
+    built.flush()
+    reset_observability_cache()
+
+
+def test_otlp_observability__accepts_parent_traceparent(monkeypatch):
+    reset_observability_cache()
+    monkeypatch.setattr(
+        "opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter.export",
+        lambda self, spans: SpanExportResult.SUCCESS,
+    )
+    monkeypatch.setattr(
+        "opentelemetry.exporter.otlp.proto.http.metric_exporter.OTLPMetricExporter.export",
+        lambda self, metrics_data, timeout_millis=10000: MetricExportResult.SUCCESS,
+    )
+    monkeypatch.setattr(
+        "opentelemetry.exporter.otlp.proto.http._log_exporter.OTLPLogExporter.export",
+        lambda self, batch: LogExportResult.SUCCESS,
+    )
+    config = ObservabilityConfig(
+        enabled=True,
+        service_name="simulation-worker",
+        otlp_endpoint="https://otlp.example",
+    )
+
+    built = build_observability(config)
+
+    with built.span(
+        "run_simulation",
+        parent_traceparent="00-11111111111111111111111111111111-2222222222222222-01",
+    ) as span:
+        assert span.get_traceparent() is not None
+
+    reset_observability_cache()

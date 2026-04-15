@@ -9,6 +9,7 @@ import modal
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
+from src.modal.gateway.observation import GatewayObservation
 from src.modal.gateway.models import (
     JobStatusResponse,
     JobSubmitResponse,
@@ -17,11 +18,16 @@ from src.modal.gateway.models import (
     PolicyEngineBundle,
     SimulationRequest,
 )
+from src.modal.observability import (
+    get_observability,
+)
 
 logger = logging.getLogger(__name__)
+observability = get_observability("policyengine-simulation-gateway")
 
 router = APIRouter()
 JOB_METADATA_DICT_NAME = "simulation-api-job-metadata"
+JOB_TELEMETRY_DICT_NAME = "simulation-api-job-telemetry"
 DATASET_URIS = {
     "us": {
         "enhanced_cps": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
@@ -42,6 +48,10 @@ DATASET_URIS = {
 
 def _job_metadata_store():
     return modal.Dict.from_name(JOB_METADATA_DICT_NAME, create_if_missing=True)
+
+
+def get_job_telemetry_registry():
+    return modal.Dict.from_name(JOB_TELEMETRY_DICT_NAME, create_if_missing=True)
 
 
 def _build_policyengine_bundle(
@@ -72,6 +82,23 @@ def _serialize_job_metadata(
     }
 
 
+def _build_status_metadata(job_id: str) -> tuple[dict, dict | None]:
+    job_metadata = dict(_job_metadata_store().get(job_id) or {})
+    telemetry = None
+    try:
+        telemetry = dict(get_job_telemetry_registry().get(job_id) or {})
+    except Exception:
+        telemetry = None
+
+    if (
+        "run_id" not in job_metadata
+        and telemetry is not None
+        and telemetry.get("run_id") is not None
+    ):
+        job_metadata["run_id"] = telemetry["run_id"]
+    return job_metadata, telemetry
+
+
 def get_app_name(country: str, version: Optional[str]) -> tuple[str, str]:
     """
     Resolve country + version to Modal app name.
@@ -85,13 +112,11 @@ def get_app_name(country: str, version: Optional[str]) -> tuple[str, str]:
 
     version_dict = modal.Dict.from_name(f"simulation-api-{country_lower}-versions")
 
-    # Resolve version
     if version is None:
         resolved_version = version_dict["latest"]
     else:
         resolved_version = version
 
-    # Get app name for this version
     try:
         app_name = version_dict[resolved_version]
     except KeyError:
@@ -113,47 +138,93 @@ async def submit_simulation(request: SimulationRequest):
     Routes to the appropriate app based on country and version params.
     Returns immediately with job_id for polling.
     """
-    try:
-        app_name, resolved_version = get_app_name(request.country, request.version)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    observation = GatewayObservation.from_request(observability, request)
 
-    payload = request.model_dump(
-        exclude={"version", "telemetry"},
-        mode="json",
-    )
-    run_id = request.telemetry.run_id if request.telemetry else None
-    if request.telemetry is not None:
-        payload["_telemetry"] = request.telemetry.model_dump(mode="json")
+    with observation.request_span("gateway.submit_simulation"):
+        observation.emit(stage="gateway.received", status="accepted")
+        try:
+            app_name, resolved_version = observation.call_stage(
+                "gateway.version_resolved",
+                lambda: get_app_name(request.country, request.version),
+                details={"requested_version": request.version},
+                on_success=lambda result, details: details.update(
+                    {
+                        "version": result[1],
+                        "modal_app_name": result[0],
+                    }
+                ),
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
-    logger.info(
-        "Routing %s:%s to app %s (run_id=%s)",
-        request.country,
-        resolved_version,
-        app_name,
-        run_id,
-    )
+        payload = request.model_dump(
+            exclude={"version", "telemetry"},
+            mode="json",
+        )
+        if request.telemetry is not None:
+            payload["_telemetry"] = dict(observation.telemetry or {})
+        logger.info(
+            "Routing %s:%s to app %s (run_id=%s)",
+            request.country,
+            resolved_version,
+            app_name,
+            observation.run_id,
+        )
 
-    # Get function reference from the target app
-    sim_func = modal.Function.from_name(app_name, "run_simulation")
+        def spawn_job():
+            sim_func = modal.Function.from_name(app_name, "run_simulation")
+            call = sim_func.spawn(payload)
+            registry_payload = dict(observation.telemetry or {})
+            registry_payload.update(
+                {
+                    "job_id": call.object_id,
+                    "country": request.country,
+                    "country_package_version": resolved_version,
+                    "modal_app_name": app_name,
+                }
+            )
+            get_job_telemetry_registry()[call.object_id] = registry_payload
+            bundle = _build_policyengine_bundle(
+                request.country,
+                resolved_version,
+                payload,
+            )
+            _job_metadata_store()[call.object_id] = _serialize_job_metadata(
+                app_name,
+                bundle,
+                observation.run_id,
+            )
+            return call, bundle, registry_payload
 
-    # Spawn the job (returns immediately)
-    call = sim_func.spawn(payload)
+        call, bundle, registry_payload = observation.call_stage(
+            "gateway.spawned",
+            spawn_job,
+            success_status="submitted",
+            record_failure_counter=True,
+            details={"version": resolved_version},
+            on_success=lambda result, details: details.update(
+                {"job_id": result[0].object_id}
+            ),
+        )
 
-    bundle = _build_policyengine_bundle(request.country, resolved_version, payload)
-    job_metadata = _serialize_job_metadata(app_name, bundle, run_id)
-    _job_metadata_store()[call.object_id] = job_metadata
+        observation.counter(
+            "policyengine.simulation.run.count",
+            attributes=observation.metric_attributes(
+                registry_payload,
+                status="submitted",
+            ),
+        )
 
-    return JobSubmitResponse(
-        job_id=call.object_id,
-        status="submitted",
-        poll_url=f"/jobs/{call.object_id}",
-        country=request.country,
-        version=resolved_version,
-        resolved_app_name=app_name,
-        policyengine_bundle=bundle,
-        run_id=run_id,
-    )
+        return JobSubmitResponse(
+            job_id=call.object_id,
+            status="submitted",
+            poll_url=f"/jobs/{call.object_id}",
+            country=request.country,
+            version=resolved_version,
+            resolved_app_name=app_name,
+            policyengine_bundle=bundle,
+            run_id=observation.run_id,
+        )
 
 
 @router.get(
@@ -171,38 +242,48 @@ async def get_job_status(job_id: str):
         - 500 with status="failed" and error on failure
         - 404 if job_id not found
     """
-    try:
-        call = modal.FunctionCall.from_id(job_id)
-    except Exception:
-        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+    job_metadata, telemetry = _build_status_metadata(job_id)
 
-    job_metadata = _job_metadata_store().get(job_id)
+    observation = GatewayObservation.from_request(
+        observability,
+        telemetry=telemetry,
+    )
 
-    try:
-        result = call.get(timeout=0)
-        return JobStatusResponse(
-            status="complete", result=result, **(job_metadata or {})
-        )
-    except TimeoutError:
-        return JSONResponse(
-            status_code=202,
-            content={
-                "status": "running",
-                "result": None,
-                "error": None,
-                **(job_metadata or {}),
-            },
-        )
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "failed",
-                "result": None,
-                "error": str(e),
-                **(job_metadata or {}),
-            },
-        )
+    with observation.request_span("gateway.get_job_status"):
+        observation.emit(stage="result.polled", status="polling", job_id=job_id)
+
+        try:
+            call = modal.FunctionCall.from_id(job_id)
+        except Exception:
+            raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+
+        try:
+            result = call.get(timeout=0)
+            return JobStatusResponse(
+                status="complete",
+                result=result,
+                **job_metadata,
+            )
+        except TimeoutError:
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "status": "running",
+                    "result": None,
+                    "error": None,
+                    **job_metadata,
+                },
+            )
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "failed",
+                    "result": None,
+                    "error": str(e),
+                    **job_metadata,
+                },
+            )
 
 
 @router.get("/versions")

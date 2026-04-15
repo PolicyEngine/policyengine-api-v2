@@ -9,6 +9,43 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+class RecordingSpan:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return None
+
+    def get_traceparent(self):
+        return None
+
+
+class RecordingObservability:
+    def __init__(self):
+        self.events = []
+        self.counters = []
+        self.histograms = []
+
+    def emit_lifecycle_event(self, payload):
+        if hasattr(payload, "model_dump"):
+            self.events.append(payload.model_dump(mode="json"))
+        else:
+            self.events.append(payload)
+
+    def emit_counter(self, name, value=1, attributes=None):
+        self.counters.append(
+            {"name": name, "value": value, "attributes": dict(attributes or {})}
+        )
+
+    def emit_histogram(self, name, value, attributes=None):
+        self.histograms.append(
+            {"name": name, "value": value, "attributes": dict(attributes or {})}
+        )
+
+    def span(self, name, attributes=None, parent_traceparent=None):
+        return RecordingSpan()
+
+
 class TestGetAppName:
     """Tests for the get_app_name helper function."""
 
@@ -229,6 +266,12 @@ class TestSubmitSimulationEndpoint:
         data = response.json()
         assert data["run_id"] == "run-123"
         assert mock_modal["func"].last_payload["_telemetry"]["run_id"] == "run-123"
+        assert (
+            mock_modal["dicts"]["simulation-api-job-telemetry"]["mock-job-id-123"][
+                "run_id"
+            ]
+            == "run-123"
+        )
 
     def test__given_submission_with_data__then_returns_resolved_bundle_metadata(
         self, mock_modal, client: TestClient
@@ -396,3 +439,48 @@ class TestSubmitSimulationEndpoint:
 
         assert response.status_code == 200
         assert response.json()["run_id"] == "run-123"
+
+    def test__given_repeated_terminal_polls__then_gateway_does_not_reemit_terminal_telemetry(
+        self, mock_modal, client: TestClient, monkeypatch
+    ):
+        from src.modal.gateway import endpoints
+
+        recorder = RecordingObservability()
+        monkeypatch.setattr(endpoints, "observability", recorder)
+
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+        }
+
+        submit_response = client.post(
+            "/simulate/economy/comparison",
+            json={
+                "country": "us",
+                "scope": "macro",
+                "reform": {},
+                "_telemetry": {
+                    "run_id": "run-123",
+                    "process_id": "proc-123",
+                    "capture_mode": "disabled",
+                },
+            },
+        )
+
+        job_id = submit_response.json()["job_id"]
+        event_count_before_polls = len(recorder.events)
+        histogram_count_before_polls = len(recorder.histograms)
+        counter_count_before_polls = len(recorder.counters)
+
+        first_poll = client.get(f"/jobs/{job_id}")
+        second_poll = client.get(f"/jobs/{job_id}")
+
+        assert first_poll.status_code == 200
+        assert second_poll.status_code == 200
+        poll_events = recorder.events[event_count_before_polls:]
+        assert [event["stage"] for event in poll_events] == [
+            "result.polled",
+            "result.polled",
+        ]
+        assert len(recorder.histograms) == histogram_count_before_polls
+        assert len(recorder.counters) == counter_count_before_polls
