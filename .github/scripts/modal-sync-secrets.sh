@@ -18,24 +18,24 @@ OBSERVABILITY_SHADOW_MODE="${OBSERVABILITY_SHADOW_MODE:-true}"
 
 echo "Syncing secrets to Modal environment: $MODAL_ENV"
 
+if [ "$OBSERVABILITY_ENABLED" = "true" ]; then
+  : "${OBSERVABILITY_OTLP_ENDPOINT:?OBSERVABILITY_OTLP_ENDPOINT is required when observability is enabled}"
+  : "${OBSERVABILITY_OTLP_HEADERS:?OBSERVABILITY_OTLP_HEADERS is required when observability is enabled}"
+fi
+
 # Sync Logfire secret
 uv run modal secret create policyengine-logfire \
   "LOGFIRE_TOKEN=${LOGFIRE_TOKEN:-}" \
   "LOGFIRE_ENVIRONMENT=$GH_ENV" \
   --env="$MODAL_ENV" \
-  --force || true
+  --force
 
 # Sync GCP credentials if provided
 if [ -n "${GCP_CREDENTIALS_JSON:-}" ]; then
   uv run modal secret create gcp-credentials \
     "GOOGLE_APPLICATION_CREDENTIALS_JSON=$GCP_CREDENTIALS_JSON" \
     --env="$MODAL_ENV" \
-    --force || true
-fi
-
-if [ "$OBSERVABILITY_ENABLED" = "true" ]; then
-  : "${OBSERVABILITY_OTLP_ENDPOINT:?OBSERVABILITY_OTLP_ENDPOINT is required when observability is enabled}"
-  : "${OBSERVABILITY_OTLP_HEADERS:?OBSERVABILITY_OTLP_HEADERS is required when observability is enabled}"
+    --force
 fi
 
 uv run modal secret create policyengine-observability \
@@ -45,6 +45,6 @@ uv run modal secret create policyengine-observability \
   "OBSERVABILITY_OTLP_ENDPOINT=${OBSERVABILITY_OTLP_ENDPOINT:-}" \
   "OBSERVABILITY_OTLP_HEADERS=${OBSERVABILITY_OTLP_HEADERS:-}" \
   --env="$MODAL_ENV" \
-  --force || true
+  --force
 
 echo "Modal secrets synced"
