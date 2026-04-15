@@ -2,14 +2,26 @@
 Pydantic models for the Gateway API.
 """
 
-from typing import Optional
-from pydantic import BaseModel, ConfigDict, model_validator
+from typing import Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.modal.telemetry import TelemetryEnvelope
 
 
-class SimulationRequest(BaseModel):
-    """Request model for simulation submission."""
+def _move_internal_telemetry_alias(value):
+    if not isinstance(value, dict):
+        return value
+    if "telemetry" in value or "_telemetry" not in value:
+        return value
+
+    normalized = dict(value)
+    normalized["telemetry"] = normalized.pop("_telemetry")
+    return normalized
+
+
+class GatewayRequestBase(BaseModel):
+    """Base request model that preserves internal telemetry aliasing."""
 
     country: str
     version: Optional[str] = None
@@ -23,14 +35,11 @@ class SimulationRequest(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def move_internal_telemetry_alias(cls, value):
-        if not isinstance(value, dict):
-            return value
-        if "telemetry" in value or "_telemetry" not in value:
-            return value
+        return _move_internal_telemetry_alias(value)
 
-        normalized = dict(value)
-        normalized["telemetry"] = normalized.pop("_telemetry")
-        return normalized
+
+class SimulationRequest(GatewayRequestBase):
+    """Request model for simulation submission."""
 
 
 class PolicyEngineBundle(BaseModel):
@@ -63,6 +72,113 @@ class JobStatusResponse(BaseModel):
     error: Optional[str] = None
     resolved_app_name: Optional[str] = None
     policyengine_bundle: Optional[PolicyEngineBundle] = None
+    run_id: Optional[str] = None
+
+
+class BudgetWindowBatchRequest(GatewayRequestBase):
+    """Request model for budget-window batch submission."""
+
+    start_year: str
+    window_size: int = Field(ge=1)
+    max_parallel: int = Field(default=3, ge=1)
+
+
+class BudgetWindowAnnualImpact(BaseModel):
+    """Annual budget-window impact row."""
+
+    year: str
+    taxRevenueImpact: float
+    federalTaxRevenueImpact: float
+    stateTaxRevenueImpact: float
+    benefitSpendingImpact: float
+    budgetaryImpact: float
+
+
+class BudgetWindowTotals(BaseModel):
+    """Aggregate totals for a completed budget-window response."""
+
+    year: Literal["Total"] = "Total"
+    taxRevenueImpact: float
+    federalTaxRevenueImpact: float
+    stateTaxRevenueImpact: float
+    benefitSpendingImpact: float
+    budgetaryImpact: float
+
+
+class BudgetWindowResult(BaseModel):
+    """Completed budget-window output."""
+
+    kind: Literal["budgetWindow"] = "budgetWindow"
+    startYear: str
+    endYear: str
+    windowSize: int
+    annualImpacts: list[BudgetWindowAnnualImpact] = Field(default_factory=list)
+    totals: BudgetWindowTotals
+
+
+class BatchChildJobStatus(BaseModel):
+    """Per-year child simulation job tracking."""
+
+    job_id: str
+    status: str
+    error: Optional[str] = None
+
+
+class BudgetWindowBatchSubmitResponse(BaseModel):
+    """Response model for budget-window batch submission."""
+
+    batch_job_id: str
+    status: str
+    poll_url: str
+    country: str
+    version: str
+    resolved_app_name: str
+    policyengine_bundle: PolicyEngineBundle
+    run_id: Optional[str] = None
+
+
+class BudgetWindowBatchStatusResponse(BaseModel):
+    """Response model for budget-window batch polling."""
+
+    status: str
+    progress: Optional[int] = None
+    completed_years: list[str] = Field(default_factory=list)
+    running_years: list[str] = Field(default_factory=list)
+    queued_years: list[str] = Field(default_factory=list)
+    failed_years: list[str] = Field(default_factory=list)
+    child_jobs: dict[str, BatchChildJobStatus] = Field(default_factory=dict)
+    result: Optional[BudgetWindowResult] = None
+    error: Optional[str] = None
+    resolved_app_name: Optional[str] = None
+    policyengine_bundle: Optional[PolicyEngineBundle] = None
+    run_id: Optional[str] = None
+
+
+class BudgetWindowBatchState(BaseModel):
+    """Internal state persisted for a budget-window parent batch job."""
+
+    batch_job_id: str
+    status: str
+    country: str
+    version: str
+    resolved_app_name: str
+    policyengine_bundle: PolicyEngineBundle
+    start_year: str
+    window_size: int
+    max_parallel: int
+    years: list[str] = Field(default_factory=list)
+    queued_years: list[str] = Field(default_factory=list)
+    running_years: list[str] = Field(default_factory=list)
+    completed_years: list[str] = Field(default_factory=list)
+    failed_years: list[str] = Field(default_factory=list)
+    child_jobs: dict[str, BatchChildJobStatus] = Field(default_factory=dict)
+    partial_annual_impacts: dict[str, BudgetWindowAnnualImpact] = Field(
+        default_factory=dict
+    )
+    result: Optional[BudgetWindowResult] = None
+    error: Optional[str] = None
+    created_at: str
+    updated_at: str
     run_id: Optional[str] = None
 
 
