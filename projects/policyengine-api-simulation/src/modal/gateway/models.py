@@ -78,7 +78,7 @@ class JobStatusResponse(BaseModel):
 class BudgetWindowBatchRequest(GatewayRequestBase):
     """Request model for budget-window batch submission."""
 
-    MAX_YEARS: ClassVar[int] = 20
+    MAX_YEARS: ClassVar[int] = 75
 
     region: str
     start_year: str

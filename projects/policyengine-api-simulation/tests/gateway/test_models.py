@@ -340,13 +340,13 @@ class TestBudgetWindowBatchRequest:
                 window_size=0,
             )
 
-    def test_budget_window_batch_request_rejects_window_size_above_v1_limit(self):
+    def test_budget_window_batch_request_rejects_window_size_above_max_limit(self):
         with pytest.raises(ValidationError):
             BudgetWindowBatchRequest(
                 country="us",
                 region="us",
                 start_year="2026",
-                window_size=21,
+                window_size=76,
             )
 
     def test_budget_window_batch_request_requires_integer_like_start_year(self):
