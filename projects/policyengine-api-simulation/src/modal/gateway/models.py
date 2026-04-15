@@ -80,9 +80,11 @@ class BudgetWindowBatchRequest(GatewayRequestBase):
 
     MAX_YEARS: ClassVar[int] = 20
 
+    region: str
     start_year: str
     window_size: int = Field(ge=1, le=MAX_YEARS)
     max_parallel: int = Field(default=3, ge=1)
+    target: Literal["general"] = "general"
 
     @field_validator("start_year")
     @classmethod

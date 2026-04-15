@@ -408,6 +408,7 @@ class TestBudgetWindowBatchEndpoints:
             "/simulate/economy/budget-window",
             json={
                 "country": "us",
+                "region": "us",
                 "scope": "macro",
                 "reform": {},
                 "start_year": "2026",
@@ -438,6 +439,7 @@ class TestBudgetWindowBatchEndpoints:
             "/simulate/economy/budget-window",
             json={
                 "country": "us",
+                "region": "us",
                 "scope": "macro",
                 "reform": {},
                 "start_year": "year-2026",
@@ -446,4 +448,43 @@ class TestBudgetWindowBatchEndpoints:
         )
 
         assert response.status_code == 422
-        assert response.json()["detail"][0]["msg"] == "Value error, start_year must be an integer year"
+        assert (
+            response.json()["detail"][0]["msg"]
+            == "Value error, start_year must be an integer year"
+        )
+
+    def test__given_missing_region__then_budget_window_submit_returns_422(
+        self, mock_modal, client: TestClient
+    ):
+        response = client.post(
+            "/simulate/economy/budget-window",
+            json={
+                "country": "us",
+                "scope": "macro",
+                "reform": {},
+                "start_year": "2026",
+                "window_size": 3,
+            },
+        )
+
+        assert response.status_code == 422
+        assert response.json()["detail"][0]["loc"] == ["body", "region"]
+
+    def test__given_non_general_target__then_budget_window_submit_returns_422(
+        self, mock_modal, client: TestClient
+    ):
+        response = client.post(
+            "/simulate/economy/budget-window",
+            json={
+                "country": "us",
+                "region": "us",
+                "scope": "macro",
+                "reform": {},
+                "start_year": "2026",
+                "window_size": 3,
+                "target": "cliff",
+            },
+        )
+
+        assert response.status_code == 422
+        assert response.json()["detail"][0]["loc"] == ["body", "target"]

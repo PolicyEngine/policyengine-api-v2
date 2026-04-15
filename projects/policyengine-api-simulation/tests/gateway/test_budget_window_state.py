@@ -10,6 +10,7 @@ from src.modal.gateway.models import BudgetWindowBatchRequest, PolicyEngineBundl
 def test_create_initial_batch_state_builds_queued_years_and_run_id():
     request = BudgetWindowBatchRequest(
         country="us",
+        region="us",
         start_year="2026",
         window_size=3,
         max_parallel=2,
@@ -38,6 +39,7 @@ def test_create_initial_batch_state_builds_queued_years_and_run_id():
 def test_build_batch_status_response_computes_progress_from_completed_years():
     request = BudgetWindowBatchRequest(
         country="us",
+        region="us",
         start_year="2026",
         window_size=4,
     )

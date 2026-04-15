@@ -319,14 +319,23 @@ class TestJobStatusResponse:
 class TestBudgetWindowBatchRequest:
     """Tests for budget-window batch request validation."""
 
+    def test_budget_window_batch_request_requires_region(self):
+        with pytest.raises(ValidationError):
+            BudgetWindowBatchRequest(
+                country="us",
+                start_year="2026",
+                window_size=10,
+            )
+
     def test_budget_window_batch_request_requires_start_year(self):
         with pytest.raises(ValidationError):
-            BudgetWindowBatchRequest(country="us", window_size=10)
+            BudgetWindowBatchRequest(country="us", region="us", window_size=10)
 
     def test_budget_window_batch_request_requires_positive_window_size(self):
         with pytest.raises(ValidationError):
             BudgetWindowBatchRequest(
                 country="us",
+                region="us",
                 start_year="2026",
                 window_size=0,
             )
@@ -335,6 +344,7 @@ class TestBudgetWindowBatchRequest:
         with pytest.raises(ValidationError):
             BudgetWindowBatchRequest(
                 country="us",
+                region="us",
                 start_year="2026",
                 window_size=21,
             )
@@ -343,13 +353,25 @@ class TestBudgetWindowBatchRequest:
         with pytest.raises(ValidationError, match="start_year must be an integer year"):
             BudgetWindowBatchRequest(
                 country="us",
+                region="us",
                 start_year="year-2026",
                 window_size=3,
+            )
+
+    def test_budget_window_batch_request_rejects_non_general_target(self):
+        with pytest.raises(ValidationError):
+            BudgetWindowBatchRequest(
+                country="us",
+                region="us",
+                start_year="2026",
+                window_size=3,
+                target="cliff",
             )
 
     def test_budget_window_batch_request_accepts_extra_simulation_fields(self):
         request = BudgetWindowBatchRequest(
             country="us",
+            region="us",
             start_year="2026",
             window_size=10,
             max_parallel=2,
@@ -366,6 +388,7 @@ class TestBudgetWindowBatchRequest:
     def test_budget_window_batch_request_accepts_internal_telemetry_alias(self):
         request = BudgetWindowBatchRequest(
             country="us",
+            region="us",
             start_year="2026",
             window_size=10,
             _telemetry={
