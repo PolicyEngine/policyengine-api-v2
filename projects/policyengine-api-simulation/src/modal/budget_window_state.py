@@ -81,7 +81,9 @@ def build_batch_status_response(
     state: BudgetWindowBatchState,
 ) -> BudgetWindowBatchStatusResponse:
     total_years = len(state.years)
-    progress = 0 if total_years == 0 else round(len(state.completed_years) / total_years * 100)
+    progress = (
+        0 if total_years == 0 else round(len(state.completed_years) / total_years * 100)
+    )
 
     return BudgetWindowBatchStatusResponse(
         status=state.status,

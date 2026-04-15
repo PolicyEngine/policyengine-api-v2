@@ -95,7 +95,10 @@ def create_openapi_app() -> FastAPI:
         "/budget-window-jobs/{batch_job_id}",
         response_model=BudgetWindowBatchStatusResponse,
         responses={
-            200: {"description": "Batch complete", "model": BudgetWindowBatchStatusResponse},
+            200: {
+                "description": "Batch complete",
+                "model": BudgetWindowBatchStatusResponse,
+            },
             202: {"description": "Batch submitted or running"},
             404: {"description": "Batch job not found"},
             500: {"description": "Batch failed"},
