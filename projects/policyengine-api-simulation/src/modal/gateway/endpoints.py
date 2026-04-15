@@ -4,18 +4,11 @@ FastAPI endpoints for the Gateway API.
 
 import logging
 from typing import Optional
-from uuid import uuid4
 
 import modal
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from src.modal.budget_window_state import (
-    build_batch_status_response,
-    create_initial_batch_state,
-    get_batch_job_state,
-    put_batch_job_state,
-)
 from src.modal.gateway.models import (
     BudgetWindowBatchRequest,
     BudgetWindowBatchStatusResponse,
@@ -80,20 +73,6 @@ def _serialize_job_metadata(
         "policyengine_bundle": bundle.model_dump(),
         "run_id": run_id,
     }
-
-
-def _new_batch_job_id() -> str:
-    return f"bw-{uuid4().hex}"
-
-
-def _batch_status_payload(response: BudgetWindowBatchStatusResponse) -> dict:
-    payload = response.model_dump(mode="json")
-    if response.policyengine_bundle is not None:
-        payload["policyengine_bundle"] = response.policyengine_bundle.model_dump(
-            mode="json",
-            exclude_none=True,
-        )
-    return payload
 
 
 def get_app_name(country: str, version: Optional[str]) -> tuple[str, str]:
@@ -189,43 +168,13 @@ async def submit_budget_window_batch(request: BudgetWindowBatchRequest):
     """
     Submit a budget-window batch job.
 
-    This is the contract-first entrypoint for multi-year economy batch runs.
-    The orchestration worker is added in a follow-up PR; this endpoint currently
-    validates and persists the initial parent batch state.
+    This contract-first endpoint is intentionally disabled until the
+    orchestration worker lands in the follow-up PR. That keeps the route
+    mergeable without falsely claiming that work has started.
     """
-    try:
-        app_name, resolved_version = get_app_name(request.country, request.version)
-        payload = request.model_dump(
-            exclude={"version", "telemetry", "start_year", "window_size", "max_parallel"},
-            mode="json",
-        )
-        bundle = _build_policyengine_bundle(
-            request.country,
-            resolved_version,
-            payload,
-        )
-        batch_job_id = _new_batch_job_id()
-        state = create_initial_batch_state(
-            batch_job_id=batch_job_id,
-            request=request,
-            resolved_version=resolved_version,
-            resolved_app_name=app_name,
-            bundle=bundle,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    put_batch_job_state(state)
-
-    return BudgetWindowBatchSubmitResponse(
-        batch_job_id=batch_job_id,
-        status=state.status,
-        poll_url=f"/budget-window-jobs/{batch_job_id}",
-        country=request.country,
-        version=resolved_version,
-        resolved_app_name=app_name,
-        policyengine_bundle=bundle,
-        run_id=state.run_id,
+    raise HTTPException(
+        status_code=501,
+        detail="Budget-window batch orchestration is not implemented yet",
     )
 
 
@@ -287,30 +236,13 @@ async def get_budget_window_job_status(batch_job_id: str):
     """
     Poll for budget-window batch status.
 
-    This currently returns the persisted parent batch state created at
-    submission time. Orchestration updates are added in a follow-up PR.
+    This contract-first endpoint is intentionally disabled until the
+    orchestration worker lands in the follow-up PR.
     """
-    state = get_batch_job_state(batch_job_id)
-    if state is None:
-        raise HTTPException(
-            status_code=404, detail=f"Budget-window job not found: {batch_job_id}"
-        )
-
-    response = build_batch_status_response(state)
-
-    if state.status in {"submitted", "running"}:
-        return JSONResponse(
-            status_code=202,
-            content=_batch_status_payload(response),
-        )
-
-    if state.status == "failed":
-        return JSONResponse(
-            status_code=500,
-            content=_batch_status_payload(response),
-        )
-
-    return response
+    raise HTTPException(
+        status_code=501,
+        detail="Budget-window batch orchestration is not implemented yet",
+    )
 
 
 @router.get("/versions")

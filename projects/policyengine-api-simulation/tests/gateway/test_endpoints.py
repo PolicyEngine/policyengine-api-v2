@@ -401,14 +401,9 @@ class TestSubmitSimulationEndpoint:
 class TestBudgetWindowBatchEndpoints:
     """Tests for budget-window batch gateway endpoints."""
 
-    def test__given_budget_window_submission__then_returns_batch_job_id_and_poll_url(
+    def test__given_budget_window_submission__then_returns_not_implemented(
         self, mock_modal, client: TestClient
     ):
-        mock_modal["dicts"]["simulation-api-us-versions"] = {
-            "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
-        }
-
         response = client.post(
             "/simulate/economy/budget-window",
             json={
@@ -421,68 +416,24 @@ class TestBudgetWindowBatchEndpoints:
             },
         )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "submitted"
-        assert data["batch_job_id"].startswith("bw-")
-        assert data["poll_url"] == f"/budget-window-jobs/{data['batch_job_id']}"
-        assert data["version"] == "1.500.0"
-        assert data["resolved_app_name"] == "policyengine-simulation-us1-500-0-uk2-66-0"
-
-    def test__given_budget_window_submission__then_poll_returns_initial_queued_state(
-        self, mock_modal, client: TestClient
-    ):
-        mock_modal["dicts"]["simulation-api-us-versions"] = {
-            "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
-        }
-
-        submit_response = client.post(
-            "/simulate/economy/budget-window",
-            json={
-                "country": "us",
-                "scope": "macro",
-                "reform": {},
-                "start_year": "2026",
-                "window_size": 3,
-                "max_parallel": 2,
-                "_telemetry": {
-                    "run_id": "batch-run-123",
-                    "process_id": "proc-123",
-                    "capture_mode": "disabled",
-                },
-            },
-        )
-
-        batch_job_id = submit_response.json()["batch_job_id"]
-        response = client.get(f"/budget-window-jobs/{batch_job_id}")
-
-        assert response.status_code == 202
+        assert response.status_code == 501
         assert response.json() == {
-            "status": "submitted",
-            "progress": 0,
-            "completed_years": [],
-            "running_years": [],
-            "queued_years": ["2026", "2027", "2028"],
-            "failed_years": [],
-            "child_jobs": {},
-            "result": None,
-            "error": None,
-            "resolved_app_name": "policyengine-simulation-us1-500-0-uk2-66-0",
-            "policyengine_bundle": {
-                "model_version": "1.500.0",
-            },
-            "run_id": "batch-run-123",
+            "detail": "Budget-window batch orchestration is not implemented yet"
         }
 
-    def test__given_non_integer_start_year__then_budget_window_submit_returns_400(
+    def test__given_budget_window_poll__then_returns_not_implemented(
         self, mock_modal, client: TestClient
     ):
-        mock_modal["dicts"]["simulation-api-us-versions"] = {
-            "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+        response = client.get("/budget-window-jobs/bw-missing")
+
+        assert response.status_code == 501
+        assert response.json() == {
+            "detail": "Budget-window batch orchestration is not implemented yet"
         }
 
+    def test__given_non_integer_start_year__then_budget_window_submit_returns_422(
+        self, mock_modal, client: TestClient
+    ):
         response = client.post(
             "/simulate/economy/budget-window",
             json={
@@ -494,13 +445,5 @@ class TestBudgetWindowBatchEndpoints:
             },
         )
 
-        assert response.status_code == 400
-        assert "invalid literal for int()" in response.json()["detail"]
-
-    def test__given_unknown_batch_job_id__then_budget_window_poll_returns_404(
-        self, mock_modal, client: TestClient
-    ):
-        response = client.get("/budget-window-jobs/bw-missing")
-
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Budget-window job not found: bw-missing"
+        assert response.status_code == 422
+        assert response.json()["detail"][0]["msg"] == "Value error, start_year must be an integer year"

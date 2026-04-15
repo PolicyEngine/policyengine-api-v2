@@ -2,9 +2,9 @@
 Pydantic models for the Gateway API.
 """
 
-from typing import Literal, Optional
+from typing import ClassVar, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.modal.telemetry import TelemetryEnvelope
 
@@ -78,9 +78,19 @@ class JobStatusResponse(BaseModel):
 class BudgetWindowBatchRequest(GatewayRequestBase):
     """Request model for budget-window batch submission."""
 
+    MAX_YEARS: ClassVar[int] = 20
+
     start_year: str
-    window_size: int = Field(ge=1)
+    window_size: int = Field(ge=1, le=MAX_YEARS)
     max_parallel: int = Field(default=3, ge=1)
+
+    @field_validator("start_year")
+    @classmethod
+    def validate_start_year(cls, value: str) -> str:
+        try:
+            return str(int(value))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("start_year must be an integer year") from exc
 
 
 class BudgetWindowAnnualImpact(BaseModel):

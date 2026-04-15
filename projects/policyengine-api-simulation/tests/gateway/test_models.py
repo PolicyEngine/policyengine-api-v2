@@ -331,6 +331,22 @@ class TestBudgetWindowBatchRequest:
                 window_size=0,
             )
 
+    def test_budget_window_batch_request_rejects_window_size_above_v1_limit(self):
+        with pytest.raises(ValidationError):
+            BudgetWindowBatchRequest(
+                country="us",
+                start_year="2026",
+                window_size=21,
+            )
+
+    def test_budget_window_batch_request_requires_integer_like_start_year(self):
+        with pytest.raises(ValidationError, match="start_year must be an integer year"):
+            BudgetWindowBatchRequest(
+                country="us",
+                start_year="year-2026",
+                window_size=3,
+            )
+
     def test_budget_window_batch_request_accepts_extra_simulation_fields(self):
         request = BudgetWindowBatchRequest(
             country="us",
@@ -345,6 +361,7 @@ class TestBudgetWindowBatchRequest:
         assert dumped["scope"] == "macro"
         assert dumped["reform"] == {}
         assert request.max_parallel == 2
+        assert request.start_year == "2026"
 
     def test_budget_window_batch_request_accepts_internal_telemetry_alias(self):
         request = BudgetWindowBatchRequest(
