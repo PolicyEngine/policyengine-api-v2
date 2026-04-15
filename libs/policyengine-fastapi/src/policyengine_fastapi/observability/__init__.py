@@ -27,6 +27,7 @@ from .correlation import (
 )
 from .emitters import (
     Observability as Observability,
+    build_traceparent as build_traceparent,
     NoOpObservability as NoOpObservability,
     NoOpSpan as NoOpSpan,
     OtlpObservability as OtlpObservability,

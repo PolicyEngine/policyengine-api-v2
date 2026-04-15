@@ -8,6 +8,9 @@ import json
 import logging
 from typing import Protocol
 from typing import Any, Mapping
+from opentelemetry.trace.propagation.tracecontext import (
+    TraceContextTextMapPropagator,
+)
 
 from .config import ObservabilityConfig
 from .contracts import SimulationLifecycleEvent, TracerArtifactManifest
@@ -24,6 +27,9 @@ class NoOpSpan(AbstractContextManager["NoOpSpan"]):
         return None
 
     def add_event(self, name: str, attributes: Mapping[str, Any] | None = None) -> None:
+        return None
+
+    def get_traceparent(self) -> str | None:
         return None
 
 
@@ -46,6 +52,11 @@ class OTelSpan(AbstractContextManager["OTelSpan"]):
     def add_event(self, name: str, attributes: Mapping[str, Any] | None = None) -> None:
         if self._span is not None:
             self._span.add_event(name, _normalize_attributes(attributes))
+
+    def get_traceparent(self) -> str | None:
+        if self._span is None:
+            return None
+        return build_traceparent(self._span.get_span_context())
 
 
 class JsonPayloadFormatter(logging.Formatter):
@@ -95,7 +106,10 @@ def _normalize_attributes(
 class Observability(Protocol):
     config: ObservabilityConfig
 
-    def emit_lifecycle_event(self, event: SimulationLifecycleEvent) -> None: ...
+    def emit_lifecycle_event(
+        self,
+        event: SimulationLifecycleEvent | Mapping[str, Any],
+    ) -> None: ...
 
     def emit_counter(
         self,
@@ -114,7 +128,10 @@ class Observability(Protocol):
     def record_artifact_manifest(self, manifest: TracerArtifactManifest) -> None: ...
 
     def span(
-        self, name: str, attributes: Mapping[str, Any] | None = None
+        self,
+        name: str,
+        attributes: Mapping[str, Any] | None = None,
+        parent_traceparent: str | None = None,
     ) -> AbstractContextManager: ...
 
     def flush(self) -> None: ...
@@ -124,7 +141,10 @@ class Observability(Protocol):
 class NoOpObservability:
     config: ObservabilityConfig = field(default_factory=ObservabilityConfig.disabled)
 
-    def emit_lifecycle_event(self, event: SimulationLifecycleEvent) -> None:
+    def emit_lifecycle_event(
+        self,
+        event: SimulationLifecycleEvent | Mapping[str, Any],
+    ) -> None:
         return None
 
     def emit_counter(
@@ -146,7 +166,12 @@ class NoOpObservability:
     def record_artifact_manifest(self, manifest: TracerArtifactManifest) -> None:
         return None
 
-    def span(self, name: str, attributes: Mapping[str, Any] | None = None) -> NoOpSpan:
+    def span(
+        self,
+        name: str,
+        attributes: Mapping[str, Any] | None = None,
+        parent_traceparent: str | None = None,
+    ) -> NoOpSpan:
         return NoOpSpan()
 
     def flush(self) -> None:
@@ -165,8 +190,14 @@ class OtlpObservability:
     counter_cache: dict[str, Any] = field(default_factory=dict)
     histogram_cache: dict[str, Any] = field(default_factory=dict)
 
-    def emit_lifecycle_event(self, event: SimulationLifecycleEvent) -> None:
-        payload = event.model_dump(mode="json")
+    def emit_lifecycle_event(
+        self,
+        event: SimulationLifecycleEvent | Mapping[str, Any],
+    ) -> None:
+        if hasattr(event, "model_dump"):
+            payload = event.model_dump(mode="json")
+        else:
+            payload = dict(event)
         self.lifecycle_logger.info(payload)
 
     def emit_counter(
@@ -201,11 +232,22 @@ class OtlpObservability:
             }
         )
 
-    def span(self, name: str, attributes: Mapping[str, Any] | None = None) -> OTelSpan:
+    def span(
+        self,
+        name: str,
+        attributes: Mapping[str, Any] | None = None,
+        parent_traceparent: str | None = None,
+    ) -> OTelSpan:
+        context = None
+        if parent_traceparent:
+            context = TraceContextTextMapPropagator().extract(
+                {"traceparent": parent_traceparent}
+            )
         return OTelSpan(
             self.tracer.start_as_current_span(
                 name,
                 attributes=_normalize_attributes(attributes),
+                context=context,
             )
         )
 
@@ -216,3 +258,13 @@ class OtlpObservability:
             self.meter_provider.force_flush()
         if self.logger_provider is not None:
             self.logger_provider.force_flush()
+
+
+def build_traceparent(span_context: Any) -> str | None:
+    if not getattr(span_context, "is_valid", False):
+        return None
+
+    trace_flags = int(getattr(span_context, "trace_flags", 0))
+    return (
+        f"00-{span_context.trace_id:032x}-{span_context.span_id:016x}-{trace_flags:02x}"
+    )

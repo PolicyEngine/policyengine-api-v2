@@ -24,7 +24,10 @@ class RecordingObservability:
         self.spans = []
 
     def emit_lifecycle_event(self, payload):
-        self.events.append(payload)
+        if hasattr(payload, "model_dump"):
+            self.events.append(payload.model_dump(mode="json"))
+        else:
+            self.events.append(payload)
 
     def emit_counter(self, name, value=1, attributes=None):
         self.counters.append(

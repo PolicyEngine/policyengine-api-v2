@@ -231,5 +231,37 @@ def test_observability_provider__preserves_supplied_config(monkeypatch):
     )
     with built.span("run_simulation", attributes={"run_id": "run-456"}) as span:
         span.add_event("simulation.completed")
+        assert span.get_traceparent() is not None
     built.flush()
+    reset_observability_cache()
+
+
+def test_otlp_observability__accepts_parent_traceparent(monkeypatch):
+    reset_observability_cache()
+    monkeypatch.setattr(
+        "opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter.export",
+        lambda self, spans: SpanExportResult.SUCCESS,
+    )
+    monkeypatch.setattr(
+        "opentelemetry.exporter.otlp.proto.http.metric_exporter.OTLPMetricExporter.export",
+        lambda self, metrics_data, timeout_millis=10000: MetricExportResult.SUCCESS,
+    )
+    monkeypatch.setattr(
+        "opentelemetry.exporter.otlp.proto.http._log_exporter.OTLPLogExporter.export",
+        lambda self, batch: LogExportResult.SUCCESS,
+    )
+    config = ObservabilityConfig(
+        enabled=True,
+        service_name="simulation-worker",
+        otlp_endpoint="https://otlp.example",
+    )
+
+    built = build_observability(config)
+
+    with built.span(
+        "run_simulation",
+        parent_traceparent="00-11111111111111111111111111111111-2222222222222222-01",
+    ) as span:
+        assert span.get_traceparent() is not None
+
     reset_observability_cache()
