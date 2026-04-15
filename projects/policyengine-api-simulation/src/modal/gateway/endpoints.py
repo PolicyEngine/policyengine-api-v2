@@ -19,8 +19,6 @@ from src.modal.gateway.models import (
     SimulationRequest,
 )
 from src.modal.observability import (
-    duration_since_requested_at,
-    FAILURE_COUNT_METRIC_NAME,
     get_observability,
 )
 
@@ -261,19 +259,6 @@ async def get_job_status(job_id: str):
 
         try:
             result = call.get(timeout=0)
-            duration = duration_since_requested_at(observation.telemetry)
-            observation.emit(
-                stage="result.returned",
-                status="complete",
-                job_id=job_id,
-                duration_seconds=duration,
-            )
-            if duration is not None:
-                observation.histogram(
-                    "policyengine.simulation.run.duration.seconds",
-                    duration,
-                    attributes=observation.metric_attributes(status="complete"),
-                )
             return JobStatusResponse(
                 status="complete",
                 result=result,
@@ -290,21 +275,6 @@ async def get_job_status(job_id: str):
                 },
             )
         except Exception as e:
-            duration = duration_since_requested_at(observation.telemetry)
-            observation.counter(
-                FAILURE_COUNT_METRIC_NAME,
-                attributes=observation.metric_attributes(
-                    stage="result.failed",
-                    status="failed",
-                ),
-            )
-            observation.emit(
-                stage="result.failed",
-                status="failed",
-                job_id=job_id,
-                duration_seconds=duration,
-                details={"error": str(e)},
-            )
             return JSONResponse(
                 status_code=500,
                 content={
