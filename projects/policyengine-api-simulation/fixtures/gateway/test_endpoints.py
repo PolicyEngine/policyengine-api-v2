@@ -74,6 +74,7 @@ class MockFunction:
 @pytest.fixture
 def mock_modal(monkeypatch):
     """Patch Modal calls in the gateway endpoints module."""
+    from src.modal import budget_window_state
     from src.modal.gateway import endpoints
 
     mock_func = MockFunction()
@@ -101,6 +102,7 @@ def mock_modal(monkeypatch):
         FunctionCall = MockFunctionCall
 
     monkeypatch.setattr(endpoints, "modal", MockModal)
+    monkeypatch.setattr(budget_window_state, "modal", MockModal)
 
     return {
         "func": mock_func,

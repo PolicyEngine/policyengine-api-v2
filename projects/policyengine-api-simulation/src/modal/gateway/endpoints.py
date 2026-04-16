@@ -10,6 +10,9 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 from src.modal.gateway.models import (
+    BudgetWindowBatchRequest,
+    BudgetWindowBatchStatusResponse,
+    BudgetWindowBatchSubmitResponse,
     JobStatusResponse,
     JobSubmitResponse,
     PingRequest,
@@ -156,6 +159,25 @@ async def submit_simulation(request: SimulationRequest):
     )
 
 
+@router.post(
+    "/simulate/economy/budget-window",
+    response_model=BudgetWindowBatchSubmitResponse,
+    response_model_exclude_none=True,
+)
+async def submit_budget_window_batch(request: BudgetWindowBatchRequest):
+    """
+    Submit a budget-window batch job.
+
+    This contract-first endpoint is intentionally disabled until the
+    orchestration worker lands in the follow-up PR. That keeps the route
+    mergeable without falsely claiming that work has started.
+    """
+    raise HTTPException(
+        status_code=501,
+        detail="Budget-window batch orchestration is not implemented yet",
+    )
+
+
 @router.get(
     "/jobs/{job_id}",
     response_model=JobStatusResponse,
@@ -203,6 +225,24 @@ async def get_job_status(job_id: str):
                 **(job_metadata or {}),
             },
         )
+
+
+@router.get(
+    "/budget-window-jobs/{batch_job_id}",
+    response_model=BudgetWindowBatchStatusResponse,
+    response_model_exclude_none=True,
+)
+async def get_budget_window_job_status(batch_job_id: str):
+    """
+    Poll for budget-window batch status.
+
+    This contract-first endpoint is intentionally disabled until the
+    orchestration worker lands in the follow-up PR.
+    """
+    raise HTTPException(
+        status_code=501,
+        detail="Budget-window batch orchestration is not implemented yet",
+    )
 
 
 @router.get("/versions")

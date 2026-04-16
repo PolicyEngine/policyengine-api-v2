@@ -396,3 +396,153 @@ class TestSubmitSimulationEndpoint:
 
         assert response.status_code == 200
         assert response.json()["run_id"] == "run-123"
+
+
+class TestBudgetWindowBatchEndpoints:
+    """Tests for budget-window batch gateway endpoints."""
+
+    def test__given_budget_window_submission__then_returns_not_implemented(
+        self, mock_modal, client: TestClient
+    ):
+        response = client.post(
+            "/simulate/economy/budget-window",
+            json={
+                "country": "us",
+                "region": "us",
+                "scope": "macro",
+                "reform": {},
+                "start_year": "2026",
+                "window_size": 3,
+                "max_parallel": 2,
+            },
+        )
+
+        assert response.status_code == 501
+        assert response.json() == {
+            "detail": "Budget-window batch orchestration is not implemented yet"
+        }
+
+    def test__given_budget_window_poll__then_returns_not_implemented(
+        self, mock_modal, client: TestClient
+    ):
+        response = client.get("/budget-window-jobs/bw-missing")
+
+        assert response.status_code == 501
+        assert response.json() == {
+            "detail": "Budget-window batch orchestration is not implemented yet"
+        }
+
+    def test__given_non_integer_start_year__then_budget_window_submit_returns_422(
+        self, mock_modal, client: TestClient
+    ):
+        response = client.post(
+            "/simulate/economy/budget-window",
+            json={
+                "country": "us",
+                "region": "us",
+                "scope": "macro",
+                "reform": {},
+                "start_year": "year-2026",
+                "window_size": 3,
+            },
+        )
+
+        assert response.status_code == 422
+        assert (
+            response.json()["detail"][0]["msg"]
+            == "Value error, start_year must be an integer year"
+        )
+
+    def test__given_end_year_past_2099__then_budget_window_submit_returns_422(
+        self, mock_modal, client: TestClient
+    ):
+        response = client.post(
+            "/simulate/economy/budget-window",
+            json={
+                "country": "us",
+                "region": "us",
+                "scope": "macro",
+                "reform": {},
+                "start_year": "2099",
+                "window_size": 2,
+            },
+        )
+
+        assert response.status_code == 422
+        assert (
+            response.json()["detail"][0]["msg"]
+            == "Value error, budget-window end_year must be 2099 or earlier"
+        )
+
+    def test__given_window_size_above_max__then_budget_window_submit_returns_422(
+        self, mock_modal, client: TestClient
+    ):
+        response = client.post(
+            "/simulate/economy/budget-window",
+            json={
+                "country": "us",
+                "region": "us",
+                "scope": "macro",
+                "reform": {},
+                "start_year": "2026",
+                "window_size": 76,
+            },
+        )
+
+        assert response.status_code == 422
+        assert response.json()["detail"][0]["loc"] == ["body", "window_size"]
+
+    def test__given_missing_region__then_budget_window_submit_returns_422(
+        self, mock_modal, client: TestClient
+    ):
+        response = client.post(
+            "/simulate/economy/budget-window",
+            json={
+                "country": "us",
+                "scope": "macro",
+                "reform": {},
+                "start_year": "2026",
+                "window_size": 3,
+            },
+        )
+
+        assert response.status_code == 422
+        assert response.json()["detail"][0]["loc"] == ["body", "region"]
+
+    def test__given_non_general_target__then_budget_window_submit_returns_422(
+        self, mock_modal, client: TestClient
+    ):
+        response = client.post(
+            "/simulate/economy/budget-window",
+            json={
+                "country": "us",
+                "region": "us",
+                "scope": "macro",
+                "reform": {},
+                "start_year": "2026",
+                "window_size": 3,
+                "target": "cliff",
+            },
+        )
+
+        assert response.status_code == 422
+        assert response.json()["detail"][0]["loc"] == ["body", "target"]
+
+    def test__given_max_parallel_above_active_limit__then_budget_window_submit_returns_422(
+        self, mock_modal, client: TestClient
+    ):
+        response = client.post(
+            "/simulate/economy/budget-window",
+            json={
+                "country": "us",
+                "region": "us",
+                "scope": "macro",
+                "reform": {},
+                "start_year": "2026",
+                "window_size": 3,
+                "max_parallel": 4,
+            },
+        )
+
+        assert response.status_code == 422
+        assert response.json()["detail"][0]["loc"] == ["body", "max_parallel"]

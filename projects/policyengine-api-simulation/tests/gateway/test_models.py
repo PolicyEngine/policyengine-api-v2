@@ -4,6 +4,13 @@ import pytest
 from pydantic import ValidationError
 
 from src.modal.gateway.models import (
+    BatchChildJobStatus,
+    BudgetWindowAnnualImpact,
+    BudgetWindowBatchRequest,
+    BudgetWindowBatchStatusResponse,
+    BudgetWindowBatchSubmitResponse,
+    BudgetWindowResult,
+    BudgetWindowTotals,
     PingRequest,
     PingResponse,
     SimulationRequest,
@@ -307,3 +314,196 @@ class TestJobStatusResponse:
         assert response.policyengine_bundle.dataset == (
             "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
         )
+
+
+class TestBudgetWindowBatchRequest:
+    """Tests for budget-window batch request validation."""
+
+    def test_budget_window_batch_request_requires_region(self):
+        with pytest.raises(ValidationError):
+            BudgetWindowBatchRequest(
+                country="us",
+                start_year="2026",
+                window_size=10,
+            )
+
+    def test_budget_window_batch_request_requires_start_year(self):
+        with pytest.raises(ValidationError):
+            BudgetWindowBatchRequest(country="us", region="us", window_size=10)
+
+    def test_budget_window_batch_request_requires_positive_window_size(self):
+        with pytest.raises(ValidationError):
+            BudgetWindowBatchRequest(
+                country="us",
+                region="us",
+                start_year="2026",
+                window_size=0,
+            )
+
+    def test_budget_window_batch_request_rejects_window_size_above_max_limit(self):
+        with pytest.raises(ValidationError):
+            BudgetWindowBatchRequest(
+                country="us",
+                region="us",
+                start_year="2026",
+                window_size=76,
+            )
+
+    def test_budget_window_batch_request_rejects_end_year_past_2099(self):
+        with pytest.raises(
+            ValidationError, match="budget-window end_year must be 2099 or earlier"
+        ):
+            BudgetWindowBatchRequest(
+                country="us",
+                region="us",
+                start_year="2099",
+                window_size=2,
+            )
+
+    def test_budget_window_batch_request_requires_integer_like_start_year(self):
+        with pytest.raises(ValidationError, match="start_year must be an integer year"):
+            BudgetWindowBatchRequest(
+                country="us",
+                region="us",
+                start_year="year-2026",
+                window_size=3,
+            )
+
+    def test_budget_window_batch_request_rejects_non_general_target(self):
+        with pytest.raises(ValidationError):
+            BudgetWindowBatchRequest(
+                country="us",
+                region="us",
+                start_year="2026",
+                window_size=3,
+                target="cliff",
+            )
+
+    def test_budget_window_batch_request_rejects_max_parallel_above_active_limit(self):
+        with pytest.raises(ValidationError):
+            BudgetWindowBatchRequest(
+                country="us",
+                region="us",
+                start_year="2026",
+                window_size=3,
+                max_parallel=4,
+            )
+
+    def test_budget_window_batch_request_accepts_extra_simulation_fields(self):
+        request = BudgetWindowBatchRequest(
+            country="us",
+            region="us",
+            start_year="2026",
+            window_size=10,
+            max_parallel=2,
+            scope="macro",
+            reform={},
+        )
+
+        dumped = request.model_dump()
+        assert dumped["scope"] == "macro"
+        assert dumped["reform"] == {}
+        assert request.max_parallel == 2
+        assert request.start_year == "2026"
+
+    def test_budget_window_batch_request_accepts_internal_telemetry_alias(self):
+        request = BudgetWindowBatchRequest(
+            country="us",
+            region="us",
+            start_year="2026",
+            window_size=10,
+            _telemetry={
+                "run_id": "batch-run-123",
+                "process_id": "proc-123",
+                "capture_mode": "disabled",
+            },
+        )
+
+        assert request.telemetry is not None
+        assert request.telemetry.run_id == "batch-run-123"
+
+
+class TestBudgetWindowBatchSubmitResponse:
+    """Tests for budget-window batch submit responses."""
+
+    def test_budget_window_batch_submit_response_serializes_correctly(self):
+        response = BudgetWindowBatchSubmitResponse(
+            batch_job_id="bw-123",
+            status="submitted",
+            poll_url="/budget-window-jobs/bw-123",
+            country="us",
+            version="1.500.0",
+            resolved_app_name="policyengine-simulation-us1-500-0-uk2-66-0",
+            policyengine_bundle={
+                "model_version": "1.500.0",
+                "dataset": "default",
+            },
+            run_id="batch-run-123",
+        )
+
+        assert response.model_dump(mode="json") == {
+            "batch_job_id": "bw-123",
+            "status": "submitted",
+            "poll_url": "/budget-window-jobs/bw-123",
+            "country": "us",
+            "version": "1.500.0",
+            "resolved_app_name": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "policyengine_bundle": {
+                "model_version": "1.500.0",
+                "policyengine_version": None,
+                "data_version": None,
+                "dataset": "default",
+            },
+            "run_id": "batch-run-123",
+        }
+
+
+class TestBudgetWindowBatchStatusResponse:
+    """Tests for budget-window batch status responses."""
+
+    def test_budget_window_batch_status_response_accepts_child_jobs_and_result(self):
+        response = BudgetWindowBatchStatusResponse(
+            status="complete",
+            progress=100,
+            completed_years=["2026", "2027"],
+            running_years=[],
+            queued_years=[],
+            failed_years=[],
+            child_jobs={
+                "2026": BatchChildJobStatus(job_id="fc-2026", status="complete"),
+                "2027": BatchChildJobStatus(job_id="fc-2027", status="complete"),
+            },
+            result=BudgetWindowResult(
+                startYear="2026",
+                endYear="2027",
+                windowSize=2,
+                annualImpacts=[
+                    BudgetWindowAnnualImpact(
+                        year="2026",
+                        taxRevenueImpact=10,
+                        federalTaxRevenueImpact=8,
+                        stateTaxRevenueImpact=2,
+                        benefitSpendingImpact=-3,
+                        budgetaryImpact=13,
+                    )
+                ],
+                totals=BudgetWindowTotals(
+                    taxRevenueImpact=10,
+                    federalTaxRevenueImpact=8,
+                    stateTaxRevenueImpact=2,
+                    benefitSpendingImpact=-3,
+                    budgetaryImpact=13,
+                ),
+            ),
+        )
+
+        dumped = response.model_dump(mode="json")
+        assert dumped["status"] == "complete"
+        assert dumped["progress"] == 100
+        assert dumped["completed_years"] == ["2026", "2027"]
+        assert dumped["child_jobs"]["2026"] == {
+            "job_id": "fc-2026",
+            "status": "complete",
+            "error": None,
+        }
+        assert dumped["result"]["kind"] == "budgetWindow"

@@ -15,6 +15,9 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from src.modal.gateway.models import (
+    BudgetWindowBatchRequest,
+    BudgetWindowBatchStatusResponse,
+    BudgetWindowBatchSubmitResponse,
     JobStatusResponse,
     JobSubmitResponse,
     PingRequest,
@@ -48,6 +51,24 @@ def create_openapi_app() -> FastAPI:
         """
         raise NotImplementedError("Stub for OpenAPI generation")
 
+    @app.post(
+        "/simulate/economy/budget-window",
+        response_model=BudgetWindowBatchSubmitResponse,
+        responses={
+            200: {"description": "Budget-window batch submitted successfully"},
+            400: {"description": "Invalid request (unknown country/version/year)"},
+        },
+    )
+    async def submit_budget_window_batch(
+        request: BudgetWindowBatchRequest,
+    ) -> BudgetWindowBatchSubmitResponse:
+        """
+        Submit a budget-window batch job.
+
+        Returns immediately with a parent batch job ID for polling.
+        """
+        raise NotImplementedError("Stub for OpenAPI generation")
+
     @app.get(
         "/jobs/{job_id}",
         response_model=JobStatusResponse,
@@ -67,6 +88,27 @@ def create_openapi_app() -> FastAPI:
             - 202 with status="running" while in progress
             - 404 if job_id not found
             - 500 with status="failed" and error on failure
+        """
+        raise NotImplementedError("Stub for OpenAPI generation")
+
+    @app.get(
+        "/budget-window-jobs/{batch_job_id}",
+        response_model=BudgetWindowBatchStatusResponse,
+        responses={
+            200: {
+                "description": "Batch complete",
+                "model": BudgetWindowBatchStatusResponse,
+            },
+            202: {"description": "Batch submitted or running"},
+            404: {"description": "Batch job not found"},
+            500: {"description": "Batch failed"},
+        },
+    )
+    async def get_budget_window_job_status(
+        batch_job_id: str,
+    ) -> BudgetWindowBatchStatusResponse:
+        """
+        Poll for budget-window batch status.
         """
         raise NotImplementedError("Stub for OpenAPI generation")
 
