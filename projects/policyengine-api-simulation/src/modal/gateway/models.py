@@ -79,6 +79,7 @@ class BudgetWindowBatchRequest(GatewayRequestBase):
     """Request model for budget-window batch submission."""
 
     MAX_YEARS: ClassVar[int] = 75
+    MAX_END_YEAR: ClassVar[int] = 2099
 
     region: str
     start_year: str
@@ -93,6 +94,15 @@ class BudgetWindowBatchRequest(GatewayRequestBase):
             return str(int(value))
         except (TypeError, ValueError) as exc:
             raise ValueError("start_year must be an integer year") from exc
+
+    @model_validator(mode="after")
+    def validate_end_year(self) -> "BudgetWindowBatchRequest":
+        end_year = int(self.start_year) + self.window_size - 1
+        if end_year > self.MAX_END_YEAR:
+            raise ValueError(
+                f"budget-window end_year must be {self.MAX_END_YEAR} or earlier"
+            )
+        return self
 
 
 class BudgetWindowAnnualImpact(BaseModel):

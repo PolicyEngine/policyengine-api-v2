@@ -349,6 +349,17 @@ class TestBudgetWindowBatchRequest:
                 window_size=76,
             )
 
+    def test_budget_window_batch_request_rejects_end_year_past_2099(self):
+        with pytest.raises(
+            ValidationError, match="budget-window end_year must be 2099 or earlier"
+        ):
+            BudgetWindowBatchRequest(
+                country="us",
+                region="us",
+                start_year="2099",
+                window_size=2,
+            )
+
     def test_budget_window_batch_request_requires_integer_like_start_year(self):
         with pytest.raises(ValidationError, match="start_year must be an integer year"):
             BudgetWindowBatchRequest(
