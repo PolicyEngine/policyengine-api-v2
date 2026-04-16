@@ -187,8 +187,19 @@ def mark_batch_failed(
     *,
     error: str,
 ) -> BudgetWindowBatchState:
+    for year in list(state.running_years):
+        child = state.child_jobs.get(year)
+        if child is None:
+            continue
+        state.child_jobs[year] = BatchChildJobStatus(
+            job_id=child.job_id,
+            status="cancelled",
+            error=error,
+        )
+
     state.status = "failed"
     state.error = error
+    state.running_years = []
     return _touch(state)
 
 

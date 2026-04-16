@@ -29,6 +29,12 @@ from src.modal.gateway.models import (
 )
 
 POLL_INTERVAL_SECONDS = 0.1
+REQUIRED_BUDGET_KEYS = (
+    "tax_revenue_impact",
+    "state_tax_revenue_impact",
+    "benefit_spending_impact",
+    "budgetary_impact",
+)
 
 
 def _extract_request_and_metadata(
@@ -87,6 +93,20 @@ def extract_budget_window_annual_impact(
     *, year: str, impact_data: dict[str, Any]
 ) -> BudgetWindowAnnualImpact:
     budget = impact_data.get("budget", {})
+    if not isinstance(budget, dict):
+        raise ValueError("Malformed budget-window child result: missing budget object")
+
+    missing_keys = [
+        key
+        for key in REQUIRED_BUDGET_KEYS
+        if not isinstance(budget.get(key), int | float)
+    ]
+    if missing_keys:
+        missing = ", ".join(f"budget.{key}" for key in missing_keys)
+        raise ValueError(
+            f"Malformed budget-window child result: missing numeric {missing}"
+        )
+
     state_tax_revenue_impact = budget.get("state_tax_revenue_impact", 0)
     tax_revenue_impact = budget.get("tax_revenue_impact", 0)
 
@@ -190,10 +210,18 @@ def run_budget_window_batch_impl(params: dict[str, Any]) -> dict[str, Any]:
                 put_batch_job_state(state)
                 return _failure_response(state)
 
-            annual_impact = extract_budget_window_annual_impact(
-                year=year,
-                impact_data=result,
-            )
+            try:
+                annual_impact = extract_budget_window_annual_impact(
+                    year=year,
+                    impact_data=result,
+                )
+            except Exception as exc:
+                error = str(exc)
+                mark_child_failed(state, year=year, error=error)
+                mark_batch_failed(state, error=error)
+                put_batch_job_state(state)
+                return _failure_response(state)
+
             mark_child_completed(state, year=year, annual_impact=annual_impact)
             put_batch_job_state(state)
             progress_made = True

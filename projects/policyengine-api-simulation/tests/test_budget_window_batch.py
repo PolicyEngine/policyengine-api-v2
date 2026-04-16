@@ -226,6 +226,23 @@ def test_extract_budget_window_annual_impact_matches_v1_shape():
     )
 
 
+def test_extract_budget_window_annual_impact_rejects_malformed_child_result():
+    with pytest.raises(
+        ValueError,
+        match="Malformed budget-window child result: missing numeric budget.tax_revenue_impact",
+    ):
+        extract_budget_window_annual_impact(
+            year="2026",
+            impact_data={
+                "budget": {
+                    "state_tax_revenue_impact": 40,
+                    "benefit_spending_impact": 20,
+                    "budgetary_impact": 80,
+                }
+            },
+        )
+
+
 def test_build_budget_window_output_sums_totals():
     annual_impacts = [
         BudgetWindowAnnualImpact(
@@ -355,6 +372,51 @@ def test_run_budget_window_batch_impl_marks_failure(mock_batch_modal):
     assert result["status"] == "failed"
     assert result["failed_years"] == ["2026"]
     assert result["error"] == "child failed"
+    assert result["running_years"] == []
+    assert result["child_jobs"]["2027"]["status"] == "cancelled"
+    assert result["child_jobs"]["2027"]["error"] == "child failed"
     assert state is not None
     assert state.status == "failed"
     assert state.error == "child failed"
+    assert state.running_years == []
+    assert state.child_jobs["2027"].status == "cancelled"
+
+
+def test_run_budget_window_batch_impl_fails_on_malformed_child_result(
+    mock_batch_modal,
+):
+    request, payload = _build_parent_payload(window_size=1)
+    _seed_parent_batch(request, mock_batch_modal["parent_call_id"])
+
+    tracker = SpawnTracker()
+    run_simulation = MockRunSimulationFunction(
+        tracker=tracker,
+        results_by_year={
+            "2026": [
+                {
+                    "budget": {
+                        "state_tax_revenue_impact": 3,
+                        "benefit_spending_impact": 6,
+                        "budgetary_impact": 17,
+                    }
+                }
+            ],
+        },
+        call_registry=mock_batch_modal["call_registry"],
+    )
+    mock_batch_modal["functions"][
+        ("policyengine-simulation-us1-500-0-uk2-66-0", "run_simulation")
+    ] = run_simulation
+
+    result = run_budget_window_batch_impl(payload)
+    state = state_module.get_batch_job_state(mock_batch_modal["parent_call_id"])
+
+    assert result["status"] == "failed"
+    assert result["failed_years"] == ["2026"]
+    assert (
+        result["error"]
+        == "Malformed budget-window child result: missing numeric budget.tax_revenue_impact"
+    )
+    assert state is not None
+    assert state.status == "failed"
+    assert state.child_jobs["2026"].status == "failed"
