@@ -104,3 +104,32 @@ def run_simulation(params: dict) -> dict:
             return result
     finally:
         logfire.force_flush()
+
+
+@app.function(
+    image=simulation_image,
+    cpu=1.0,
+    memory=4096,
+    timeout=3600,
+    retries=0,
+    max_containers=100,
+    secrets=[gcp_secret, logfire_secret],
+)
+def run_budget_window_batch(params: dict) -> dict:
+    """Execute a multi-year budget-window batch orchestration."""
+    import logfire
+
+    from src.modal.budget_window_batch import run_budget_window_batch_impl
+
+    configure_logfire()
+
+    try:
+        with logfire.span(
+            "run_budget_window_batch",
+            input_params=params,
+        ) as span:
+            result = run_budget_window_batch_impl(params)
+            span.set_attribute("output_result", result)
+            return result
+    finally:
+        logfire.force_flush()

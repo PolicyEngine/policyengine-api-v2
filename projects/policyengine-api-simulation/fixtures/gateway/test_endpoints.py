@@ -59,16 +59,29 @@ class MockFunction:
         self.last_payload = None
         self.last_from_name_call = None
         self.last_call = None
+        self.calls = []
+
+    def bind(self, app_name: str, func_name: str) -> "BoundMockFunction":
+        return BoundMockFunction(self, app_name, func_name)
+
+
+class BoundMockFunction:
+    """Function handle returned by Modal.Function.from_name."""
+
+    def __init__(self, recorder: MockFunction, app_name: str, func_name: str):
+        self.recorder = recorder
+        self.app_name = app_name
+        self.func_name = func_name
 
     def spawn(self, payload: dict) -> MockFunctionCall:
-        self.last_payload = payload
-        self.last_call = MockFunctionCall()
-        return self.last_call
-
-    @classmethod
-    def from_name(cls, app_name: str, func_name: str):
-        """Mock from_name that returns a MockFunction."""
-        raise NotImplementedError("Mock not configured")
+        self.recorder.last_payload = payload
+        is_batch = self.func_name == "run_budget_window_batch"
+        object_id = "mock-batch-job-id-123" if is_batch else "mock-job-id-123"
+        self.recorder.last_call = MockFunctionCall(object_id=object_id)
+        if is_batch:
+            self.recorder.last_call.running = True
+        self.recorder.calls.append((self.app_name, self.func_name, payload, object_id))
+        return self.recorder.last_call
 
 
 @pytest.fixture
@@ -94,7 +107,7 @@ def mock_modal(monkeypatch):
         @staticmethod
         def from_name(app_name: str, func_name: str):
             mock_func.last_from_name_call = (app_name, func_name)
-            return mock_func
+            return mock_func.bind(app_name, func_name)
 
     class MockModal:
         Dict = MockModalDict

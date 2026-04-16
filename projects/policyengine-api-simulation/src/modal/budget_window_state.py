@@ -7,17 +7,27 @@ from datetime import UTC, datetime
 import modal
 
 from src.modal.gateway.models import (
+    BatchChildJobStatus,
+    BudgetWindowAnnualImpact,
     BudgetWindowBatchRequest,
     BudgetWindowBatchState,
     BudgetWindowBatchStatusResponse,
+    BudgetWindowResult,
     PolicyEngineBundle,
 )
 
 BUDGET_WINDOW_JOB_DICT_NAME = "simulation-api-budget-window-jobs"
+BUDGET_WINDOW_JOB_SEED_DICT_NAME = "simulation-api-budget-window-job-seeds"
 
 
 def _budget_window_job_store():
     return modal.Dict.from_name(BUDGET_WINDOW_JOB_DICT_NAME, create_if_missing=True)
+
+
+def _budget_window_job_seed_store():
+    return modal.Dict.from_name(
+        BUDGET_WINDOW_JOB_SEED_DICT_NAME, create_if_missing=True
+    )
 
 
 def _utc_now_iso() -> str:
@@ -27,6 +37,11 @@ def _utc_now_iso() -> str:
 def _build_years(start_year: str, window_size: int) -> list[str]:
     base_year = int(start_year)
     return [str(base_year + offset) for offset in range(window_size)]
+
+
+def _touch(state: BudgetWindowBatchState) -> BudgetWindowBatchState:
+    state.updated_at = _utc_now_iso()
+    return state
 
 
 def create_initial_batch_state(
@@ -68,6 +83,17 @@ def create_initial_batch_state(
     )
 
 
+def get_batch_job_seed(batch_job_id: str) -> BudgetWindowBatchState | None:
+    payload = _budget_window_job_seed_store().get(batch_job_id)
+    if payload is None:
+        return None
+    return BudgetWindowBatchState.model_validate(payload)
+
+
+def put_batch_job_seed(state: BudgetWindowBatchState) -> None:
+    _budget_window_job_seed_store()[state.batch_job_id] = state.model_dump(mode="json")
+
+
 def get_batch_job_state(batch_job_id: str) -> BudgetWindowBatchState | None:
     payload = _budget_window_job_store().get(batch_job_id)
     if payload is None:
@@ -78,6 +104,103 @@ def get_batch_job_state(batch_job_id: str) -> BudgetWindowBatchState | None:
 def put_batch_job_state(state: BudgetWindowBatchState) -> None:
     serialized = state.model_dump(mode="json")
     _budget_window_job_store()[state.batch_job_id] = serialized
+
+
+def mark_batch_running(state: BudgetWindowBatchState) -> BudgetWindowBatchState:
+    state.status = "running"
+    return _touch(state)
+
+
+def mark_child_started(
+    state: BudgetWindowBatchState,
+    *,
+    year: str,
+    child_job_id: str,
+) -> BudgetWindowBatchState:
+    if year in state.queued_years:
+        state.queued_years.remove(year)
+    if year not in state.running_years:
+        state.running_years.append(year)
+
+    state.child_jobs[year] = BatchChildJobStatus(
+        job_id=child_job_id,
+        status="running",
+    )
+    return _touch(state)
+
+
+def mark_child_completed(
+    state: BudgetWindowBatchState,
+    *,
+    year: str,
+    annual_impact: BudgetWindowAnnualImpact,
+) -> BudgetWindowBatchState:
+    if year in state.running_years:
+        state.running_years.remove(year)
+    if year not in state.completed_years:
+        state.completed_years.append(year)
+
+    child = state.child_jobs[year]
+    state.child_jobs[year] = BatchChildJobStatus(
+        job_id=child.job_id,
+        status="complete",
+    )
+    state.partial_annual_impacts[year] = annual_impact
+    return _touch(state)
+
+
+def mark_child_failed(
+    state: BudgetWindowBatchState,
+    *,
+    year: str,
+    error: str,
+) -> BudgetWindowBatchState:
+    if year in state.running_years:
+        state.running_years.remove(year)
+    if year not in state.failed_years:
+        state.failed_years.append(year)
+
+    child = state.child_jobs[year]
+    state.child_jobs[year] = BatchChildJobStatus(
+        job_id=child.job_id,
+        status="failed",
+        error=error,
+    )
+    return _touch(state)
+
+
+def mark_batch_complete(
+    state: BudgetWindowBatchState,
+    *,
+    result: BudgetWindowResult,
+) -> BudgetWindowBatchState:
+    state.status = "complete"
+    state.result = result
+    state.error = None
+    state.running_years = []
+    state.queued_years = []
+    return _touch(state)
+
+
+def mark_batch_failed(
+    state: BudgetWindowBatchState,
+    *,
+    error: str,
+) -> BudgetWindowBatchState:
+    for year in list(state.running_years):
+        child = state.child_jobs.get(year)
+        if child is None:
+            continue
+        state.child_jobs[year] = BatchChildJobStatus(
+            job_id=child.job_id,
+            status="cancelled",
+            error=error,
+        )
+
+    state.status = "failed"
+    state.error = error
+    state.running_years = []
+    return _touch(state)
 
 
 def build_batch_status_response(
