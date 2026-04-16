@@ -527,3 +527,22 @@ class TestBudgetWindowBatchEndpoints:
 
         assert response.status_code == 422
         assert response.json()["detail"][0]["loc"] == ["body", "target"]
+
+    def test__given_max_parallel_above_active_limit__then_budget_window_submit_returns_422(
+        self, mock_modal, client: TestClient
+    ):
+        response = client.post(
+            "/simulate/economy/budget-window",
+            json={
+                "country": "us",
+                "region": "us",
+                "scope": "macro",
+                "reform": {},
+                "start_year": "2026",
+                "window_size": 3,
+                "max_parallel": 4,
+            },
+        )
+
+        assert response.status_code == 422
+        assert response.json()["detail"][0]["loc"] == ["body", "max_parallel"]

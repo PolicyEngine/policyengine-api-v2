@@ -2,7 +2,7 @@
 Pydantic models for the Gateway API.
 """
 
-from typing import ClassVar, Literal, Optional
+from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -80,11 +80,12 @@ class BudgetWindowBatchRequest(GatewayRequestBase):
 
     MAX_YEARS: ClassVar[int] = 75
     MAX_END_YEAR: ClassVar[int] = 2099
+    MAX_PARALLEL: ClassVar[int] = 3
 
     region: str
     start_year: str
     window_size: int = Field(ge=1, le=MAX_YEARS)
-    max_parallel: int = Field(default=3, ge=1)
+    max_parallel: int = Field(default=MAX_PARALLEL, ge=1, le=MAX_PARALLEL)
     target: Literal["general"] = "general"
 
     @field_validator("start_year")
@@ -182,12 +183,15 @@ class BudgetWindowBatchState(BaseModel):
     batch_job_id: str
     status: str
     country: str
+    region: str
     version: str
+    target: Literal["general"] = "general"
     resolved_app_name: str
     policyengine_bundle: PolicyEngineBundle
     start_year: str
     window_size: int
     max_parallel: int
+    request_payload: dict[str, Any] = Field(default_factory=dict)
     years: list[str] = Field(default_factory=list)
     queued_years: list[str] = Field(default_factory=list)
     running_years: list[str] = Field(default_factory=list)

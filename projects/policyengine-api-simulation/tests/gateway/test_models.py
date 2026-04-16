@@ -379,6 +379,16 @@ class TestBudgetWindowBatchRequest:
                 target="cliff",
             )
 
+    def test_budget_window_batch_request_rejects_max_parallel_above_active_limit(self):
+        with pytest.raises(ValidationError):
+            BudgetWindowBatchRequest(
+                country="us",
+                region="us",
+                start_year="2026",
+                window_size=3,
+                max_parallel=4,
+            )
+
     def test_budget_window_batch_request_accepts_extra_simulation_fields(self):
         request = BudgetWindowBatchRequest(
             country="us",
