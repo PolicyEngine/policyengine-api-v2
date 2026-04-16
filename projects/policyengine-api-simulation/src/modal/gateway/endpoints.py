@@ -7,7 +7,6 @@ from typing import Optional
 
 import modal
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
 
 from src.modal.budget_window_state import (
     build_batch_status_response,
@@ -26,6 +25,11 @@ from src.modal.gateway.models import (
     PingResponse,
     PolicyEngineBundle,
     SimulationRequest,
+)
+from src.modal.gateway.responses import (
+    batch_status_response,
+    failed_job_response,
+    running_job_response,
 )
 
 logger = logging.getLogger(__name__)
@@ -82,16 +86,6 @@ def _serialize_job_metadata(
     }
 
 
-def _batch_status_payload(response: BudgetWindowBatchStatusResponse) -> dict:
-    payload = response.model_dump(mode="json")
-    if response.policyengine_bundle is not None:
-        payload["policyengine_bundle"] = response.policyengine_bundle.model_dump(
-            mode="json",
-            exclude_none=True,
-        )
-    return payload
-
-
 def _build_budget_window_parent_payload(
     request: BudgetWindowBatchRequest,
     *,
@@ -112,15 +106,6 @@ def _build_budget_window_parent_payload(
         "policyengine_bundle": bundle.model_dump(mode="json"),
     }
     return payload
-
-
-def _json_batch_status_response(response: BudgetWindowBatchStatusResponse):
-    payload = _batch_status_payload(response)
-    if response.status in {"submitted", "running"}:
-        return JSONResponse(status_code=202, content=payload)
-    if response.status == "failed":
-        return JSONResponse(status_code=500, content=payload)
-    return response
 
 
 def get_app_name(country: str, version: Optional[str]) -> tuple[str, str]:
@@ -286,25 +271,9 @@ async def get_job_status(job_id: str):
             status="complete", result=result, **(job_metadata or {})
         )
     except TimeoutError:
-        return JSONResponse(
-            status_code=202,
-            content={
-                "status": "running",
-                "result": None,
-                "error": None,
-                **(job_metadata or {}),
-            },
-        )
+        return running_job_response(job_metadata)
     except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "failed",
-                "result": None,
-                "error": str(e),
-                **(job_metadata or {}),
-            },
-        )
+        return failed_job_response(error=str(e), job_metadata=job_metadata)
 
 
 @router.get(
@@ -318,7 +287,7 @@ async def get_budget_window_job_status(batch_job_id: str):
     """
     state = get_batch_job_state(batch_job_id)
     if state is not None:
-        return _json_batch_status_response(build_batch_status_response(state))
+        return batch_status_response(build_batch_status_response(state))
 
     seed_state = get_batch_job_seed(batch_job_id)
     if seed_state is None:
@@ -329,19 +298,19 @@ async def get_budget_window_job_status(batch_job_id: str):
     try:
         call = modal.FunctionCall.from_id(batch_job_id)
     except Exception:
-        return _json_batch_status_response(build_batch_status_response(seed_state))
+        return batch_status_response(build_batch_status_response(seed_state))
 
     try:
         result = call.get(timeout=0)
     except TimeoutError:
-        return _json_batch_status_response(build_batch_status_response(seed_state))
+        return batch_status_response(build_batch_status_response(seed_state))
     except Exception as e:
         seed_state.status = "failed"
         seed_state.error = str(e)
-        return _json_batch_status_response(build_batch_status_response(seed_state))
+        return batch_status_response(build_batch_status_response(seed_state))
 
     response = BudgetWindowBatchStatusResponse.model_validate(result)
-    return _json_batch_status_response(response)
+    return batch_status_response(response)
 
 
 @router.get("/versions")
