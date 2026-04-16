@@ -9,6 +9,13 @@ import modal
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
+from src.modal.budget_window_state import (
+    build_batch_status_response,
+    create_initial_batch_state,
+    get_batch_job_seed,
+    get_batch_job_state,
+    put_batch_job_seed,
+)
 from src.modal.gateway.models import (
     BudgetWindowBatchRequest,
     BudgetWindowBatchStatusResponse,
@@ -73,6 +80,47 @@ def _serialize_job_metadata(
         "policyengine_bundle": bundle.model_dump(),
         "run_id": run_id,
     }
+
+
+def _batch_status_payload(response: BudgetWindowBatchStatusResponse) -> dict:
+    payload = response.model_dump(mode="json")
+    if response.policyengine_bundle is not None:
+        payload["policyengine_bundle"] = response.policyengine_bundle.model_dump(
+            mode="json",
+            exclude_none=True,
+        )
+    return payload
+
+
+def _build_budget_window_parent_payload(
+    request: BudgetWindowBatchRequest,
+    *,
+    resolved_version: str,
+    resolved_app_name: str,
+    bundle: PolicyEngineBundle,
+) -> dict:
+    payload = request.model_dump(
+        exclude={"telemetry"},
+        mode="json",
+    )
+    payload["version"] = resolved_version
+    if request.telemetry is not None:
+        payload["_telemetry"] = request.telemetry.model_dump(mode="json")
+    payload["_metadata"] = {
+        "resolved_version": resolved_version,
+        "resolved_app_name": resolved_app_name,
+        "policyengine_bundle": bundle.model_dump(mode="json"),
+    }
+    return payload
+
+
+def _json_batch_status_response(response: BudgetWindowBatchStatusResponse):
+    payload = _batch_status_payload(response)
+    if response.status in {"submitted", "running"}:
+        return JSONResponse(status_code=202, content=payload)
+    if response.status == "failed":
+        return JSONResponse(status_code=500, content=payload)
+    return response
 
 
 def get_app_name(country: str, version: Optional[str]) -> tuple[str, str]:
@@ -167,14 +215,46 @@ async def submit_simulation(request: SimulationRequest):
 async def submit_budget_window_batch(request: BudgetWindowBatchRequest):
     """
     Submit a budget-window batch job.
-
-    This contract-first endpoint is intentionally disabled until the
-    orchestration worker lands in the follow-up PR. That keeps the route
-    mergeable without falsely claiming that work has started.
     """
-    raise HTTPException(
-        status_code=501,
-        detail="Budget-window batch orchestration is not implemented yet",
+    try:
+        app_name, resolved_version = get_app_name(request.country, request.version)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    bundle = _build_policyengine_bundle(
+        request.country,
+        resolved_version,
+        request.model_dump(mode="json"),
+    )
+    payload = _build_budget_window_parent_payload(
+        request,
+        resolved_version=resolved_version,
+        resolved_app_name=app_name,
+        bundle=bundle,
+    )
+
+    batch_func = modal.Function.from_name(app_name, "run_budget_window_batch")
+    call = batch_func.spawn(payload)
+    batch_job_id = call.object_id
+
+    seed_state = create_initial_batch_state(
+        batch_job_id=batch_job_id,
+        request=request,
+        resolved_version=resolved_version,
+        resolved_app_name=app_name,
+        bundle=bundle,
+    )
+    put_batch_job_seed(seed_state)
+
+    return BudgetWindowBatchSubmitResponse(
+        batch_job_id=batch_job_id,
+        status=seed_state.status,
+        poll_url=f"/budget-window-jobs/{batch_job_id}",
+        country=request.country,
+        version=resolved_version,
+        resolved_app_name=app_name,
+        policyengine_bundle=bundle,
+        run_id=seed_state.run_id,
     )
 
 
@@ -235,14 +315,33 @@ async def get_job_status(job_id: str):
 async def get_budget_window_job_status(batch_job_id: str):
     """
     Poll for budget-window batch status.
-
-    This contract-first endpoint is intentionally disabled until the
-    orchestration worker lands in the follow-up PR.
     """
-    raise HTTPException(
-        status_code=501,
-        detail="Budget-window batch orchestration is not implemented yet",
-    )
+    state = get_batch_job_state(batch_job_id)
+    if state is not None:
+        return _json_batch_status_response(build_batch_status_response(state))
+
+    seed_state = get_batch_job_seed(batch_job_id)
+    if seed_state is None:
+        raise HTTPException(
+            status_code=404, detail=f"Budget-window job not found: {batch_job_id}"
+        )
+
+    try:
+        call = modal.FunctionCall.from_id(batch_job_id)
+    except Exception:
+        return _json_batch_status_response(build_batch_status_response(seed_state))
+
+    try:
+        result = call.get(timeout=0)
+    except TimeoutError:
+        return _json_batch_status_response(build_batch_status_response(seed_state))
+    except Exception as e:
+        seed_state.status = "failed"
+        seed_state.error = str(e)
+        return _json_batch_status_response(build_batch_status_response(seed_state))
+
+    response = BudgetWindowBatchStatusResponse.model_validate(result)
+    return _json_batch_status_response(response)
 
 
 @router.get("/versions")

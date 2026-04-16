@@ -401,9 +401,14 @@ class TestSubmitSimulationEndpoint:
 class TestBudgetWindowBatchEndpoints:
     """Tests for budget-window batch gateway endpoints."""
 
-    def test__given_budget_window_submission__then_returns_not_implemented(
+    def test__given_budget_window_submission__then_returns_parent_batch_job_id(
         self, mock_modal, client: TestClient
     ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+        }
+
         response = client.post(
             "/simulate/economy/budget-window",
             json={
@@ -417,20 +422,144 @@ class TestBudgetWindowBatchEndpoints:
             },
         )
 
-        assert response.status_code == 501
+        assert response.status_code == 200
+        assert mock_modal["func"].last_from_name_call == (
+            "policyengine-simulation-us1-500-0-uk2-66-0",
+            "run_budget_window_batch",
+        )
         assert response.json() == {
-            "detail": "Budget-window batch orchestration is not implemented yet"
+            "batch_job_id": "mock-batch-job-id-123",
+            "status": "submitted",
+            "poll_url": "/budget-window-jobs/mock-batch-job-id-123",
+            "country": "us",
+            "version": "1.500.0",
+            "resolved_app_name": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "policyengine_bundle": {
+                "model_version": "1.500.0",
+            },
         }
 
-    def test__given_budget_window_poll__then_returns_not_implemented(
+    def test__given_budget_window_submission__then_initial_poll_returns_seed_state(
         self, mock_modal, client: TestClient
     ):
-        response = client.get("/budget-window-jobs/bw-missing")
-
-        assert response.status_code == 501
-        assert response.json() == {
-            "detail": "Budget-window batch orchestration is not implemented yet"
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
         }
+
+        submit_response = client.post(
+            "/simulate/economy/budget-window",
+            json={
+                "country": "us",
+                "region": "us",
+                "scope": "macro",
+                "reform": {},
+                "start_year": "2026",
+                "window_size": 3,
+                "max_parallel": 2,
+                "_telemetry": {
+                    "run_id": "batch-run-123",
+                    "process_id": "proc-123",
+                    "capture_mode": "disabled",
+                },
+            },
+        )
+
+        response = client.get(
+            f"/budget-window-jobs/{submit_response.json()['batch_job_id']}"
+        )
+
+        assert response.status_code == 202
+        assert response.json() == {
+            "status": "submitted",
+            "progress": 0,
+            "completed_years": [],
+            "running_years": [],
+            "queued_years": ["2026", "2027", "2028"],
+            "failed_years": [],
+            "child_jobs": {},
+            "result": None,
+            "error": None,
+            "resolved_app_name": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "policyengine_bundle": {
+                "model_version": "1.500.0",
+            },
+            "run_id": "batch-run-123",
+        }
+
+    def test__given_batch_state__then_poll_returns_completed_response(
+        self, mock_modal, client: TestClient
+    ):
+        from src.modal.budget_window_state import put_batch_job_state
+        from src.modal.gateway.models import (
+            BudgetWindowAnnualImpact,
+            BudgetWindowBatchState,
+            BudgetWindowResult,
+            BudgetWindowTotals,
+            PolicyEngineBundle,
+        )
+
+        put_batch_job_state(
+            BudgetWindowBatchState(
+                batch_job_id="mock-batch-job-id-123",
+                status="complete",
+                country="us",
+                version="1.500.0",
+                resolved_app_name="policyengine-simulation-us1-500-0-uk2-66-0",
+                policyengine_bundle=PolicyEngineBundle(model_version="1.500.0"),
+                start_year="2026",
+                window_size=2,
+                max_parallel=2,
+                years=["2026", "2027"],
+                queued_years=[],
+                running_years=[],
+                completed_years=["2026", "2027"],
+                failed_years=[],
+                child_jobs={},
+                partial_annual_impacts={},
+                result=BudgetWindowResult(
+                    startYear="2026",
+                    endYear="2027",
+                    windowSize=2,
+                    annualImpacts=[
+                        BudgetWindowAnnualImpact(
+                            year="2026",
+                            taxRevenueImpact=10,
+                            federalTaxRevenueImpact=7,
+                            stateTaxRevenueImpact=3,
+                            benefitSpendingImpact=5,
+                            budgetaryImpact=15,
+                        ),
+                        BudgetWindowAnnualImpact(
+                            year="2027",
+                            taxRevenueImpact=11,
+                            federalTaxRevenueImpact=8,
+                            stateTaxRevenueImpact=3,
+                            benefitSpendingImpact=6,
+                            budgetaryImpact=17,
+                        ),
+                    ],
+                    totals=BudgetWindowTotals(
+                        taxRevenueImpact=21,
+                        federalTaxRevenueImpact=15,
+                        stateTaxRevenueImpact=6,
+                        benefitSpendingImpact=11,
+                        budgetaryImpact=32,
+                    ),
+                ),
+                error=None,
+                created_at="2026-01-01T00:00:00+00:00",
+                updated_at="2026-01-01T00:00:01+00:00",
+                run_id="batch-run-123",
+            )
+        )
+
+        response = client.get("/budget-window-jobs/mock-batch-job-id-123")
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "complete"
+        assert response.json()["result"]["totals"]["budgetaryImpact"] == 32
+        assert response.json()["run_id"] == "batch-run-123"
 
     def test__given_non_integer_start_year__then_budget_window_submit_returns_422(
         self, mock_modal, client: TestClient
