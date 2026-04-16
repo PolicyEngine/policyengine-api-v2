@@ -474,6 +474,24 @@ class TestBudgetWindowBatchEndpoints:
             == "Value error, budget-window end_year must be 2099 or earlier"
         )
 
+    def test__given_window_size_above_max__then_budget_window_submit_returns_422(
+        self, mock_modal, client: TestClient
+    ):
+        response = client.post(
+            "/simulate/economy/budget-window",
+            json={
+                "country": "us",
+                "region": "us",
+                "scope": "macro",
+                "reform": {},
+                "start_year": "2026",
+                "window_size": 76,
+            },
+        )
+
+        assert response.status_code == 422
+        assert response.json()["detail"][0]["loc"] == ["body", "window_size"]
+
     def test__given_missing_region__then_budget_window_submit_returns_422(
         self, mock_modal, client: TestClient
     ):
