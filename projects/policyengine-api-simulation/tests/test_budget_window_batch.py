@@ -7,16 +7,10 @@ from collections import deque
 import pytest
 
 import src.modal.budget_window_batch as batch_module
+import src.modal.budget_window_scheduler as scheduler_module
 import src.modal.budget_window_state as state_module
-from src.modal.budget_window_batch import (
-    build_budget_window_output,
-    build_child_simulation_payload,
-    extract_budget_window_annual_impact,
-    run_budget_window_batch_impl,
-    sum_budget_window_annual_impacts,
-)
+from src.modal.budget_window_batch import run_budget_window_batch_impl
 from src.modal.gateway.models import (
-    BudgetWindowAnnualImpact,
     BudgetWindowBatchRequest,
     PolicyEngineBundle,
 )
@@ -137,8 +131,9 @@ def mock_batch_modal(monkeypatch):
             return parent_call_id
 
     monkeypatch.setattr(batch_module, "modal", MockModal)
+    monkeypatch.setattr(scheduler_module, "modal", MockModal)
     monkeypatch.setattr(state_module, "modal", MockModal)
-    monkeypatch.setattr(batch_module.time, "sleep", lambda _: None)
+    monkeypatch.setattr(scheduler_module.time, "sleep", lambda _: None)
 
     return {
         "dicts": dicts,
@@ -185,95 +180,6 @@ def _seed_parent_batch(request: BudgetWindowBatchRequest, batch_job_id: str):
         bundle=PolicyEngineBundle(model_version="1.500.0"),
     )
     state_module.put_batch_job_seed(seed)
-
-
-def test_build_child_simulation_payload_removes_batch_only_fields():
-    _, payload = _build_parent_payload()
-
-    child_payload = build_child_simulation_payload(payload, year="2028")
-
-    assert child_payload["time_period"] == "2028"
-    assert child_payload["region"] == "us"
-    assert child_payload["scope"] == "macro"
-    assert "_telemetry" in child_payload
-    assert "version" not in child_payload
-    assert "start_year" not in child_payload
-    assert "window_size" not in child_payload
-    assert "max_parallel" not in child_payload
-    assert "_metadata" not in child_payload
-
-
-def test_extract_budget_window_annual_impact_matches_v1_shape():
-    annual = extract_budget_window_annual_impact(
-        year="2026",
-        impact_data={
-            "budget": {
-                "tax_revenue_impact": 100,
-                "state_tax_revenue_impact": 40,
-                "benefit_spending_impact": 20,
-                "budgetary_impact": 80,
-            }
-        },
-    )
-
-    assert annual == BudgetWindowAnnualImpact(
-        year="2026",
-        taxRevenueImpact=100,
-        federalTaxRevenueImpact=60,
-        stateTaxRevenueImpact=40,
-        benefitSpendingImpact=20,
-        budgetaryImpact=80,
-    )
-
-
-def test_extract_budget_window_annual_impact_rejects_malformed_child_result():
-    with pytest.raises(
-        ValueError,
-        match="Malformed budget-window child result: missing numeric budget.tax_revenue_impact",
-    ):
-        extract_budget_window_annual_impact(
-            year="2026",
-            impact_data={
-                "budget": {
-                    "state_tax_revenue_impact": 40,
-                    "benefit_spending_impact": 20,
-                    "budgetary_impact": 80,
-                }
-            },
-        )
-
-
-def test_build_budget_window_output_sums_totals():
-    annual_impacts = [
-        BudgetWindowAnnualImpact(
-            year="2026",
-            taxRevenueImpact=10,
-            federalTaxRevenueImpact=7,
-            stateTaxRevenueImpact=3,
-            benefitSpendingImpact=5,
-            budgetaryImpact=15,
-        ),
-        BudgetWindowAnnualImpact(
-            year="2027",
-            taxRevenueImpact=11,
-            federalTaxRevenueImpact=8,
-            stateTaxRevenueImpact=3,
-            benefitSpendingImpact=6,
-            budgetaryImpact=17,
-        ),
-    ]
-
-    totals = sum_budget_window_annual_impacts(annual_impacts)
-    result = build_budget_window_output(
-        start_year="2026",
-        window_size=2,
-        annual_impacts=annual_impacts,
-    )
-
-    assert totals.budgetaryImpact == 32
-    assert result.endYear == "2027"
-    assert result.totals.taxRevenueImpact == 21
-    assert result.totals.budgetaryImpact == 32
 
 
 def test_run_budget_window_batch_impl_completes_and_respects_max_parallel(
