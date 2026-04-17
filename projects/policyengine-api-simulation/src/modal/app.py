@@ -11,6 +11,7 @@ import modal
 import os
 
 from src.modal._image_setup import snapshot_models
+from src.modal.logging_redaction import redact_params_for_logging
 
 # Get versions from environment or use defaults
 US_VERSION = os.environ.get("POLICYENGINE_US_VERSION", "1.562.3")
@@ -94,14 +95,18 @@ def run_simulation(params: dict) -> dict:
 
     configure_logfire()
 
+    # We deliberately avoid sending full ``params`` or ``result`` blobs to
+    # Logfire: both can embed signed URLs, reform parameter trees with
+    # sensitive policy details, or result payloads large enough to blow the
+    # span attribute size budget. The redacted summary keeps correlation
+    # traceability via run_id while leaving the heavy payload in memory.
+    redacted_params = redact_params_for_logging(params)
     try:
         with logfire.span(
             "run_simulation",
-            input_params=params,
-        ) as span:
-            result = run_simulation_impl(params)
-            span.set_attribute("output_result", result)
-            return result
+            **redacted_params,
+        ):
+            return run_simulation_impl(params)
     finally:
         logfire.force_flush()
 
@@ -123,13 +128,12 @@ def run_budget_window_batch(params: dict) -> dict:
 
     configure_logfire()
 
+    redacted_params = redact_params_for_logging(params)
     try:
         with logfire.span(
             "run_budget_window_batch",
-            input_params=params,
-        ) as span:
-            result = run_budget_window_batch_impl(params)
-            span.set_attribute("output_result", result)
-            return result
+            **redacted_params,
+        ):
+            return run_budget_window_batch_impl(params)
     finally:
         logfire.force_flush()
