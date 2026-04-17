@@ -277,15 +277,77 @@ def test_run_budget_window_batch_impl_marks_failure(mock_batch_modal):
 
     assert result["status"] == "failed"
     assert result["failed_years"] == ["2026"]
-    assert result["error"] == "child failed"
+    # Error body is redacted (#453); message must not leak the raw exception.
+    assert result["error"].startswith("Simulation failed")
+    assert "correlation_id=" in result["error"]
+    assert "child failed" not in result["error"]
     assert result["running_years"] == []
     assert result["child_jobs"]["2027"]["status"] == "cancelled"
-    assert result["child_jobs"]["2027"]["error"] == "child failed"
+    assert result["child_jobs"]["2027"]["error"].startswith("Simulation failed")
     assert state is not None
     assert state.status == "failed"
-    assert state.error == "child failed"
+    assert state.error.startswith("Simulation failed")
     assert state.running_years == []
     assert state.child_jobs["2027"].status == "cancelled"
+
+
+def test_scheduler_sleep_exponentially_backs_off_then_resets_on_progress(
+    monkeypatch, mock_batch_modal
+):
+    """When every poll sees nothing resolve the runner should sleep with
+    increasing intervals, capped at the configured max. Any progress in a
+    subsequent poll should reset the cadence to the initial interval.
+    """
+
+    request, payload = _build_parent_payload(window_size=1)
+    _seed_parent_batch(request, mock_batch_modal["parent_call_id"])
+
+    tracker = SpawnTracker()
+    run_simulation = MockRunSimulationFunction(
+        tracker=tracker,
+        results_by_year={
+            "2026": [
+                TimeoutError(),
+                TimeoutError(),
+                TimeoutError(),
+                TimeoutError(),
+                {
+                    "budget": {
+                        "tax_revenue_impact": 10,
+                        "state_tax_revenue_impact": 3,
+                        "benefit_spending_impact": 5,
+                        "budgetary_impact": 15,
+                    }
+                },
+            ],
+        },
+        call_registry=mock_batch_modal["call_registry"],
+    )
+    mock_batch_modal["functions"][
+        ("policyengine-simulation-us1-500-0-uk2-66-0", "run_simulation")
+    ] = run_simulation
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(scheduler_module.time, "sleep", sleeps.append)
+
+    runner = scheduler_module.BudgetWindowBatchRunner(
+        context=scheduler_module.BudgetWindowBatchContext(
+            batch_job_id=mock_batch_modal["parent_call_id"],
+            request=request,
+            resolved_version="1.500.0",
+            resolved_app_name="policyengine-simulation-us1-500-0-uk2-66-0",
+            bundle=PolicyEngineBundle(model_version="1.500.0"),
+            raw_params=payload,
+        ),
+        poll_interval_seconds=0.5,
+        poll_interval_max_seconds=4.0,
+        poll_interval_backoff_factor=2.0,
+    )
+
+    runner.run()
+
+    # We expect 4 sleeps from the 4 TimeoutError probes: 0.5, 1.0, 2.0, 4.0.
+    assert sleeps == [0.5, 1.0, 2.0, 4.0]
 
 
 def test_run_budget_window_batch_impl_fails_on_malformed_child_result(
@@ -319,10 +381,11 @@ def test_run_budget_window_batch_impl_fails_on_malformed_child_result(
 
     assert result["status"] == "failed"
     assert result["failed_years"] == ["2026"]
-    assert (
-        result["error"]
-        == "Malformed budget-window child result: missing numeric budget.tax_revenue_impact"
-    )
+    # The raw "Malformed ..." message is logged server-side but only a
+    # redacted correlated message reaches the caller (#453).
+    assert result["error"].startswith("Simulation failed")
+    assert "correlation_id=" in result["error"]
+    assert "Malformed" not in result["error"]
     assert state is not None
     assert state.status == "failed"
     assert state.child_jobs["2026"].status == "failed"

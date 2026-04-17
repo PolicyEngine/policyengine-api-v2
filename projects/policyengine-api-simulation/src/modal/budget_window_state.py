@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 
 import modal
@@ -15,6 +16,10 @@ from src.modal.gateway.models import (
     BudgetWindowResult,
     PolicyEngineBundle,
 )
+
+logger = logging.getLogger(__name__)
+
+_UNKNOWN_CHILD_JOB_ID = "unknown"
 
 BUDGET_WINDOW_JOB_DICT_NAME = "simulation-api-budget-window-jobs"
 BUDGET_WINDOW_JOB_SEED_DICT_NAME = "simulation-api-budget-window-job-seeds"
@@ -129,6 +134,34 @@ def mark_child_started(
     return _touch(state)
 
 
+def _existing_child_or_sentinel(
+    state: BudgetWindowBatchState, *, year: str
+) -> BatchChildJobStatus:
+    """Return the tracked child for ``year`` or synthesise a sentinel.
+
+    Callers (``mark_child_completed`` / ``mark_child_failed``) used to index
+    ``state.child_jobs[year]`` directly which would raise ``KeyError`` if
+    transition helpers were invoked out of order (e.g., after recovery from
+    a dropped ``mark_child_started`` due to a crash between spawn and seed
+    persistence). In that unusual case we'd rather surface a redacted
+    terminal state with a synthetic job id than abort the whole batch. The
+    anomaly is logged at WARNING so operators can investigate separately.
+    """
+    child = state.child_jobs.get(year)
+    if child is not None:
+        return child
+
+    logger.warning(
+        "Transitioning child state for year %s with no prior child_jobs entry;"
+        " synthesising a sentinel job id",
+        year,
+        extra={"year": year, "batch_job_id": state.batch_job_id},
+    )
+    sentinel = BatchChildJobStatus(job_id=_UNKNOWN_CHILD_JOB_ID, status="pending")
+    state.child_jobs[year] = sentinel
+    return sentinel
+
+
 def mark_child_completed(
     state: BudgetWindowBatchState,
     *,
@@ -140,7 +173,7 @@ def mark_child_completed(
     if year not in state.completed_years:
         state.completed_years.append(year)
 
-    child = state.child_jobs[year]
+    child = _existing_child_or_sentinel(state, year=year)
     state.child_jobs[year] = BatchChildJobStatus(
         job_id=child.job_id,
         status="complete",
@@ -160,7 +193,7 @@ def mark_child_failed(
     if year not in state.failed_years:
         state.failed_years.append(year)
 
-    child = state.child_jobs[year]
+    child = _existing_child_or_sentinel(state, year=year)
     state.child_jobs[year] = BatchChildJobStatus(
         job_id=child.job_id,
         status="failed",

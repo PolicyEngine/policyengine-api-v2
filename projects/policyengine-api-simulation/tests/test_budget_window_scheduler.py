@@ -1,4 +1,11 @@
-"""Semi-integration coverage for budget-window gateway and worker seams."""
+"""Unit coverage for the budget-window scheduler wiring.
+
+Despite the previous filename (``test_budget_window_semi_integration.py``),
+nothing in this file talks to a real Modal control plane: we monkey-patch
+the ``modal`` module with in-memory fakes and run the scheduler against
+those fakes. Renamed to reflect the actual scope (#457). Real Modal
+integration tests live under ``tests/integration/`` and are skipped by
+default."""
 
 from __future__ import annotations
 

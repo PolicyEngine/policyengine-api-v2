@@ -29,8 +29,23 @@ from src.modal.budget_window_state import (
     put_batch_job_seed,
     put_batch_job_state,
 )
+from src.modal.gateway.errors import log_and_redact_exception
 
-POLL_INTERVAL_SECONDS = 0.1
+# Polling tuning. The runner busy-loops across child FunctionCall.get(timeout=0)
+# probes; when no child resolved we sleep before the next probe to stop the
+# Modal control-plane from getting hammered. We start aggressive (0.5s) so
+# fast child runs don't inflate end-to-end latency, then double up to 30s so a
+# sluggish child doesn't keep the parent container hot polling. A blocking
+# FunctionCall.get(timeout=...) would be even better, but its interaction with
+# max_parallel means we'd have to juggle per-year deadlines and give up early
+# termination on child failure; the exponential walk keeps the control flow
+# simple while matching Modal's recommended polling cadence.
+POLL_INTERVAL_INITIAL_SECONDS = 0.5
+POLL_INTERVAL_MAX_SECONDS = 30.0
+POLL_INTERVAL_BACKOFF_FACTOR = 2.0
+# Retained for backward compatibility with callers that imported the original
+# constant; new code should use the initial/max pair above.
+POLL_INTERVAL_SECONDS = POLL_INTERVAL_INITIAL_SECONDS
 
 
 def serialize_batch_status(state) -> dict[str, Any]:
@@ -59,10 +74,16 @@ class BudgetWindowBatchRunner:
         context: BudgetWindowBatchContext,
         *,
         modal_module=None,
-        poll_interval_seconds: float = POLL_INTERVAL_SECONDS,
+        poll_interval_seconds: float = POLL_INTERVAL_INITIAL_SECONDS,
+        poll_interval_max_seconds: float = POLL_INTERVAL_MAX_SECONDS,
+        poll_interval_backoff_factor: float = POLL_INTERVAL_BACKOFF_FACTOR,
     ):
         self.context = context
         self.modal = modal if modal_module is None else modal_module
+        self.poll_interval_initial_seconds = poll_interval_seconds
+        self.poll_interval_max_seconds = poll_interval_max_seconds
+        self.poll_interval_backoff_factor = poll_interval_backoff_factor
+        # Kept for tests that still read this attribute.
         self.poll_interval_seconds = poll_interval_seconds
         self.state = load_or_create_batch_state(context)
         self.child_func = self.modal.Function.from_name(
@@ -75,13 +96,22 @@ class BudgetWindowBatchRunner:
         mark_batch_running(self.state)
         put_batch_job_state(self.state)
 
+        # Exponential backoff: reset on any progress, double on empty polls.
+        current_sleep = self.poll_interval_initial_seconds
+
         while self.has_pending_work():
             self.spawn_until_capacity()
             progress_made = self.poll_running_children_once()
             if self.state.status == "failed":
                 return serialize_batch_status(self.state)
             if self.state.running_years and not progress_made:
-                time.sleep(self.poll_interval_seconds)
+                time.sleep(current_sleep)
+                current_sleep = min(
+                    current_sleep * self.poll_interval_backoff_factor,
+                    self.poll_interval_max_seconds,
+                )
+            elif progress_made:
+                current_sleep = self.poll_interval_initial_seconds
 
         return self.complete_batch()
 
@@ -122,9 +152,17 @@ class BudgetWindowBatchRunner:
             except TimeoutError:
                 continue
             except Exception as exc:
+                redacted = log_and_redact_exception(
+                    exc,
+                    scope="budget_window_child_call",
+                    context={
+                        "batch_job_id": self.context.batch_job_id,
+                        "simulation_year": simulation_year,
+                    },
+                )
                 self.fail_batch_for_child_error(
                     simulation_year=simulation_year,
-                    error=str(exc),
+                    error=redacted,
                 )
                 return False
 
@@ -134,9 +172,17 @@ class BudgetWindowBatchRunner:
                     child_result=child_result,
                 )
             except Exception as exc:
+                redacted = log_and_redact_exception(
+                    exc,
+                    scope="budget_window_child_result_parsing",
+                    context={
+                        "batch_job_id": self.context.batch_job_id,
+                        "simulation_year": simulation_year,
+                    },
+                )
                 self.fail_batch_for_child_error(
                     simulation_year=simulation_year,
-                    error=str(exc),
+                    error=redacted,
                 )
                 return False
 

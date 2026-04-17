@@ -41,3 +41,10 @@ pythonpath = [
 ]
 
 testpaths = ["tests"]
+
+# Skip real-Modal integration smoke tests unless the operator explicitly
+# opts in with ``-m integration``. The default test run stays hermetic.
+addopts = "-m 'not integration'"
+markers = [
+  "integration: runs against a real (ephemeral) Modal deployment",
+]

@@ -156,17 +156,19 @@ class TestSimulationRequest:
         assert request.country == "uk"
         assert request.version == "1.0.0"
 
-    def test_simulation_request_allows_extra_fields(self):
+    def test_simulation_request_accepts_documented_simulation_fields(self):
         """
-        Given extra fields (reform, region, etc.)
+        Given the documented simulation fields (reform, region, data, ...)
         When creating a SimulationRequest
-        Then the model accepts the extra fields.
+        Then the model accepts and preserves them.
         """
         # Given
         data = {
             "country": "us",
             "region": "enhanced_us",
             "reform": {"some.parameter": {"2024-01-01": True}},
+            "data": "enhanced_cps_2024",
+            "scope": "macro",
         }
 
         # When
@@ -174,10 +176,81 @@ class TestSimulationRequest:
 
         # Then
         assert request.country == "us"
-        # Extra fields should be accessible via model_dump
-        dumped = request.model_dump()
+        dumped = request.model_dump(exclude_none=True)
         assert dumped["region"] == "enhanced_us"
         assert dumped["reform"] == {"some.parameter": {"2024-01-01": True}}
+        assert dumped["data"] == "enhanced_cps_2024"
+        assert dumped["scope"] == "macro"
+
+    def test_simulation_request_rejects_unknown_fields(self):
+        """Unknown fields should fail fast with ``extra="forbid"``."""
+        with pytest.raises(ValidationError):
+            SimulationRequest(country="us", dataset="enhanced_cps_2024")
+        with pytest.raises(ValidationError):
+            SimulationRequest(country="us", mystery_flag=True)
+
+    def test_simulation_request_rejects_oversized_payload(self):
+        """Payloads that exceed the gateway max should 422 before Pydantic
+        allocates proxy objects for the nested reform dict."""
+        giant_reform = {
+            f"mock.parameter[{i}]": {"2024-01-01": i} for i in range(10_000)
+        }
+        with pytest.raises(ValidationError, match="too large"):
+            SimulationRequest(country="us", reform=giant_reform)
+
+    def test_simulation_request_accepts_payload_just_below_256kb(self):
+        """256 KB boundary (#450): a payload just below the cap must be
+        accepted. We build a reform dict whose JSON encoding is ~256_100
+        bytes before adding the ``country`` key, then prune until just under
+        the 262_144 byte limit."""
+        import json
+
+        from src.modal.gateway.models import MAX_GATEWAY_REQUEST_BYTES
+
+        # Each entry in this shape encodes to roughly 40 bytes of JSON. We
+        # build a generous reform then trim the last few entries until the
+        # total is safely under the cap.
+        reform = {f"mock.parameter[{i}]": {"2024-01-01": i} for i in range(6_000)}
+        payload = {"country": "us", "reform": reform}
+
+        while len(json.dumps(payload, default=str)) > MAX_GATEWAY_REQUEST_BYTES - 200:
+            reform.popitem()
+
+        encoded_size = len(json.dumps(payload, default=str))
+        assert encoded_size < MAX_GATEWAY_REQUEST_BYTES, (
+            f"Test setup produced {encoded_size} bytes, "
+            f"expected < {MAX_GATEWAY_REQUEST_BYTES}"
+        )
+
+        # Must not raise — this is the just-under-cap happy path.
+        request = SimulationRequest(**payload)
+        assert request.country == "us"
+        assert len(request.reform) == len(reform)
+
+    def test_simulation_request_rejects_payload_just_above_256kb(self):
+        """The cap is strict: a payload that crosses 262_144 bytes by even a
+        few bytes should be rejected with a ``too large`` ValidationError."""
+        import json
+
+        from src.modal.gateway.models import MAX_GATEWAY_REQUEST_BYTES
+
+        # Generate enough entries to definitely exceed the cap, then trim to
+        # just a few bytes above it.
+        reform = {f"mock.parameter[{i}]": {"2024-01-01": i} for i in range(12_000)}
+        payload = {"country": "us", "reform": reform}
+
+        # Trim down to just above the cap (within 200 bytes).
+        while len(json.dumps(payload, default=str)) > MAX_GATEWAY_REQUEST_BYTES + 200:
+            reform.popitem()
+
+        encoded_size = len(json.dumps(payload, default=str))
+        assert encoded_size > MAX_GATEWAY_REQUEST_BYTES, (
+            f"Test setup produced {encoded_size} bytes, "
+            f"expected > {MAX_GATEWAY_REQUEST_BYTES}"
+        )
+
+        with pytest.raises(ValidationError, match="too large"):
+            SimulationRequest(**payload)
 
     def test_simulation_request_accepts_typed_telemetry_envelope(self):
         """

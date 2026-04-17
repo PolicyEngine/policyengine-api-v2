@@ -2,6 +2,7 @@
 Pydantic models for the Gateway API.
 """
 
+import json
 from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -9,33 +10,114 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from src.modal.telemetry import TelemetryEnvelope
 
 
+# Hard cap on request body size (bytes). SimulationOptions + telemetry + any
+# reform/baseline parameter tree should fit comfortably in ~256 KB. A hostile
+# client that tries to stream a multi-MB reform dict is rejected with 422
+# before Pydantic allocates proxy objects, which prevents memory-based DoS
+# against the gateway ASGI worker. If we discover a legitimate use case that
+# exceeds this we should add an explicit endpoint for bulk parameter upload
+# rather than relaxing the cap here.
+MAX_GATEWAY_REQUEST_BYTES = 262_144
+
+
+INTERNAL_PASSTHROUGH_FIELDS = frozenset({"_metadata"})
+
+
 def _move_internal_telemetry_alias(value):
     if not isinstance(value, dict):
         return value
-    if "telemetry" in value or "_telemetry" not in value:
-        return value
+    if "_telemetry" in value and "telemetry" not in value:
+        value = dict(value)
+        value["telemetry"] = value.pop("_telemetry")
+    return value
 
-    normalized = dict(value)
-    normalized["telemetry"] = normalized.pop("_telemetry")
-    return normalized
+
+def _strip_internal_passthrough_fields(value):
+    """Drop internal-only fields the gateway adds to payloads in flight.
+
+    When the parent batch entrypoint forwards a payload to the worker we
+    attach ``_metadata`` describing resolved routing. That enrichment is
+    consumed by :mod:`src.modal.budget_window_context`, not by the request
+    model itself. We strip it before strict validation so ``extra="forbid"``
+    keeps catching unknown fields from *callers* without breaking the
+    internal round-trip.
+    """
+
+    if not isinstance(value, dict):
+        return value
+    if not INTERNAL_PASSTHROUGH_FIELDS.intersection(value):
+        return value
+    return {
+        key: item
+        for key, item in value.items()
+        if key not in INTERNAL_PASSTHROUGH_FIELDS
+    }
+
+
+def _enforce_max_payload_size(value):
+    if not isinstance(value, dict):
+        return value
+    try:
+        encoded_length = len(json.dumps(value, default=str))
+    except TypeError:
+        # Non-JSON-serialisable values will fail later in Pydantic; size cap
+        # only guards against well-formed hostile payloads.
+        return value
+    if encoded_length > MAX_GATEWAY_REQUEST_BYTES:
+        raise ValueError(
+            f"Request body is too large ({encoded_length} bytes); the gateway "
+            f"accepts at most {MAX_GATEWAY_REQUEST_BYTES} bytes."
+        )
+    return value
 
 
 class GatewayRequestBase(BaseModel):
-    """Base request model that preserves internal telemetry aliasing."""
+    """Base request model with strict passthrough of documented fields only.
+
+    All fields that a caller may legitimately supply are declared explicitly:
+    fields consumed by the gateway router (``country``, ``version``,
+    ``telemetry``) plus every field the downstream ``SimulationOptions``
+    worker model accepts. Unknown fields are rejected (``extra="forbid"``)
+    so typos and adversarial payloads fail fast with a 422 instead of being
+    forwarded opaquely to the worker app.
+    """
 
     country: str
     version: Optional[str] = None
     telemetry: TelemetryEnvelope | None = None
 
+    # Fields forwarded to SimulationOptions on the worker side.
+    scope: Optional[str] = None
+    data: Optional[str] = None
+    time_period: Optional[str] = None
+    reform: Optional[dict[str, Any]] = None
+    baseline: Optional[dict[str, Any]] = None
+    region: Optional[str] = None
+    subsample: Optional[int] = None
+    title: Optional[str] = None
+    include_cliffs: Optional[bool] = None
+    model_version: Optional[str] = None
+    data_version: Optional[str] = None
+
     model_config = ConfigDict(
-        extra="allow",
+        extra="forbid",
         populate_by_name=True,
-    )  # Pass through all other fields
+    )
 
     @model_validator(mode="before")
     @classmethod
     def move_internal_telemetry_alias(cls, value):
         return _move_internal_telemetry_alias(value)
+
+    @model_validator(mode="before")
+    @classmethod
+    def strip_internal_passthrough_fields(cls, value):
+        return _strip_internal_passthrough_fields(value)
+
+    @model_validator(mode="before")
+    @classmethod
+    def enforce_max_payload_size(cls, value):
+        return _enforce_max_payload_size(value)
 
 
 class SimulationRequest(GatewayRequestBase):

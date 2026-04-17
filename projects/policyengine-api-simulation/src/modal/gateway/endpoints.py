@@ -6,7 +6,7 @@ import logging
 from typing import Optional
 
 import modal
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from src.modal.budget_window_state import (
     build_batch_status_response,
@@ -14,7 +14,10 @@ from src.modal.budget_window_state import (
     get_batch_job_seed,
     get_batch_job_state,
     put_batch_job_seed,
+    put_batch_job_state,
 )
+from src.modal.gateway.auth import require_auth
+from src.modal.gateway.errors import log_and_redact_exception
 from src.modal.gateway.models import (
     BudgetWindowBatchRequest,
     BudgetWindowBatchStatusResponse,
@@ -140,6 +143,7 @@ def get_app_name(country: str, version: Optional[str]) -> tuple[str, str]:
     "/simulate/economy/comparison",
     response_model=JobSubmitResponse,
     response_model_exclude_none=True,
+    dependencies=[Depends(require_auth)],
 )
 async def submit_simulation(request: SimulationRequest):
     """
@@ -196,6 +200,7 @@ async def submit_simulation(request: SimulationRequest):
     "/simulate/economy/budget-window",
     response_model=BudgetWindowBatchSubmitResponse,
     response_model_exclude_none=True,
+    dependencies=[Depends(require_auth)],
 )
 async def submit_budget_window_batch(request: BudgetWindowBatchRequest):
     """
@@ -247,6 +252,7 @@ async def submit_budget_window_batch(request: BudgetWindowBatchRequest):
     "/jobs/{job_id}",
     response_model=JobStatusResponse,
     response_model_exclude_none=True,
+    dependencies=[Depends(require_auth)],
 )
 async def get_job_status(job_id: str):
     """
@@ -272,14 +278,20 @@ async def get_job_status(job_id: str):
         )
     except TimeoutError:
         return running_job_response(job_metadata)
-    except Exception as e:
-        return failed_job_response(error=str(e), job_metadata=job_metadata)
+    except Exception as exc:
+        redacted = log_and_redact_exception(
+            exc,
+            scope="simulation_job_status",
+            context={"job_id": job_id},
+        )
+        return failed_job_response(error=redacted, job_metadata=job_metadata)
 
 
 @router.get(
     "/budget-window-jobs/{batch_job_id}",
     response_model=BudgetWindowBatchStatusResponse,
     response_model_exclude_none=True,
+    dependencies=[Depends(require_auth)],
 )
 async def get_budget_window_job_status(batch_job_id: str):
     """
@@ -304,9 +316,20 @@ async def get_budget_window_job_status(batch_job_id: str):
         result = call.get(timeout=0)
     except TimeoutError:
         return batch_status_response(build_batch_status_response(seed_state))
-    except Exception as e:
+    except Exception as exc:
+        # Persist the failure so subsequent polls don't resurrect the
+        # "submitted" status from the seed store (#448). We deliberately
+        # overwrite the main job store entry as well as the seed so either
+        # lookup path observes the terminal failed state.
+        redacted = log_and_redact_exception(
+            exc,
+            scope="budget_window_parent_call",
+            context={"batch_job_id": batch_job_id},
+        )
         seed_state.status = "failed"
-        seed_state.error = str(e)
+        seed_state.error = redacted
+        put_batch_job_state(seed_state)
+        put_batch_job_seed(seed_state)
         return batch_status_response(build_batch_status_response(seed_state))
 
     response = BudgetWindowBatchStatusResponse.model_validate(result)
