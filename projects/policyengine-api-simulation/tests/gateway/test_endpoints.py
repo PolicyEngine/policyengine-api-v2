@@ -672,7 +672,7 @@ class TestBudgetWindowBatchEndpoints:
                 "reform": {},
                 "start_year": "2026",
                 "window_size": 3,
-                "max_parallel": 4,
+                "max_parallel": 21,
             },
         )
 

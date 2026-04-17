@@ -459,7 +459,7 @@ class TestBudgetWindowBatchRequest:
                 region="us",
                 start_year="2026",
                 window_size=3,
-                max_parallel=4,
+                max_parallel=21,
             )
 
     def test_budget_window_batch_request_accepts_extra_simulation_fields(self):
