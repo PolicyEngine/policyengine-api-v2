@@ -44,7 +44,15 @@ def web_app():
     """
     from fastapi import FastAPI
 
+    from src.modal.gateway.auth import enforce_production_auth_guard
     from src.modal.gateway.endpoints import router
+
+    # Startup guard: crash the container if GATEWAY_AUTH_DISABLED is set in
+    # a production-equivalent Modal environment, or set without the
+    # explicit acknowledgement env var. This prevents the bypass from
+    # accidentally shipping to prod if a dev deploy grabs the wrong secret
+    # bundle. See gateway.auth.enforce_production_auth_guard for the rules.
+    enforce_production_auth_guard()
 
     api = FastAPI(
         title="PolicyEngine Simulation Gateway",

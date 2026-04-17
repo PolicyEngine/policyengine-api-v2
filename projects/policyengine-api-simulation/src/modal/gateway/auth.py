@@ -14,9 +14,14 @@ runtime container picks up the values injected via ``modal.Secret``:
 - ``GATEWAY_AUTH_AUDIENCE`` - Auth0 API identifier the gateway accepts
 
 For local development and unit tests the dependency can be bypassed by
-setting ``GATEWAY_AUTH_DISABLED=1``. Production deployments must leave this
-unset; the gateway returns ``503`` to callers if it is started without the
-issuer/audience configured.
+setting ``GATEWAY_AUTH_DISABLED=1``. This bypass is hard-gated by
+:func:`enforce_production_auth_guard`, which is called from the gateway
+ASGI factory at startup: it refuses to boot when ``MODAL_ENVIRONMENT`` is
+missing or looks like production, and otherwise requires an explicit
+``GATEWAY_AUTH_DISABLED_ACK=I_UNDERSTAND_THIS_IS_DEV`` acknowledgement so
+the bypass cannot be activated by a single stray env var. The gateway
+also returns ``503`` to callers if auth is enabled but the issuer/audience
+configuration is missing.
 """
 
 from __future__ import annotations
@@ -36,6 +41,16 @@ logger = logging.getLogger(__name__)
 GATEWAY_AUTH_ISSUER_ENV = "GATEWAY_AUTH_ISSUER"
 GATEWAY_AUTH_AUDIENCE_ENV = "GATEWAY_AUTH_AUDIENCE"
 GATEWAY_AUTH_DISABLED_ENV = "GATEWAY_AUTH_DISABLED"
+GATEWAY_AUTH_DISABLED_ACK_ENV = "GATEWAY_AUTH_DISABLED_ACK"
+GATEWAY_AUTH_DISABLED_ACK_VALUE = "I_UNDERSTAND_THIS_IS_DEV"
+
+# Modal injects ``MODAL_ENVIRONMENT`` into every container. Any of these
+# values are treated as production-equivalent: refuse to start the gateway
+# with auth disabled in them. If the env var is unset we also refuse,
+# because "unset" is the default state of a mis-deployed container and we
+# don't want the auth bypass to silently activate there.
+PRODUCTION_MODAL_ENVIRONMENTS = frozenset({"main", "prod", "production"})
+MODAL_ENVIRONMENT_ENV = "MODAL_ENVIRONMENT"
 
 
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -83,6 +98,75 @@ def _get_decoder() -> JWTDecoder:
 def reset_decoder_cache() -> None:
     """Clear the cached decoder. Intended for tests and process restarts."""
     _build_decoder.cache_clear()
+
+
+class AuthDisabledInProductionError(RuntimeError):
+    """Refuse to start when auth is disabled in a production-equivalent env."""
+
+
+class AuthDisabledWithoutAckError(RuntimeError):
+    """Refuse to start when auth is disabled without the explicit ACK."""
+
+
+def enforce_production_auth_guard() -> None:
+    """Validate at startup that the auth-disabled bypass is only used in dev.
+
+    Must be called from the ASGI app factory (``gateway.app.web_app``) before
+    serving any requests. The guard has three tiers so that accidental
+    production deploys cannot reach the "auth disabled" code path:
+
+    1. If ``GATEWAY_AUTH_DISABLED`` is not set, do nothing.
+    2. If set and ``MODAL_ENVIRONMENT`` is missing or looks like production
+       (``main``, ``prod``, ``production``), raise so the container crashes
+       at import time. ``modal serve`` / ``modal deploy`` surface the
+       traceback instead of silently serving an unprotected gateway.
+    3. Otherwise require an explicit acknowledgement env var
+       (``GATEWAY_AUTH_DISABLED_ACK=I_UNDERSTAND_THIS_IS_DEV``). This makes
+       the bypass impossible to set via one stray env var — an operator
+       must actively opt in.
+
+    Even when the guard passes, emit a ``CRITICAL`` log (and, if available,
+    a ``logfire.error``) so any audit of the service's logs surfaces the
+    bypass immediately.
+    """
+    if not _auth_disabled():
+        return
+
+    modal_env = os.environ.get(MODAL_ENVIRONMENT_ENV)
+    ack = os.environ.get(GATEWAY_AUTH_DISABLED_ACK_ENV, "")
+
+    if modal_env is None or modal_env.lower() in PRODUCTION_MODAL_ENVIRONMENTS:
+        raise AuthDisabledInProductionError(
+            f"Refusing to start gateway with {GATEWAY_AUTH_DISABLED_ENV}=1 "
+            f"when {MODAL_ENVIRONMENT_ENV}={modal_env!r}. "
+            "Disabling auth is only permitted in ephemeral dev environments."
+        )
+
+    if ack != GATEWAY_AUTH_DISABLED_ACK_VALUE:
+        raise AuthDisabledWithoutAckError(
+            f"Refusing to start gateway with {GATEWAY_AUTH_DISABLED_ENV}=1 "
+            f"unless {GATEWAY_AUTH_DISABLED_ACK_ENV}="
+            f"{GATEWAY_AUTH_DISABLED_ACK_VALUE} is also set."
+        )
+
+    banner = (
+        "\n"
+        "!! GATEWAY AUTH IS DISABLED !! "
+        f"MODAL_ENVIRONMENT={modal_env!r}. "
+        "This MUST NOT reach production. If you see this in prod logs, "
+        "roll back immediately."
+    )
+    logger.critical(banner)
+    try:
+        import logfire  # Local import: logfire is optional in tests.
+
+        logfire.error(
+            "gateway_auth_disabled_bypass_active",
+            modal_environment=modal_env,
+            ack_value_present=True,
+        )
+    except Exception:  # pragma: no cover - logfire optional / misconfigured
+        pass
 
 
 def require_auth(

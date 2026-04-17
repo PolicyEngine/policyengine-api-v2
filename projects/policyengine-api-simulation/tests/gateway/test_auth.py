@@ -191,3 +191,80 @@ def test__given_dependency_override__then_gated_endpoint_returns_200(
     assert body["job_id"] == "mock-job-id-123"
     assert body["country"] == "us"
     assert body["version"] == "1.500.0"
+
+
+class TestProductionAuthGuard:
+    """Tests for ``enforce_production_auth_guard`` — the startup-time check
+    that prevents ``GATEWAY_AUTH_DISABLED`` from slipping into production."""
+
+    def test__given_auth_enabled__then_guard_noops(self, monkeypatch):
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
+        monkeypatch.delenv(auth_module.MODAL_ENVIRONMENT_ENV, raising=False)
+
+        # Must not raise even without any prod env configured.
+        auth_module.enforce_production_auth_guard()
+
+    def test__given_disabled_and_modal_env_missing__then_refuses(self, monkeypatch):
+        """Unset MODAL_ENVIRONMENT is treated as production: refuse."""
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, "1")
+        monkeypatch.delenv(auth_module.MODAL_ENVIRONMENT_ENV, raising=False)
+        monkeypatch.setenv(
+            auth_module.GATEWAY_AUTH_DISABLED_ACK_ENV,
+            auth_module.GATEWAY_AUTH_DISABLED_ACK_VALUE,
+        )
+
+        with pytest.raises(auth_module.AuthDisabledInProductionError):
+            auth_module.enforce_production_auth_guard()
+
+    @pytest.mark.parametrize("prod_env", ["main", "prod", "production", "PROD"])
+    def test__given_disabled_and_prod_modal_env__then_refuses(
+        self, monkeypatch, prod_env
+    ):
+        """Named production environments reject the bypass even with ACK."""
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, "1")
+        monkeypatch.setenv(auth_module.MODAL_ENVIRONMENT_ENV, prod_env)
+        monkeypatch.setenv(
+            auth_module.GATEWAY_AUTH_DISABLED_ACK_ENV,
+            auth_module.GATEWAY_AUTH_DISABLED_ACK_VALUE,
+        )
+
+        with pytest.raises(auth_module.AuthDisabledInProductionError):
+            auth_module.enforce_production_auth_guard()
+
+    def test__given_disabled_in_dev_without_ack__then_refuses(self, monkeypatch):
+        """A single env var (``GATEWAY_AUTH_DISABLED=1``) is not enough."""
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, "1")
+        monkeypatch.setenv(auth_module.MODAL_ENVIRONMENT_ENV, "dev")
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ACK_ENV, raising=False)
+
+        with pytest.raises(auth_module.AuthDisabledWithoutAckError):
+            auth_module.enforce_production_auth_guard()
+
+    def test__given_disabled_in_dev_with_wrong_ack__then_refuses(self, monkeypatch):
+        """ACK must exactly match the magic string — truthy is not enough."""
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, "1")
+        monkeypatch.setenv(auth_module.MODAL_ENVIRONMENT_ENV, "dev")
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_DISABLED_ACK_ENV, "yes")
+
+        with pytest.raises(auth_module.AuthDisabledWithoutAckError):
+            auth_module.enforce_production_auth_guard()
+
+    def test__given_disabled_in_dev_with_correct_ack__then_allows_and_logs(
+        self, monkeypatch, caplog
+    ):
+        """The bypass is permitted but emits a CRITICAL log for audit."""
+        import logging
+
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, "1")
+        monkeypatch.setenv(auth_module.MODAL_ENVIRONMENT_ENV, "dev")
+        monkeypatch.setenv(
+            auth_module.GATEWAY_AUTH_DISABLED_ACK_ENV,
+            auth_module.GATEWAY_AUTH_DISABLED_ACK_VALUE,
+        )
+
+        with caplog.at_level(logging.CRITICAL, logger=auth_module.logger.name):
+            auth_module.enforce_production_auth_guard()
+
+        assert any(
+            "GATEWAY AUTH IS DISABLED" in record.message for record in caplog.records
+        ), f"Expected critical auth-disabled banner, got {caplog.records!r}"
