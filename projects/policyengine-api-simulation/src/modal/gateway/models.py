@@ -162,7 +162,7 @@ class BudgetWindowBatchRequest(GatewayRequestBase):
 
     MAX_YEARS: ClassVar[int] = 75
     MAX_END_YEAR: ClassVar[int] = 2099
-    MAX_PARALLEL: ClassVar[int] = 3
+    MAX_PARALLEL: ClassVar[int] = 20
 
     region: str
     start_year: str
