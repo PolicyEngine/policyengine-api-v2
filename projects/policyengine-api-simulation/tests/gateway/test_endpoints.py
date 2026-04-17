@@ -714,10 +714,16 @@ class TestBudgetWindowBatchEndpoints:
 
         first_poll = client.get(f"/budget-window-jobs/{batch_id}")
         assert first_poll.status_code == 500
-        assert first_poll.json()["status"] == "failed"
-        assert first_poll.json()["error"] == "worker crashed"
+        first_body = first_poll.json()
+        assert first_body["status"] == "failed"
+        # Error is redacted (#453); the correlation id is in the string so
+        # operators can jump from the user's report to the server-side log.
+        assert first_body["error"].startswith("Simulation failed")
+        assert "correlation_id=" in first_body["error"]
+        assert "worker crashed" not in first_body["error"]
 
         second_poll = client.get(f"/budget-window-jobs/{batch_id}")
         assert second_poll.status_code == 500, second_poll.json()
-        assert second_poll.json()["status"] == "failed"
-        assert second_poll.json()["error"] == "worker crashed"
+        second_body = second_poll.json()
+        assert second_body["status"] == "failed"
+        assert second_body["error"].startswith("Simulation failed")

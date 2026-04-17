@@ -277,13 +277,16 @@ def test_run_budget_window_batch_impl_marks_failure(mock_batch_modal):
 
     assert result["status"] == "failed"
     assert result["failed_years"] == ["2026"]
-    assert result["error"] == "child failed"
+    # Error body is redacted (#453); message must not leak the raw exception.
+    assert result["error"].startswith("Simulation failed")
+    assert "correlation_id=" in result["error"]
+    assert "child failed" not in result["error"]
     assert result["running_years"] == []
     assert result["child_jobs"]["2027"]["status"] == "cancelled"
-    assert result["child_jobs"]["2027"]["error"] == "child failed"
+    assert result["child_jobs"]["2027"]["error"].startswith("Simulation failed")
     assert state is not None
     assert state.status == "failed"
-    assert state.error == "child failed"
+    assert state.error.startswith("Simulation failed")
     assert state.running_years == []
     assert state.child_jobs["2027"].status == "cancelled"
 
@@ -378,10 +381,11 @@ def test_run_budget_window_batch_impl_fails_on_malformed_child_result(
 
     assert result["status"] == "failed"
     assert result["failed_years"] == ["2026"]
-    assert (
-        result["error"]
-        == "Malformed budget-window child result: missing numeric budget.tax_revenue_impact"
-    )
+    # The raw "Malformed ..." message is logged server-side but only a
+    # redacted correlated message reaches the caller (#453).
+    assert result["error"].startswith("Simulation failed")
+    assert "correlation_id=" in result["error"]
+    assert "Malformed" not in result["error"]
     assert state is not None
     assert state.status == "failed"
     assert state.child_jobs["2026"].status == "failed"

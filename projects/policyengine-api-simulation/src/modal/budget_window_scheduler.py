@@ -29,6 +29,7 @@ from src.modal.budget_window_state import (
     put_batch_job_seed,
     put_batch_job_state,
 )
+from src.modal.gateway.errors import log_and_redact_exception
 
 # Polling tuning. The runner busy-loops across child FunctionCall.get(timeout=0)
 # probes; when no child resolved we sleep before the next probe to stop the
@@ -151,9 +152,17 @@ class BudgetWindowBatchRunner:
             except TimeoutError:
                 continue
             except Exception as exc:
+                redacted = log_and_redact_exception(
+                    exc,
+                    scope="budget_window_child_call",
+                    context={
+                        "batch_job_id": self.context.batch_job_id,
+                        "simulation_year": simulation_year,
+                    },
+                )
                 self.fail_batch_for_child_error(
                     simulation_year=simulation_year,
-                    error=str(exc),
+                    error=redacted,
                 )
                 return False
 
@@ -163,9 +172,17 @@ class BudgetWindowBatchRunner:
                     child_result=child_result,
                 )
             except Exception as exc:
+                redacted = log_and_redact_exception(
+                    exc,
+                    scope="budget_window_child_result_parsing",
+                    context={
+                        "batch_job_id": self.context.batch_job_id,
+                        "simulation_year": simulation_year,
+                    },
+                )
                 self.fail_batch_for_child_error(
                     simulation_year=simulation_year,
-                    error=str(exc),
+                    error=redacted,
                 )
                 return False
 
