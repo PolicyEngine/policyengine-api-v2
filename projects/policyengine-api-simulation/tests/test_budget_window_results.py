@@ -50,6 +50,46 @@ def test_extract_annual_impact_rejects_malformed_child_result():
         )
 
 
+def test_sum_annual_impacts_avoids_binary_float_drift():
+    """0.1 + 0.2 + 0.3 = 0.6 exactly when accumulated in Decimal.
+
+    With float addition this sequence drifts by ~5e-17 which is enough to
+    break bit-exact deduplication on the client side. Accumulating in
+    :class:`decimal.Decimal` collapses the drift before the float downcast.
+    """
+    from src.modal.budget_window_results import sum_annual_impacts
+
+    totals = sum_annual_impacts(
+        [
+            BudgetWindowAnnualImpact(
+                year="2026",
+                taxRevenueImpact=0.1,
+                federalTaxRevenueImpact=0,
+                stateTaxRevenueImpact=0,
+                benefitSpendingImpact=0,
+                budgetaryImpact=0,
+            ),
+            BudgetWindowAnnualImpact(
+                year="2027",
+                taxRevenueImpact=0.2,
+                federalTaxRevenueImpact=0,
+                stateTaxRevenueImpact=0,
+                benefitSpendingImpact=0,
+                budgetaryImpact=0,
+            ),
+            BudgetWindowAnnualImpact(
+                year="2028",
+                taxRevenueImpact=0.3,
+                federalTaxRevenueImpact=0,
+                stateTaxRevenueImpact=0,
+                benefitSpendingImpact=0,
+                budgetaryImpact=0,
+            ),
+        ]
+    )
+    assert totals.taxRevenueImpact == 0.6
+
+
 def test_build_budget_window_result_sums_totals():
     annual_impacts = [
         BudgetWindowAnnualImpact(
