@@ -28,7 +28,7 @@ def test_create_initial_batch_state_builds_queued_years_and_run_id():
         start_year="2026",
         window_size=3,
         max_parallel=2,
-        dataset="enhanced_cps_2024",
+        data="enhanced_cps_2024",
         scope="macro",
         reform={},
         _telemetry={
@@ -52,7 +52,7 @@ def test_create_initial_batch_state_builds_queued_years_and_run_id():
     assert state.target == "general"
     assert state.years == ["2026", "2027", "2028"]
     assert state.queued_years == ["2026", "2027", "2028"]
-    assert state.request_payload["dataset"] == "enhanced_cps_2024"
+    assert state.request_payload["data"] == "enhanced_cps_2024"
     assert state.request_payload["scope"] == "macro"
     assert state.request_payload["reform"] == {}
     assert state.run_id == "batch-run-123"

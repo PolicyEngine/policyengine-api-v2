@@ -156,17 +156,19 @@ class TestSimulationRequest:
         assert request.country == "uk"
         assert request.version == "1.0.0"
 
-    def test_simulation_request_allows_extra_fields(self):
+    def test_simulation_request_accepts_documented_simulation_fields(self):
         """
-        Given extra fields (reform, region, etc.)
+        Given the documented simulation fields (reform, region, data, ...)
         When creating a SimulationRequest
-        Then the model accepts the extra fields.
+        Then the model accepts and preserves them.
         """
         # Given
         data = {
             "country": "us",
             "region": "enhanced_us",
             "reform": {"some.parameter": {"2024-01-01": True}},
+            "data": "enhanced_cps_2024",
+            "scope": "macro",
         }
 
         # When
@@ -174,10 +176,27 @@ class TestSimulationRequest:
 
         # Then
         assert request.country == "us"
-        # Extra fields should be accessible via model_dump
-        dumped = request.model_dump()
+        dumped = request.model_dump(exclude_none=True)
         assert dumped["region"] == "enhanced_us"
         assert dumped["reform"] == {"some.parameter": {"2024-01-01": True}}
+        assert dumped["data"] == "enhanced_cps_2024"
+        assert dumped["scope"] == "macro"
+
+    def test_simulation_request_rejects_unknown_fields(self):
+        """Unknown fields should fail fast with ``extra="forbid"``."""
+        with pytest.raises(ValidationError):
+            SimulationRequest(country="us", dataset="enhanced_cps_2024")
+        with pytest.raises(ValidationError):
+            SimulationRequest(country="us", mystery_flag=True)
+
+    def test_simulation_request_rejects_oversized_payload(self):
+        """Payloads that exceed the gateway max should 422 before Pydantic
+        allocates proxy objects for the nested reform dict."""
+        giant_reform = {
+            f"mock.parameter[{i}]": {"2024-01-01": i} for i in range(10_000)
+        }
+        with pytest.raises(ValidationError, match="too large"):
+            SimulationRequest(country="us", reform=giant_reform)
 
     def test_simulation_request_accepts_typed_telemetry_envelope(self):
         """
