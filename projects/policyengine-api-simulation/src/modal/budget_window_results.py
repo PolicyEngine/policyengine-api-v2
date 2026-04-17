@@ -11,12 +11,16 @@ from src.modal.gateway.models import (
     BudgetWindowTotals,
 )
 
+# The UK microsimulation has no state/province fiscal layer, so worker child
+# results for ``country="uk"`` never emit ``state_tax_revenue_impact``. The
+# parent aggregator treats it as optional with a zero default; US results are
+# expected to supply it as a real number. All other keys remain mandatory.
 REQUIRED_BUDGET_KEYS = (
     "tax_revenue_impact",
-    "state_tax_revenue_impact",
     "benefit_spending_impact",
     "budgetary_impact",
 )
+OPTIONAL_BUDGET_KEYS = ("state_tax_revenue_impact",)
 
 
 def _as_decimal(value: float | int) -> Decimal:
@@ -48,8 +52,13 @@ def extract_annual_impact(
             f"Malformed budget-window child result: missing numeric {missing}"
         )
 
-    state_tax_revenue_impact = budget["state_tax_revenue_impact"]
     tax_revenue_impact = budget["tax_revenue_impact"]
+    # UK worker results omit the state fiscal layer entirely; coerce to 0.0
+    # so the parent aggregator can still report federal/state splits with a
+    # uniform shape across countries.
+    state_tax_revenue_impact = budget.get("state_tax_revenue_impact")
+    if not isinstance(state_tax_revenue_impact, int | float):
+        state_tax_revenue_impact = 0.0
 
     return BudgetWindowAnnualImpact(
         year=simulation_year,

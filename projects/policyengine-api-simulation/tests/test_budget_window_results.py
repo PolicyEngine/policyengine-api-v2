@@ -33,6 +33,35 @@ def test_extract_annual_impact_matches_v1_shape():
     )
 
 
+def test_extract_annual_impact_defaults_state_tax_for_uk_child_result():
+    """UK worker results omit ``state_tax_revenue_impact`` because the UK
+    microsimulation has no devolved fiscal layer. The aggregator should
+    accept these results and treat the state component as zero instead of
+    failing with "missing numeric budget.state_tax_revenue_impact"."""
+
+    annual = extract_annual_impact(
+        simulation_year="2026",
+        child_result={
+            "budget": {
+                # UK payload shape: tax_revenue_impact is the full HMRC total,
+                # state_tax_revenue_impact is absent.
+                "tax_revenue_impact": 250,
+                "benefit_spending_impact": 40,
+                "budgetary_impact": 210,
+            }
+        },
+    )
+
+    assert annual == BudgetWindowAnnualImpact(
+        year="2026",
+        taxRevenueImpact=250,
+        federalTaxRevenueImpact=250,
+        stateTaxRevenueImpact=0,
+        benefitSpendingImpact=40,
+        budgetaryImpact=210,
+    )
+
+
 def test_extract_annual_impact_rejects_malformed_child_result():
     with pytest.raises(
         ValueError,
