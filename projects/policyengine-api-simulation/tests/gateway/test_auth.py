@@ -94,3 +94,100 @@ def test__given_health_endpoint__then_auth_not_required(monkeypatch):
     client = TestClient(create_gateway_app(authenticate=False))
     response = client.get("/health")
     assert response.status_code == 200
+
+
+def test__given_same_env__then_decoder_is_cached(monkeypatch):
+    """Calling ``_get_decoder`` repeatedly must return the same instance so
+    the wrapped ``PyJWKClient`` JWKS cache is reused across requests.
+    Rebuilding the decoder per request defeats the cache (#458 review)."""
+
+    monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
+    monkeypatch.setenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example/")
+    monkeypatch.setenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, "aud-caching")
+
+    auth_module.reset_decoder_cache()
+    first = auth_module._get_decoder()
+    second = auth_module._get_decoder()
+
+    assert first is second
+
+
+def test__given_rotated_audience__then_cache_returns_new_decoder(monkeypatch):
+    """Cache is keyed on issuer+audience so rotating the audience yields a
+    fresh decoder without polluting the previous one."""
+
+    monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
+    monkeypatch.setenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example/")
+
+    auth_module.reset_decoder_cache()
+
+    monkeypatch.setenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, "aud-first")
+    first = auth_module._get_decoder()
+
+    monkeypatch.setenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, "aud-second")
+    second = auth_module._get_decoder()
+
+    assert first is not second
+    assert first.audience == "aud-first"
+    assert second.audience == "aud-second"
+
+
+def test__given_repeated_requests__then_decoder_not_reinstantiated(monkeypatch):
+    """Smoke test: hitting a gated endpoint many times must not rebuild the
+    decoder. We spy on ``JWTDecoder.__init__`` and assert it runs at most
+    once across many requests."""
+
+    from fixtures.gateway.shared import create_gateway_app
+    from policyengine_fastapi.auth import jwt_decoder as jwt_decoder_module
+
+    monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
+    monkeypatch.setenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example/")
+    monkeypatch.setenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, "aud-repeat")
+
+    auth_module.reset_decoder_cache()
+
+    init_calls = {"count": 0}
+    original_init = jwt_decoder_module.JWTDecoder.__init__
+
+    def _counting_init(self, *args, **kwargs):
+        init_calls["count"] += 1
+        original_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(jwt_decoder_module.JWTDecoder, "__init__", _counting_init)
+
+    client = TestClient(create_gateway_app(authenticate=False))
+
+    for _ in range(5):
+        response = client.get("/jobs/some-id")
+        assert response.status_code == 403
+
+    assert init_calls["count"] == 1, (
+        f"Expected exactly one JWTDecoder instantiation across 5 requests, "
+        f"got {init_calls['count']}"
+    )
+
+
+def test__given_dependency_override__then_gated_endpoint_returns_200(
+    mock_modal, client: TestClient
+):
+    """Positive-path auth test: when ``app.dependency_overrides`` bypasses
+    ``require_auth`` (as real tests do), the gated endpoint returns 200 with
+    the expected payload. This guards the override path that other tests
+    rely on — if the override stops working, every gated-endpoint test would
+    start returning 403 instead of exercising real logic."""
+
+    mock_modal["dicts"]["simulation-api-us-versions"] = {
+        "latest": "1.500.0",
+        "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+    }
+
+    response = client.post(
+        "/simulate/economy/comparison",
+        json={"country": "us", "scope": "macro", "reform": {}},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["job_id"] == "mock-job-id-123"
+    assert body["country"] == "us"
+    assert body["version"] == "1.500.0"

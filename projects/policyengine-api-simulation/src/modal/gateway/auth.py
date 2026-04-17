@@ -21,6 +21,7 @@ issuer/audience configured.
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 
@@ -48,7 +49,26 @@ def _auth_disabled() -> bool:
     }
 
 
+@functools.lru_cache(maxsize=8)
+def _build_decoder(issuer: str, audience: str) -> JWTDecoder:
+    """Construct and cache a ``JWTDecoder`` keyed by issuer/audience.
+
+    The decoder wraps a ``PyJWKClient`` that caches JWKS responses internally.
+    Rebuilding the decoder on every request defeats that cache and forces a
+    live JWKS fetch per call (see PR #458 review). Caching here with
+    ``functools.lru_cache`` keeps a single decoder instance per
+    (issuer, audience) pair for the lifetime of the process, so the JWKS
+    client's own LRU cache is reused across requests.
+
+    The cache is keyed on the resolved env values so that test suites that
+    mutate ``GATEWAY_AUTH_ISSUER`` / ``GATEWAY_AUTH_AUDIENCE`` still observe
+    the right decoder without a stale instance bleeding across tests.
+    """
+    return JWTDecoder(issuer=issuer, audience=audience, auto_error=True)
+
+
 def _get_decoder() -> JWTDecoder:
+    """Resolve the cached ``JWTDecoder`` for the current env configuration."""
     issuer = os.environ.get(GATEWAY_AUTH_ISSUER_ENV)
     audience = os.environ.get(GATEWAY_AUTH_AUDIENCE_ENV)
     if not issuer or not audience:
@@ -57,7 +77,12 @@ def _get_decoder() -> JWTDecoder:
             f"{GATEWAY_AUTH_ISSUER_ENV} and {GATEWAY_AUTH_AUDIENCE_ENV} or "
             f"{GATEWAY_AUTH_DISABLED_ENV}=1 for local/test use."
         )
-    return JWTDecoder(issuer=issuer, audience=audience, auto_error=True)
+    return _build_decoder(issuer, audience)
+
+
+def reset_decoder_cache() -> None:
+    """Clear the cached decoder. Intended for tests and process restarts."""
+    _build_decoder.cache_clear()
 
 
 def require_auth(
