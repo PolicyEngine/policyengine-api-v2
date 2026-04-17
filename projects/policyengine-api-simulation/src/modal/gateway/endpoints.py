@@ -14,6 +14,7 @@ from src.modal.budget_window_state import (
     get_batch_job_seed,
     get_batch_job_state,
     put_batch_job_seed,
+    put_batch_job_state,
 )
 from src.modal.gateway.auth import require_auth
 from src.modal.gateway.models import (
@@ -310,8 +311,14 @@ async def get_budget_window_job_status(batch_job_id: str):
     except TimeoutError:
         return batch_status_response(build_batch_status_response(seed_state))
     except Exception as e:
+        # Persist the failure so subsequent polls don't resurrect the
+        # "submitted" status from the seed store (#448). We deliberately
+        # overwrite the main job store entry as well as the seed so either
+        # lookup path observes the terminal failed state.
         seed_state.status = "failed"
         seed_state.error = str(e)
+        put_batch_job_state(seed_state)
+        put_batch_job_seed(seed_state)
         return batch_status_response(build_batch_status_response(seed_state))
 
     response = BudgetWindowBatchStatusResponse.model_validate(result)

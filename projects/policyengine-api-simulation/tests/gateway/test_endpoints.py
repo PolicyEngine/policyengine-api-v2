@@ -678,3 +678,46 @@ class TestBudgetWindowBatchEndpoints:
 
         assert response.status_code == 422
         assert response.json()["detail"][0]["loc"] == ["body", "max_parallel"]
+
+    def test__given_parent_call_raises__then_failure_persists_across_polls(
+        self, mock_modal, client: TestClient
+    ):
+        """Regression test for #448: when the parent Modal FunctionCall raises
+        on .get() the first poll flipped seed state to failed in-memory only.
+        Subsequent polls re-read the unmodified seed and flipped back to
+        "submitted". Verify the mutation is persisted so the terminal state
+        survives a second poll."""
+
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+        }
+
+        submit_response = client.post(
+            "/simulate/economy/budget-window",
+            json={
+                "country": "us",
+                "region": "us",
+                "scope": "macro",
+                "reform": {},
+                "start_year": "2026",
+                "window_size": 2,
+                "max_parallel": 2,
+            },
+        )
+        batch_id = submit_response.json()["batch_job_id"]
+
+        # Arm the mocked call so .get(timeout=0) raises a non-timeout error.
+        call = mock_modal["func"].last_call
+        call.error = RuntimeError("worker crashed")
+        call.running = False
+
+        first_poll = client.get(f"/budget-window-jobs/{batch_id}")
+        assert first_poll.status_code == 500
+        assert first_poll.json()["status"] == "failed"
+        assert first_poll.json()["error"] == "worker crashed"
+
+        second_poll = client.get(f"/budget-window-jobs/{batch_id}")
+        assert second_poll.status_code == 500, second_poll.json()
+        assert second_poll.json()["status"] == "failed"
+        assert second_poll.json()["error"] == "worker crashed"
