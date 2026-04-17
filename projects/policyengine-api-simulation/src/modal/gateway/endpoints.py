@@ -6,7 +6,7 @@ import logging
 from typing import Optional
 
 import modal
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from src.modal.budget_window_state import (
     build_batch_status_response,
@@ -15,6 +15,7 @@ from src.modal.budget_window_state import (
     get_batch_job_state,
     put_batch_job_seed,
 )
+from src.modal.gateway.auth import require_auth
 from src.modal.gateway.models import (
     BudgetWindowBatchRequest,
     BudgetWindowBatchStatusResponse,
@@ -140,6 +141,7 @@ def get_app_name(country: str, version: Optional[str]) -> tuple[str, str]:
     "/simulate/economy/comparison",
     response_model=JobSubmitResponse,
     response_model_exclude_none=True,
+    dependencies=[Depends(require_auth)],
 )
 async def submit_simulation(request: SimulationRequest):
     """
@@ -196,6 +198,7 @@ async def submit_simulation(request: SimulationRequest):
     "/simulate/economy/budget-window",
     response_model=BudgetWindowBatchSubmitResponse,
     response_model_exclude_none=True,
+    dependencies=[Depends(require_auth)],
 )
 async def submit_budget_window_batch(request: BudgetWindowBatchRequest):
     """
@@ -247,6 +250,7 @@ async def submit_budget_window_batch(request: BudgetWindowBatchRequest):
     "/jobs/{job_id}",
     response_model=JobStatusResponse,
     response_model_exclude_none=True,
+    dependencies=[Depends(require_auth)],
 )
 async def get_job_status(job_id: str):
     """
@@ -280,6 +284,7 @@ async def get_job_status(job_id: str):
     "/budget-window-jobs/{batch_job_id}",
     response_model=BudgetWindowBatchStatusResponse,
     response_model_exclude_none=True,
+    dependencies=[Depends(require_auth)],
 )
 async def get_budget_window_job_status(batch_job_id: str):
     """

@@ -19,8 +19,14 @@ gateway_image = (
     .pip_install(
         "fastapi>=0.115.0",
         "pydantic>=2.0",
+        # PyJWT powers the bearer-token decoder in gateway.auth.
+        "pyjwt>=2.10.1,<3.0.0",
+        # JWTDecoder lives in the policyengine-fastapi lib; it only needs
+        # the auth module at runtime here.
+        "cryptography>=41.0.0",
     )
     .add_local_python_source("src.modal", copy=True)
+    .add_local_python_source("policyengine_fastapi", copy=True)
 )
 
 
