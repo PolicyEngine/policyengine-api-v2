@@ -30,7 +30,12 @@ from src.modal.budget_window_state import (
     put_batch_job_state,
 )
 
-POLL_INTERVAL_SECONDS = 0.1
+# Fixed parent sweep cadence. The parent only checks child FunctionCall
+# readiness; the actual compute stays in separate Modal containers. A simple
+# fixed interval is easier to reason about than exponential backoff here, and
+# with the budget-window flow designed to fan out many children over time we do
+# not want one quick completion to reset the parent into hot polling.
+POLL_INTERVAL_SECONDS = 2.0
 
 
 def serialize_batch_status(state) -> dict[str, Any]:
