@@ -268,3 +268,92 @@ class TestProductionAuthGuard:
         assert any(
             "GATEWAY AUTH IS DISABLED" in record.message for record in caplog.records
         ), f"Expected critical auth-disabled banner, got {caplog.records!r}"
+
+
+class TestAuthConfiguredGuard:
+    """``enforce_auth_configured_guard`` crashes the ASGI factory at boot
+    when auth is enabled but issuer/audience env vars are missing."""
+
+    def test__given_auth_disabled__then_guard_noops(self, monkeypatch):
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, "1")
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, raising=False)
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, raising=False)
+
+        auth_module.enforce_auth_configured_guard()
+
+    def test__given_issuer_missing__then_raises(self, monkeypatch):
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, raising=False)
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, "aud")
+
+        with pytest.raises(auth_module.AuthMisconfiguredError):
+            auth_module.enforce_auth_configured_guard()
+
+    def test__given_audience_missing__then_raises(self, monkeypatch):
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
+        monkeypatch.setenv(
+            auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://tenant.auth0.com/"
+        )
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, raising=False)
+
+        with pytest.raises(auth_module.AuthMisconfiguredError):
+            auth_module.enforce_auth_configured_guard()
+
+    def test__given_both_set__then_noops(self, monkeypatch):
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
+        monkeypatch.setenv(
+            auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://tenant.auth0.com/"
+        )
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, "aud")
+
+        auth_module.enforce_auth_configured_guard()
+
+
+class TestIssuerNormalization:
+    """``_get_decoder`` appends a trailing "/" to issuer values that lack
+    one, so Auth0's ``iss`` claim and JWKS URL construction line up."""
+
+    def test__given_issuer_without_trailing_slash__then_decoder_receives_slash(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv(
+            auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://tenant.auth0.com"
+        )
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, "aud")
+        auth_module.reset_decoder_cache()
+
+        captured = {}
+
+        def fake_builder(issuer, audience):
+            captured["issuer"] = issuer
+            captured["audience"] = audience
+            return object()
+
+        monkeypatch.setattr(auth_module, "_build_decoder", fake_builder)
+
+        auth_module._get_decoder()
+
+        assert captured["issuer"] == "https://tenant.auth0.com/"
+        assert captured["audience"] == "aud"
+
+    def test__given_issuer_with_trailing_slash__then_decoder_receives_unchanged(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv(
+            auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://tenant.auth0.com/"
+        )
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, "aud")
+        auth_module.reset_decoder_cache()
+
+        captured = {}
+
+        def fake_builder(issuer, audience):
+            captured["issuer"] = issuer
+            captured["audience"] = audience
+            return object()
+
+        monkeypatch.setattr(auth_module, "_build_decoder", fake_builder)
+
+        auth_module._get_decoder()
+
+        assert captured["issuer"] == "https://tenant.auth0.com/"
