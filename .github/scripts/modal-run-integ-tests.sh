@@ -23,22 +23,43 @@ US_VERSION="${3:-}"
 ISSUER="${GATEWAY_AUTH_ISSUER%/}"
 TOKEN_URL="$ISSUER/oauth/token"
 
-echo "Requesting client_credentials access token from $TOKEN_URL"
-TOKEN_RESPONSE=$(
-  curl --fail --silent --show-error \
-    --request POST "$TOKEN_URL" \
-    --header "content-type: application/json" \
-    --data @- <<JSON
-{
-  "client_id": "$GATEWAY_AUTH_CLIENT_ID",
-  "client_secret": "$GATEWAY_AUTH_CLIENT_SECRET",
-  "audience": "$GATEWAY_AUTH_AUDIENCE",
-  "grant_type": "client_credentials"
-}
-JSON
+# Build the token-request JSON with Python so that any ", \, or newline in
+# the client secret is encoded correctly (Auth0-generated secrets are
+# random strings that routinely contain characters that break a shell
+# heredoc).
+TOKEN_REQUEST_JSON=$(
+  CLIENT_ID="$GATEWAY_AUTH_CLIENT_ID" \
+  CLIENT_SECRET="$GATEWAY_AUTH_CLIENT_SECRET" \
+  AUDIENCE="$GATEWAY_AUTH_AUDIENCE" \
+  python3 -c '
+import json, os
+print(json.dumps({
+    "client_id": os.environ["CLIENT_ID"],
+    "client_secret": os.environ["CLIENT_SECRET"],
+    "audience": os.environ["AUDIENCE"],
+    "grant_type": "client_credentials",
+}))
+'
 )
 
-ACCESS_TOKEN=$(printf '%s' "$TOKEN_RESPONSE" | python3 -c 'import json, sys; print(json.load(sys.stdin)["access_token"])')
+echo "Requesting client_credentials access token from $TOKEN_URL"
+TOKEN_RESPONSE=$(
+  curl --fail-with-body --silent --show-error \
+    --request POST "$TOKEN_URL" \
+    --header "content-type: application/json" \
+    --data-binary "$TOKEN_REQUEST_JSON"
+)
+
+ACCESS_TOKEN=$(
+  printf '%s' "$TOKEN_RESPONSE" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+token = data.get("access_token")
+if not token:
+    sys.exit(f"Auth0 response missing access_token: {data}")
+print(token)
+'
+)
 if [ -z "$ACCESS_TOKEN" ]; then
   echo "Failed to extract access_token from Auth0 response" >&2
   exit 1
