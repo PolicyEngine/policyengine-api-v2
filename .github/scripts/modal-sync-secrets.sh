@@ -25,4 +25,20 @@ if [ -n "${GCP_CREDENTIALS_JSON:-}" ]; then
     --force || true
 fi
 
+# Sync gateway auth secret. The gateway container consumes issuer+audience to
+# validate bearer tokens; client_id/secret are stored alongside so rotating the
+# Auth0 M2M app updates every consumer from one place.
+if [ -n "${GATEWAY_AUTH_ISSUER:-}" ] \
+  && [ -n "${GATEWAY_AUTH_AUDIENCE:-}" ] \
+  && [ -n "${GATEWAY_AUTH_CLIENT_ID:-}" ] \
+  && [ -n "${GATEWAY_AUTH_CLIENT_SECRET:-}" ]; then
+  uv run modal secret create gateway-auth \
+    "GATEWAY_AUTH_ISSUER=$GATEWAY_AUTH_ISSUER" \
+    "GATEWAY_AUTH_AUDIENCE=$GATEWAY_AUTH_AUDIENCE" \
+    "GATEWAY_AUTH_CLIENT_ID=$GATEWAY_AUTH_CLIENT_ID" \
+    "GATEWAY_AUTH_CLIENT_SECRET=$GATEWAY_AUTH_CLIENT_SECRET" \
+    --env="$MODAL_ENV" \
+    --force || true
+fi
+
 echo "Modal secrets synced"

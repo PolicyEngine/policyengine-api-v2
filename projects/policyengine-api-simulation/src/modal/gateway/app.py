@@ -13,6 +13,12 @@ import modal
 # Stable app name - this should rarely change
 app = modal.App("policyengine-simulation-gateway")
 
+# Injects GATEWAY_AUTH_ISSUER, GATEWAY_AUTH_AUDIENCE, GATEWAY_AUTH_CLIENT_ID,
+# and GATEWAY_AUTH_CLIENT_SECRET. Only the issuer and audience are consumed
+# by this container (see gateway.auth); the client id/secret are kept in the
+# same secret so a single rotation updates every consumer at once.
+gateway_auth_secret = modal.Secret.from_name("gateway-auth")
+
 # Lightweight image for gateway - no heavy dependencies
 gateway_image = (
     modal.Image.debian_slim(python_version="3.13")
@@ -30,7 +36,7 @@ gateway_image = (
 )
 
 
-@app.function(image=gateway_image)
+@app.function(image=gateway_image, secrets=[gateway_auth_secret])
 @modal.asgi_app()
 def web_app():
     """
