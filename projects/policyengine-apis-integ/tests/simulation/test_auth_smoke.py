@@ -1,9 +1,10 @@
 """Authenticated smoke tests that must pass in both beta and prod.
 
 These tests assert the end-to-end auth wiring is functional: the gateway
-has the ``gateway-auth`` Modal secret attached, the JWKS-fetch and token
-verification work against the configured Auth0 tenant, and the test
-harness can mint a bearer token that the gateway accepts.
+has the ``gateway-auth`` Modal secret attached with issuer/audience
+configuration, the JWKS-fetch and token verification work against the
+configured Auth0 tenant, and the test harness can mint a bearer token
+that the gateway accepts.
 
 They intentionally do NOT use ``@pytest.mark.beta_only`` so they run in the
 prod deployment job too. Without an auth test in the prod integ suite, a
