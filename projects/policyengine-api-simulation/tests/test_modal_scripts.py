@@ -206,6 +206,72 @@ class TestModalSyncSecrets:
         )
         assert result.returncode != 0, "Should fail without GH environment"
 
+    def test_fails_when_gateway_auth_vars_missing(self):
+        """Should fail before touching Modal when auth config is absent."""
+        env = os.environ.copy()
+        for key in (
+            "GATEWAY_AUTH_ISSUER",
+            "GATEWAY_AUTH_AUDIENCE",
+            "GATEWAY_AUTH_CLIENT_ID",
+            "GATEWAY_AUTH_CLIENT_SECRET",
+        ):
+            env.pop(key, None)
+
+        result = subprocess.run(
+            ["bash", str(self.script), "staging", "beta"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert result.returncode != 0
+        assert "Missing required GATEWAY_AUTH_* GitHub secrets." in result.stderr
+        assert "Refusing to deploy because auth config would drift" in result.stderr
+
+    def test_creates_gateway_secret_without_client_credentials(self, tmp_path):
+        """Should only sync issuer/audience into the gateway Modal secret."""
+        uv_calls_log = tmp_path / "uv_calls.log"
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
+        fake_uv = fake_bin / "uv"
+        fake_uv.write_text(
+            "#!/bin/bash\n"
+            'printf "%s\\n" "$*" >> "$UV_CALLS_LOG"\n'
+        )
+        fake_uv.chmod(0o755)
+
+        env = os.environ.copy()
+        env.update(
+            {
+                "PATH": f"{fake_bin}:{env['PATH']}",
+                "UV_CALLS_LOG": str(uv_calls_log),
+                "GATEWAY_AUTH_ISSUER": "https://tenant.auth0.com",
+                "GATEWAY_AUTH_AUDIENCE": "https://simulation-api-beta.policyengine.org",
+                "GATEWAY_AUTH_CLIENT_ID": "client-id",
+                "GATEWAY_AUTH_CLIENT_SECRET": "client-secret",
+            }
+        )
+
+        result = subprocess.run(
+            ["bash", str(self.script), "staging", "beta"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert result.returncode == 0, result.stderr
+        calls = uv_calls_log.read_text()
+        assert "run modal secret create gateway-auth" in calls
+        assert (
+            "GATEWAY_AUTH_ISSUER=https://tenant.auth0.com/" in calls
+        ), calls
+        assert (
+            "GATEWAY_AUTH_AUDIENCE=https://simulation-api-beta.policyengine.org"
+            in calls
+        ), calls
+        assert "GATEWAY_AUTH_CLIENT_ID" not in calls
+        assert "GATEWAY_AUTH_CLIENT_SECRET" not in calls
+
 
 class TestModalDeployApp:
     """Tests for modal-deploy-app.sh"""

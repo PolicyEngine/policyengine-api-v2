@@ -92,6 +92,13 @@ def _get_decoder() -> JWTDecoder:
             f"{GATEWAY_AUTH_ISSUER_ENV} and {GATEWAY_AUTH_AUDIENCE_ENV} or "
             f"{GATEWAY_AUTH_DISABLED_ENV}=1 for local/test use."
         )
+    # The verifier expects issuer to end with "/" so that Auth0's `iss`
+    # claim matches and the JWKS URL is constructed correctly. Operators
+    # storing the secret without the trailing slash would otherwise see
+    # every gated request fail with an opaque JWKS-fetch or iss-mismatch
+    # error.
+    if not issuer.endswith("/"):
+        issuer = issuer + "/"
     return _build_decoder(issuer, audience)
 
 
@@ -167,6 +174,34 @@ def enforce_production_auth_guard() -> None:
         )
     except Exception:  # pragma: no cover - logfire optional / misconfigured
         pass
+
+
+class AuthMisconfiguredError(RuntimeError):
+    """Refuse to start when the issuer/audience env vars are missing in prod."""
+
+
+def enforce_auth_configured_guard() -> None:
+    """Crash the ASGI factory if auth is enabled but misconfigured.
+
+    Without this, a missing ``GATEWAY_AUTH_ISSUER`` / ``GATEWAY_AUTH_AUDIENCE``
+    (e.g. the ``gateway-auth`` Modal secret failed to attach, or a GH secret
+    is misspelled) surfaces only as 503s at request time from
+    :func:`require_auth`. Fail fast at container boot so Modal's deploy
+    reports the misconfiguration instead of a silently broken gateway.
+    """
+    if _auth_disabled():
+        return
+
+    issuer = os.environ.get(GATEWAY_AUTH_ISSUER_ENV)
+    audience = os.environ.get(GATEWAY_AUTH_AUDIENCE_ENV)
+    if not issuer or not audience:
+        raise AuthMisconfiguredError(
+            "Gateway auth is enabled but "
+            f"{GATEWAY_AUTH_ISSUER_ENV}/{GATEWAY_AUTH_AUDIENCE_ENV} are not set "
+            "in the container environment. Verify the 'gateway-auth' Modal "
+            "secret is attached and synced from the GATEWAY_AUTH_* GitHub "
+            "Actions secrets."
+        )
 
 
 def require_auth(
