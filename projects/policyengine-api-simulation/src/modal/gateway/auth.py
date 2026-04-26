@@ -12,6 +12,7 @@ runtime container picks up the values injected via ``modal.Secret``:
 
 - ``GATEWAY_AUTH_ISSUER`` - Auth0 issuer URL (must end with ``/``)
 - ``GATEWAY_AUTH_AUDIENCE`` - Auth0 API identifier the gateway accepts
+- ``GATEWAY_AUTH_REQUIRED`` - if truthy, missing issuer/audience is a 503
 
 For local development and unit tests the dependency can be bypassed by
 setting ``GATEWAY_AUTH_DISABLED=1``. This bypass is hard-gated by
@@ -20,8 +21,8 @@ ASGI factory at startup: it refuses to boot when ``MODAL_ENVIRONMENT`` is
 missing or looks like production, and otherwise requires an explicit
 ``GATEWAY_AUTH_DISABLED_ACK=I_UNDERSTAND_THIS_IS_DEV`` acknowledgement so
 the bypass cannot be activated by a single stray env var. The gateway
-also returns ``503`` to callers if auth is enabled but the issuer/audience
-configuration is missing.
+also returns ``503`` to callers if auth is required but the issuer/audience
+configuration is missing, or if only one of issuer/audience is present.
 """
 
 from __future__ import annotations
@@ -40,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 GATEWAY_AUTH_ISSUER_ENV = "GATEWAY_AUTH_ISSUER"
 GATEWAY_AUTH_AUDIENCE_ENV = "GATEWAY_AUTH_AUDIENCE"
+GATEWAY_AUTH_REQUIRED_ENV = "GATEWAY_AUTH_REQUIRED"
 GATEWAY_AUTH_DISABLED_ENV = "GATEWAY_AUTH_DISABLED"
 GATEWAY_AUTH_DISABLED_ACK_ENV = "GATEWAY_AUTH_DISABLED_ACK"
 GATEWAY_AUTH_DISABLED_ACK_VALUE = "I_UNDERSTAND_THIS_IS_DEV"
@@ -61,6 +63,15 @@ def _auth_disabled() -> bool:
         "1",
         "true",
         "yes",
+    }
+
+
+def _auth_required() -> bool:
+    return os.environ.get(GATEWAY_AUTH_REQUIRED_ENV, "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
     }
 
 
@@ -182,11 +193,18 @@ def require_auth(
        missing or invalid token produces a 403 (matching the underlying
        decoder's contract).
 
-    If issuer/audience env configuration is missing the dependency returns
-    503 so operators see a clear misconfiguration instead of silent bypass.
+    If issuer/audience env configuration is absent, the dependency preserves
+    the legacy public gateway behavior unless ``GATEWAY_AUTH_REQUIRED`` is
+    truthy. Partial auth configuration always returns 503 because it indicates
+    an operator intended to enable auth but shipped an incomplete secret.
     """
 
     if _auth_disabled():
+        return None
+
+    issuer = os.environ.get(GATEWAY_AUTH_ISSUER_ENV)
+    audience = os.environ.get(GATEWAY_AUTH_AUDIENCE_ENV)
+    if not issuer and not audience and not _auth_required():
         return None
 
     try:
