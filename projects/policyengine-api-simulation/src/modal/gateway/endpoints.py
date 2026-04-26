@@ -100,6 +100,7 @@ def _build_budget_window_parent_payload(
     payload = request.model_dump(
         exclude={"telemetry"},
         mode="json",
+        exclude_none=True,
     )
     payload["version"] = resolved_version
     if request.telemetry is not None:
@@ -162,6 +163,7 @@ async def submit_simulation(request: SimulationRequest):
     payload = request.model_dump(
         exclude={"version", "telemetry"},
         mode="json",
+        exclude_none=True,
     )
     run_id = request.telemetry.run_id if request.telemetry else None
     if request.telemetry is not None:

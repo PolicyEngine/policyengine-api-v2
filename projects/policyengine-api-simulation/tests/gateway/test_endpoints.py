@@ -167,6 +167,8 @@ class TestSubmitSimulationEndpoint:
             "policyengine-simulation-us1-500-0-uk2-66-0",
             "run_simulation",
         )
+        assert "time_period" not in mock_modal["func"].last_payload
+        assert "data_version" not in mock_modal["func"].last_payload
 
     def test__given_submission__then_returns_job_id_and_poll_url(
         self, mock_modal, client: TestClient
