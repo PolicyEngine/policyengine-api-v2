@@ -25,4 +25,13 @@ if [ -n "${GCP_CREDENTIALS_JSON:-}" ]; then
     --force || true
 fi
 
+# Sync gateway auth config. Empty values preserve the existing public-gateway
+# behavior unless GATEWAY_AUTH_REQUIRED is explicitly set.
+uv run modal secret create policyengine-gateway-auth \
+  "GATEWAY_AUTH_ISSUER=${GATEWAY_AUTH_ISSUER:-}" \
+  "GATEWAY_AUTH_AUDIENCE=${GATEWAY_AUTH_AUDIENCE:-}" \
+  "GATEWAY_AUTH_REQUIRED=${GATEWAY_AUTH_REQUIRED:-}" \
+  --env="$MODAL_ENV" \
+  --force || true
+
 echo "Modal secrets synced"

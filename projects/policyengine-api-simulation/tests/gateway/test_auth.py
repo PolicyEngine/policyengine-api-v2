@@ -73,11 +73,39 @@ def test__given_auth_disabled_env__then_dependency_returns_none(monkeypatch):
     assert auth_module.require_auth(token=None) is None
 
 
-def test__given_auth_misconfigured__then_dependency_raises_503(monkeypatch):
+def test__given_auth_not_configured_and_not_required__then_dependency_allows(
+    monkeypatch,
+):
+    monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
+    monkeypatch.delenv(auth_module.GATEWAY_AUTH_REQUIRED_ENV, raising=False)
+    monkeypatch.delenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, raising=False)
+    monkeypatch.delenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, raising=False)
+
+    assert auth_module.require_auth(token=None) is None
+
+
+def test__given_auth_required_and_misconfigured__then_dependency_raises_503(
+    monkeypatch,
+):
     from fastapi import HTTPException
 
     monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
+    monkeypatch.setenv(auth_module.GATEWAY_AUTH_REQUIRED_ENV, "1")
     monkeypatch.delenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, raising=False)
+    monkeypatch.delenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, raising=False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        auth_module.require_auth(token=None)
+
+    assert exc_info.value.status_code == 503
+
+
+def test__given_partial_auth_config__then_dependency_raises_503(monkeypatch):
+    from fastapi import HTTPException
+
+    monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
+    monkeypatch.delenv(auth_module.GATEWAY_AUTH_REQUIRED_ENV, raising=False)
+    monkeypatch.setenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example/")
     monkeypatch.delenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, raising=False)
 
     with pytest.raises(HTTPException) as exc_info:
