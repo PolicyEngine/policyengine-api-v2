@@ -48,6 +48,7 @@ def unauthenticated_client(monkeypatch) -> TestClient:
 
     monkeypatch.setattr(auth_module, "_get_decoder", lambda: FailingDecoder())
     monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
+    monkeypatch.setenv(auth_module.GATEWAY_AUTH_REQUIRED_ENV, "1")
     monkeypatch.setenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example/")
     monkeypatch.setenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, "aud")
 
@@ -80,6 +81,17 @@ def test__given_auth_not_configured_and_not_required__then_dependency_allows(
     monkeypatch.delenv(auth_module.GATEWAY_AUTH_REQUIRED_ENV, raising=False)
     monkeypatch.delenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, raising=False)
     monkeypatch.delenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, raising=False)
+
+    assert auth_module.require_auth(token=None) is None
+
+
+def test__given_auth_configured_but_not_required__then_dependency_allows(
+    monkeypatch,
+):
+    monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
+    monkeypatch.delenv(auth_module.GATEWAY_AUTH_REQUIRED_ENV, raising=False)
+    monkeypatch.setenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example/")
+    monkeypatch.setenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, "aud")
 
     assert auth_module.require_auth(token=None) is None
 
@@ -169,6 +181,7 @@ def test__given_repeated_requests__then_decoder_not_reinstantiated(monkeypatch):
     from policyengine_fastapi.auth import jwt_decoder as jwt_decoder_module
 
     monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
+    monkeypatch.setenv(auth_module.GATEWAY_AUTH_REQUIRED_ENV, "1")
     monkeypatch.setenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example/")
     monkeypatch.setenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, "aud-repeat")
 

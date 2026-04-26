@@ -12,7 +12,7 @@ runtime container picks up the values injected via ``modal.Secret``:
 
 - ``GATEWAY_AUTH_ISSUER`` - Auth0 issuer URL (must end with ``/``)
 - ``GATEWAY_AUTH_AUDIENCE`` - Auth0 API identifier the gateway accepts
-- ``GATEWAY_AUTH_REQUIRED`` - if truthy, missing issuer/audience is a 503
+- ``GATEWAY_AUTH_REQUIRED`` - if truthy, bearer JWT auth is enforced
 
 For local development and unit tests the dependency can be bypassed by
 setting ``GATEWAY_AUTH_DISABLED=1``. This bypass is hard-gated by
@@ -21,8 +21,8 @@ ASGI factory at startup: it refuses to boot when ``MODAL_ENVIRONMENT`` is
 missing or looks like production, and otherwise requires an explicit
 ``GATEWAY_AUTH_DISABLED_ACK=I_UNDERSTAND_THIS_IS_DEV`` acknowledgement so
 the bypass cannot be activated by a single stray env var. The gateway
-also returns ``503`` to callers if auth is required but the issuer/audience
-configuration is missing, or if only one of issuer/audience is present.
+also returns ``503`` to callers if only one of issuer/audience is present, or
+if auth is required but issuer/audience are missing.
 """
 
 from __future__ import annotations
@@ -193,10 +193,11 @@ def require_auth(
        missing or invalid token produces a 403 (matching the underlying
        decoder's contract).
 
-    If issuer/audience env configuration is absent, the dependency preserves
-    the legacy public gateway behavior unless ``GATEWAY_AUTH_REQUIRED`` is
-    truthy. Partial auth configuration always returns 503 because it indicates
-    an operator intended to enable auth but shipped an incomplete secret.
+    The gateway preserves its legacy public behavior unless
+    ``GATEWAY_AUTH_REQUIRED`` is truthy. Issuer/audience may be staged in the
+    Modal secret ahead of enforcement; setting those values alone must not
+    silently make the gateway private. Partial auth configuration always
+    returns 503 because it indicates an incomplete secret.
     """
 
     if _auth_disabled():
@@ -204,7 +205,17 @@ def require_auth(
 
     issuer = os.environ.get(GATEWAY_AUTH_ISSUER_ENV)
     audience = os.environ.get(GATEWAY_AUTH_AUDIENCE_ENV)
-    if not issuer and not audience and not _auth_required():
+    if bool(issuer) != bool(audience):
+        logger.error(
+            "Gateway auth partially configured: issuer_present=%s audience_present=%s",
+            bool(issuer),
+            bool(audience),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Gateway authentication is not configured.",
+        )
+    if not _auth_required():
         return None
 
     try:
