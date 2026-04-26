@@ -311,6 +311,40 @@ class TestSubmitSimulationEndpoint:
             == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3"
         )
 
+    def test__given_submission_with_runtime_bundle__then_accepts_internal_provenance(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+        }
+
+        request_body = {
+            "country": "us",
+            "scope": "macro",
+            "reform": {},
+            "data": "enhanced_cps_2024",
+            "data_version": "1.78.2",
+            "_runtime_bundle": {
+                "model_version": "1.500.0",
+                "data_version": "1.78.2",
+            },
+            "_metadata": {"process_id": "process-123"},
+        }
+
+        response = client.post("/simulate/economy/comparison", json=request_body)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["policyengine_bundle"] == {
+            "model_version": "1.500.0",
+            "data_version": "1.78.2",
+            "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
+        }
+        assert mock_modal["func"].last_payload["data_version"] == "1.78.2"
+        assert "_runtime_bundle" not in mock_modal["func"].last_payload
+        assert "_metadata" not in mock_modal["func"].last_payload
+
     def test__given_submission_with_unknown_alias_data__then_bundle_dataset_is_preserved(
         self, mock_modal, client: TestClient
     ):

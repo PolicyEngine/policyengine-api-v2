@@ -73,6 +73,7 @@ def _build_policyengine_bundle(
         resolved_dataset = None
     return PolicyEngineBundle(
         model_version=resolved_version,
+        data_version=payload.get("data_version"),
         dataset=resolved_dataset,
     )
 
