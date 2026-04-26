@@ -20,7 +20,7 @@ from src.modal.telemetry import TelemetryEnvelope
 MAX_GATEWAY_REQUEST_BYTES = 262_144
 
 
-INTERNAL_PASSTHROUGH_FIELDS = frozenset({"_metadata"})
+INTERNAL_PASSTHROUGH_FIELDS = frozenset({"_metadata", "_runtime_bundle"})
 
 
 def _move_internal_telemetry_alias(value):
@@ -35,12 +35,11 @@ def _move_internal_telemetry_alias(value):
 def _strip_internal_passthrough_fields(value):
     """Drop internal-only fields the gateway adds to payloads in flight.
 
-    When the parent batch entrypoint forwards a payload to the worker we
-    attach ``_metadata`` describing resolved routing. That enrichment is
-    consumed by :mod:`src.modal.budget_window_context`, not by the request
-    model itself. We strip it before strict validation so ``extra="forbid"``
-    keeps catching unknown fields from *callers* without breaking the
-    internal round-trip.
+    Parent batch entrypoints attach ``_metadata`` describing resolved routing,
+    and the v4 API attaches ``_runtime_bundle`` describing provenance that the
+    gateway returns separately. Strip those fields before strict validation so
+    ``extra="forbid"`` keeps catching unknown caller fields without breaking
+    internal round-trips.
     """
 
     if not isinstance(value, dict):
