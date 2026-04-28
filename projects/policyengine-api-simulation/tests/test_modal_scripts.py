@@ -206,6 +206,87 @@ class TestModalSyncSecrets:
         )
         assert result.returncode != 0, "Should fail without GH environment"
 
+    def test_fails_when_gateway_auth_config_is_partial(self):
+        """Should fail before touching Modal when auth config is partial."""
+        env = os.environ.copy()
+        env["GATEWAY_AUTH_ISSUER"] = "https://tenant.auth0.com"
+        env.pop("GATEWAY_AUTH_AUDIENCE", None)
+        env.pop("GATEWAY_AUTH_CLIENT_ID", None)
+        env.pop("GATEWAY_AUTH_CLIENT_SECRET", None)
+
+        result = subprocess.run(
+            ["bash", str(self.script), "staging", "beta"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert result.returncode != 0
+        assert "Gateway auth config is partial." in result.stderr
+
+    def test_fails_when_auth_required_but_gateway_auth_vars_missing(self):
+        """Required auth must refuse deploy when the GitHub secrets are absent."""
+        env = os.environ.copy()
+        env["GATEWAY_AUTH_REQUIRED"] = "1"
+        for key in (
+            "GATEWAY_AUTH_ISSUER",
+            "GATEWAY_AUTH_AUDIENCE",
+            "GATEWAY_AUTH_CLIENT_ID",
+            "GATEWAY_AUTH_CLIENT_SECRET",
+        ):
+            env.pop(key, None)
+
+        result = subprocess.run(
+            ["bash", str(self.script), "staging", "beta"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert result.returncode != 0
+        assert "GATEWAY_AUTH_REQUIRED is enabled" in result.stderr
+
+    def test_creates_gateway_secret_with_normalized_issuer(self, tmp_path):
+        """Should sync only runtime gateway values and normalize issuer."""
+        uv_calls_log = tmp_path / "uv_calls.log"
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
+        fake_uv = fake_bin / "uv"
+        fake_uv.write_text('#!/bin/bash\nprintf "%s\\n" "$*" >> "$UV_CALLS_LOG"\n')
+        fake_uv.chmod(0o755)
+
+        env = os.environ.copy()
+        env.update(
+            {
+                "PATH": f"{fake_bin}:{env['PATH']}",
+                "UV_CALLS_LOG": str(uv_calls_log),
+                "GATEWAY_AUTH_ISSUER": "https://tenant.auth0.com",
+                "GATEWAY_AUTH_AUDIENCE": "https://simulation-api-beta.policyengine.org",
+                "GATEWAY_AUTH_CLIENT_ID": "client-id",
+                "GATEWAY_AUTH_CLIENT_SECRET": "client-secret",
+                "GATEWAY_AUTH_REQUIRED": "1",
+            }
+        )
+
+        result = subprocess.run(
+            ["bash", str(self.script), "staging", "beta"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert result.returncode == 0, result.stderr
+        calls = uv_calls_log.read_text()
+        assert "run modal secret create policyengine-gateway-auth" in calls
+        assert "GATEWAY_AUTH_ISSUER=https://tenant.auth0.com/" in calls
+        assert (
+            "GATEWAY_AUTH_AUDIENCE=https://simulation-api-beta.policyengine.org"
+            in calls
+        )
+        assert "GATEWAY_AUTH_REQUIRED=1" in calls
+        assert "GATEWAY_AUTH_CLIENT_ID" not in calls
+        assert "GATEWAY_AUTH_CLIENT_SECRET" not in calls
+
 
 class TestModalDeployApp:
     """Tests for modal-deploy-app.sh"""
@@ -317,6 +398,46 @@ class TestModalRunIntegTests:
             text=True,
         )
         assert result.returncode != 0, "Should fail without base URL"
+
+    def test_fails_when_gateway_auth_config_is_partial(self):
+        """Should fail before running tests if token-mint config is partial."""
+        env = os.environ.copy()
+        env["GATEWAY_AUTH_ISSUER"] = "https://tenant.auth0.com/"
+        env.pop("GATEWAY_AUTH_AUDIENCE", None)
+        env.pop("GATEWAY_AUTH_CLIENT_ID", None)
+        env.pop("GATEWAY_AUTH_CLIENT_SECRET", None)
+
+        result = subprocess.run(
+            ["bash", str(self.script), "beta", "https://example.com"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert result.returncode != 0
+        assert "Gateway auth integration-test config is partial." in result.stderr
+
+    def test_fails_when_auth_required_but_gateway_auth_vars_missing(self):
+        """Required auth must not run tests unauthenticated."""
+        env = os.environ.copy()
+        env["GATEWAY_AUTH_REQUIRED"] = "1"
+        for key in (
+            "GATEWAY_AUTH_ISSUER",
+            "GATEWAY_AUTH_AUDIENCE",
+            "GATEWAY_AUTH_CLIENT_ID",
+            "GATEWAY_AUTH_CLIENT_SECRET",
+        ):
+            env.pop(key, None)
+
+        result = subprocess.run(
+            ["bash", str(self.script), "beta", "https://example.com"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert result.returncode != 0
+        assert "GATEWAY_AUTH_REQUIRED is enabled" in result.stderr
 
 
 class TestAllScriptsHaveShebang:

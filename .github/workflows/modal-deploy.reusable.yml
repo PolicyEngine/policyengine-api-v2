@@ -57,6 +57,8 @@ jobs:
         GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
         GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
         GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
+        GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
+        GATEWAY_AUTH_CLIENT_SECRET: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET }}
         GATEWAY_AUTH_REQUIRED: ${{ vars.GATEWAY_AUTH_REQUIRED }}
       run: ../../.github/scripts/modal-sync-secrets.sh "${{ inputs.modal_environment }}" "${{ inputs.environment }}"
 
@@ -105,4 +107,10 @@ jobs:
       run: ./scripts/generate-clients.sh
 
     - name: Run simulation integration tests
+      env:
+        GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
+        GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
+        GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
+        GATEWAY_AUTH_CLIENT_SECRET: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET }}
+        GATEWAY_AUTH_REQUIRED: ${{ vars.GATEWAY_AUTH_REQUIRED }}
       run: .github/scripts/modal-run-integ-tests.sh "${{ inputs.environment }}" "${{ needs.deploy.outputs.simulation_api_url }}" "${{ needs.deploy.outputs.us_version }}"
