@@ -103,6 +103,8 @@ def _get_decoder() -> JWTDecoder:
             f"{GATEWAY_AUTH_ISSUER_ENV} and {GATEWAY_AUTH_AUDIENCE_ENV} or "
             f"{GATEWAY_AUTH_DISABLED_ENV}=1 for local/test use."
         )
+    if not issuer.endswith("/"):
+        issuer = issuer + "/"
     return _build_decoder(issuer, audience)
 
 
@@ -117,6 +119,10 @@ class AuthDisabledInProductionError(RuntimeError):
 
 class AuthDisabledWithoutAckError(RuntimeError):
     """Refuse to start when auth is disabled without the explicit ACK."""
+
+
+class AuthMisconfiguredError(RuntimeError):
+    """Refuse to start when required auth config is absent or partial."""
 
 
 def enforce_production_auth_guard() -> None:
@@ -178,6 +184,38 @@ def enforce_production_auth_guard() -> None:
         )
     except Exception:  # pragma: no cover - logfire optional / misconfigured
         pass
+
+
+def enforce_auth_configured_guard() -> None:
+    """Crash startup when gateway auth would serve broken gated endpoints.
+
+    Rules:
+    - auth disabled: allow startup; the separate production guard handles safety.
+    - partial issuer/audience config: always refuse startup because every gated
+      endpoint would return 503 in that state.
+    - auth required and both values missing: refuse startup.
+    - auth optional and both values missing: allow startup (public gateway mode).
+    """
+    if _auth_disabled():
+        return
+
+    issuer = os.environ.get(GATEWAY_AUTH_ISSUER_ENV)
+    audience = os.environ.get(GATEWAY_AUTH_AUDIENCE_ENV)
+
+    if bool(issuer) != bool(audience):
+        raise AuthMisconfiguredError(
+            "Gateway auth is partially configured: set both "
+            f"{GATEWAY_AUTH_ISSUER_ENV} and {GATEWAY_AUTH_AUDIENCE_ENV}, "
+            "or clear both."
+        )
+
+    if _auth_required() and (not issuer or not audience):
+        raise AuthMisconfiguredError(
+            "Gateway auth is required but "
+            f"{GATEWAY_AUTH_ISSUER_ENV}/{GATEWAY_AUTH_AUDIENCE_ENV} are not set "
+            "in the container environment. Verify the "
+            "'policyengine-gateway-auth' Modal secret is synced correctly."
+        )
 
 
 def require_auth(

@@ -309,3 +309,98 @@ class TestProductionAuthGuard:
         assert any(
             "GATEWAY AUTH IS DISABLED" in record.message for record in caplog.records
         ), f"Expected critical auth-disabled banner, got {caplog.records!r}"
+
+
+class TestAuthConfiguredGuard:
+    """Startup guard for required-or-partial auth misconfiguration."""
+
+    def test__given_auth_disabled__then_guard_noops(self, monkeypatch):
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, "1")
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, raising=False)
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, raising=False)
+
+        auth_module.enforce_auth_configured_guard()
+
+    def test__given_auth_optional_and_unset__then_guard_noops(self, monkeypatch):
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_REQUIRED_ENV, raising=False)
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, raising=False)
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, raising=False)
+
+        auth_module.enforce_auth_configured_guard()
+
+    def test__given_partial_auth_config__then_guard_raises(self, monkeypatch):
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_REQUIRED_ENV, raising=False)
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example/")
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, raising=False)
+
+        with pytest.raises(auth_module.AuthMisconfiguredError):
+            auth_module.enforce_auth_configured_guard()
+
+    def test__given_required_and_missing__then_guard_raises(self, monkeypatch):
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_REQUIRED_ENV, "1")
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, raising=False)
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, raising=False)
+
+        with pytest.raises(auth_module.AuthMisconfiguredError):
+            auth_module.enforce_auth_configured_guard()
+
+    def test__given_required_and_configured__then_guard_noops(self, monkeypatch):
+        monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_REQUIRED_ENV, "1")
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example/")
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, "aud")
+
+        auth_module.enforce_auth_configured_guard()
+
+
+class TestIssuerNormalization:
+    """Issuer should be normalized to the trailing-slash Auth0 form."""
+
+    def test__given_issuer_without_slash__then_decoder_receives_normalized_value(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example")
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, "aud")
+        auth_module.reset_decoder_cache()
+
+        captured = {}
+
+        def fake_builder(issuer, audience):
+            captured["issuer"] = issuer
+            captured["audience"] = audience
+            return object()
+
+        monkeypatch.setattr(auth_module, "_build_decoder", fake_builder)
+
+        auth_module._get_decoder()
+
+        assert captured == {
+            "issuer": "https://issuer.example/",
+            "audience": "aud",
+        }
+
+    def test__given_issuer_with_slash__then_decoder_receives_unchanged_value(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example/")
+        monkeypatch.setenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, "aud")
+        auth_module.reset_decoder_cache()
+
+        captured = {}
+
+        def fake_builder(issuer, audience):
+            captured["issuer"] = issuer
+            captured["audience"] = audience
+            return object()
+
+        monkeypatch.setattr(auth_module, "_build_decoder", fake_builder)
+
+        auth_module._get_decoder()
+
+        assert captured == {
+            "issuer": "https://issuer.example/",
+            "audience": "aud",
+        }

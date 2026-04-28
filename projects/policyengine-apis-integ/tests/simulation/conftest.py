@@ -8,6 +8,7 @@ from policyengine_api_simulation_client import AuthenticatedClient, Client
 class Settings(BaseSettings):
     base_url: str = "http://localhost:8082"
     access_token: str | None = None
+    gateway_auth_required: bool = False
     timeout_in_millis: int = 600_000  # 10 minutes for full simulations
     poll_interval_seconds: float = 5.0
     us_model_version: str = "1.562.3"
