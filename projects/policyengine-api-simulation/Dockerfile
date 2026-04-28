@@ -1,6 +1,6 @@
 # Multi-stage build inheriting from base
 # Use explicit platform for consistency across builds
-FROM --platform=linux/amd64 python:3.13-slim AS base
+FROM --platform=$BUILDPLATFORM python:3.13-slim AS base
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
