@@ -433,6 +433,143 @@ class TestSubmitSimulationEndpoint:
         assert response.status_code == 200
         assert response.json()["run_id"] == "run-123"
 
+    def test__given_unknown_job_id__then_polling_returns_404(
+        self, mock_modal, client: TestClient
+    ):
+        """
+        Given a job id that the gateway never issued
+        When polling job status
+        Then the gateway returns 404 before asking Modal for a call result.
+        """
+        response = client.get("/jobs/unknown-job-id")
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Job not found: unknown-job-id"
+
+    def test__given_lazy_modal_call_without_metadata__then_polling_returns_404(
+        self, mock_modal, client: TestClient
+    ):
+        """
+        Given Modal can construct a FunctionCall handle for an arbitrary id
+        When the gateway has no metadata for that id
+        Then the gateway still treats it as not found.
+        """
+        mock_modal["func"].call_for("auth-smoke-probe-does-not-exist")
+
+        response = client.get("/jobs/auth-smoke-probe-does-not-exist")
+
+        assert response.status_code == 404
+        assert (
+            response.json()["detail"]
+            == "Job not found: auth-smoke-probe-does-not-exist"
+        )
+
+    def test__given_running_job__then_polling_returns_202(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+        }
+
+        submit_response = client.post(
+            "/simulate/economy/comparison",
+            json={
+                "country": "us",
+                "scope": "macro",
+                "reform": {},
+            },
+        )
+        job_id = submit_response.json()["job_id"]
+        mock_modal["func"].last_call.running = True
+
+        response = client.get(f"/jobs/{job_id}")
+
+        assert response.status_code == 202
+        assert response.json()["status"] == "running"
+
+    def test__given_expired_modal_output__then_polling_returns_404(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+        }
+
+        submit_response = client.post(
+            "/simulate/economy/comparison",
+            json={
+                "country": "us",
+                "scope": "macro",
+                "reform": {},
+            },
+        )
+        job_id = submit_response.json()["job_id"]
+        mock_modal["func"].last_call.error = mock_modal[
+            "exception"
+        ].OutputExpiredError()
+
+        # Modal's FastAPI job queue example maps OutputExpiredError to 404:
+        # https://modal.com/docs/guide/job-queue#integration-with-web-frameworks
+        response = client.get(f"/jobs/{job_id}")
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == f"Job not found: {job_id}"
+
+    def test__given_modal_call_not_found__then_polling_returns_404(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+        }
+
+        submit_response = client.post(
+            "/simulate/economy/comparison",
+            json={
+                "country": "us",
+                "scope": "macro",
+                "reform": {},
+            },
+        )
+        job_id = submit_response.json()["job_id"]
+        mock_modal["function_call"].from_id_errors[job_id] = mock_modal[
+            "exception"
+        ].NotFoundError()
+
+        response = client.get(f"/jobs/{job_id}")
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == f"Job not found: {job_id}"
+
+    def test__given_worker_error__then_polling_returns_redacted_500(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+        }
+
+        submit_response = client.post(
+            "/simulate/economy/comparison",
+            json={
+                "country": "us",
+                "scope": "macro",
+                "reform": {},
+            },
+        )
+        job_id = submit_response.json()["job_id"]
+        mock_modal["func"].last_call.error = RuntimeError("worker crashed")
+
+        response = client.get(f"/jobs/{job_id}")
+
+        assert response.status_code == 500
+        body = response.json()
+        assert body["status"] == "failed"
+        assert body["error"].startswith("Simulation failed")
+        assert "correlation_id=" in body["error"]
+        assert "worker crashed" not in body["error"]
+
 
 class TestBudgetWindowBatchEndpoints:
     """Tests for budget-window batch gateway endpoints."""

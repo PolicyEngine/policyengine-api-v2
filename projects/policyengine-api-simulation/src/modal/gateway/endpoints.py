@@ -61,6 +61,24 @@ def _job_metadata_store():
     return modal.Dict.from_name(JOB_METADATA_DICT_NAME, create_if_missing=True)
 
 
+def _modal_exception_class(name: str):
+    exception_module = getattr(modal, "exception", None)
+    if exception_module is None:
+        return None
+    return getattr(exception_module, name, None)
+
+
+def _is_modal_exception(exc: BaseException, name: str) -> bool:
+    exception_class = _modal_exception_class(name)
+    return exception_class is not None and isinstance(exc, exception_class)
+
+
+def _is_modal_job_not_found(exc: BaseException) -> bool:
+    return _is_modal_exception(exc, "NotFoundError") or _is_modal_exception(
+        exc, "OutputExpiredError"
+    )
+
+
 def _build_policyengine_bundle(
     country: str, resolved_version: str, payload: dict
 ) -> PolicyEngineBundle:
@@ -267,12 +285,16 @@ async def get_job_status(job_id: str):
         - 500 with status="failed" and error on failure
         - 404 if job_id not found
     """
-    try:
-        call = modal.FunctionCall.from_id(job_id)
-    except Exception:
+    job_metadata = _job_metadata_store().get(job_id)
+    if job_metadata is None:
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
 
-    job_metadata = _job_metadata_store().get(job_id)
+    try:
+        call = modal.FunctionCall.from_id(job_id)
+    except Exception as exc:
+        if _is_modal_job_not_found(exc):
+            raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+        raise
 
     try:
         result = call.get(timeout=0)
@@ -282,6 +304,8 @@ async def get_job_status(job_id: str):
     except TimeoutError:
         return running_job_response(job_metadata)
     except Exception as exc:
+        if _is_modal_job_not_found(exc):
+            raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
         redacted = log_and_redact_exception(
             exc,
             scope="simulation_job_status",
