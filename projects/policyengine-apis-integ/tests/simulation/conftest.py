@@ -13,7 +13,10 @@ class Settings(BaseSettings):
     poll_interval_seconds: float = 5.0
     us_model_version: str = "1.562.3"
 
-    model_config = SettingsConfigDict(env_prefix="simulation_integ_test_")
+    model_config = SettingsConfigDict(
+        env_prefix="simulation_integ_test_",
+        env_ignore_empty=True,
+    )
 
 
 settings = Settings()

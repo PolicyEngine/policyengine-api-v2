@@ -102,7 +102,10 @@ cd projects/policyengine-apis-integ
 uv sync --extra test
 
 export simulation_integ_test_base_url="$BASE_URL"
-export simulation_integ_test_gateway_auth_required="${GATEWAY_AUTH_REQUIRED:-}"
+
+if [ -n "${GATEWAY_AUTH_REQUIRED:-}" ]; then
+  export simulation_integ_test_gateway_auth_required="$GATEWAY_AUTH_REQUIRED"
+fi
 
 if [ -n "$ACCESS_TOKEN" ]; then
   export simulation_integ_test_access_token="$ACCESS_TOKEN"
