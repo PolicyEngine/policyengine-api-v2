@@ -30,6 +30,7 @@ class MockFunctionCall:
     """Mock for Modal FunctionCall returned by spawn."""
 
     registry = {}
+    from_id_errors = {}
 
     def __init__(self, object_id: str = "mock-job-id-123"):
         self.object_id = object_id
@@ -47,6 +48,8 @@ class MockFunctionCall:
 
     @classmethod
     def from_id(cls, object_id: str):
+        if object_id in cls.from_id_errors:
+            raise cls.from_id_errors[object_id]
         if object_id not in cls.registry:
             raise KeyError(object_id)
         return cls.registry[object_id]
@@ -63,6 +66,11 @@ class MockFunction:
 
     def bind(self, app_name: str, func_name: str) -> "BoundMockFunction":
         return BoundMockFunction(self, app_name, func_name)
+
+    def call_for(self, object_id: str) -> MockFunctionCall:
+        call = MockFunctionCall(object_id=object_id)
+        self.last_call = call
+        return call
 
 
 class BoundMockFunction:
@@ -84,6 +92,14 @@ class BoundMockFunction:
         return self.recorder.last_call
 
 
+class MockModalException:
+    class NotFoundError(Exception):
+        pass
+
+    class OutputExpiredError(Exception):
+        pass
+
+
 @pytest.fixture
 def mock_modal(monkeypatch):
     """Patch Modal calls in the gateway endpoints module."""
@@ -93,6 +109,7 @@ def mock_modal(monkeypatch):
     mock_func = MockFunction()
     mock_dicts = {}
     MockFunctionCall.registry = {}
+    MockFunctionCall.from_id_errors = {}
 
     class MockModalDict:
         @staticmethod
@@ -113,6 +130,7 @@ def mock_modal(monkeypatch):
         Dict = MockModalDict
         Function = MockModalFunction
         FunctionCall = MockFunctionCall
+        exception = MockModalException
 
     monkeypatch.setattr(endpoints, "modal", MockModal)
     monkeypatch.setattr(budget_window_state, "modal", MockModal)
@@ -120,4 +138,6 @@ def mock_modal(monkeypatch):
     return {
         "func": mock_func,
         "dicts": mock_dicts,
+        "function_call": MockFunctionCall,
+        "exception": MockModalException,
     }
