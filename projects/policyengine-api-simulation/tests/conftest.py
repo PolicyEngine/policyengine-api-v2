@@ -7,6 +7,7 @@ from pathlib import Path
 pytest_plugins = (
     "fixtures.gateway.shared",
     "fixtures.gateway.test_endpoints",
+    "fixtures.gateway.package_imports",
 )
 
 project_root = Path(__file__).parent.parent
