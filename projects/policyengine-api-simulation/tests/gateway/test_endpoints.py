@@ -250,7 +250,7 @@ class TestSubmitSimulationEndpoint:
             "country": "us",
             "scope": "macro",
             "reform": {},
-            "data": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
+            "data": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
         }
 
         # When
@@ -262,7 +262,7 @@ class TestSubmitSimulationEndpoint:
         assert data["resolved_app_name"] == "policyengine-simulation-us1-500-0-uk2-66-0"
         assert data["policyengine_bundle"] == {
             "model_version": "1.500.0",
-            "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
+            "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
         }
 
     def test__given_submission_with_alias_data__then_bundle_dataset_stays_unresolved(
@@ -286,7 +286,7 @@ class TestSubmitSimulationEndpoint:
         data = response.json()
         assert (
             data["policyengine_bundle"]["dataset"]
-            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
+            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
         )
 
     def test__given_submission_with_uk_alias_data__then_bundle_dataset_is_versioned_uri(
@@ -341,7 +341,7 @@ class TestSubmitSimulationEndpoint:
         assert data["policyengine_bundle"] == {
             "model_version": "1.500.0",
             "data_version": "1.78.2",
-            "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
+            "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
         }
         assert mock_modal["func"].last_payload["data_version"] == "1.78.2"
         assert "_runtime_bundle" not in mock_modal["func"].last_payload
@@ -388,7 +388,7 @@ class TestSubmitSimulationEndpoint:
                 "country": "us",
                 "scope": "macro",
                 "reform": {},
-                "data": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
+                "data": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
             },
         )
 
@@ -403,7 +403,7 @@ class TestSubmitSimulationEndpoint:
         assert data["resolved_app_name"] == "policyengine-simulation-us1-500-0-uk2-66-0"
         assert data["policyengine_bundle"] == {
             "model_version": "1.500.0",
-            "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
+            "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
         }
 
     def test__given_submitted_job_with_telemetry__then_polling_echoes_run_id(
