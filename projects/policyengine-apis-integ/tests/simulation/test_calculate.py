@@ -22,6 +22,22 @@ from policyengine_api_simulation_client.models import (
 )
 
 
+def test_generated_client_job_status_result_remains_pass_through_dict():
+    """Single-job result parsing must not promote arbitrary dicts into DTOs."""
+
+    legacy_result = {"budget": {"total": 123}, "custom": ["dict-access"]}
+
+    response = JobStatusResponse.from_dict(
+        {
+            "status": "complete",
+            "result": legacy_result,
+        }
+    )
+
+    assert response.result == legacy_result
+    assert response.to_dict()["result"] == legacy_result
+
+
 def poll_for_completion(
     client: Client | AuthenticatedClient,
     job_id: str,
@@ -183,6 +199,7 @@ def test_calculate_specific_model(
 @pytest.mark.beta_only
 def test_calculate_uk_model(
     client: Client | AuthenticatedClient,
+    uk_model_version: str,
     max_wait_seconds: float,
     poll_interval: float,
 ):
@@ -195,6 +212,7 @@ def test_calculate_uk_model(
     request = SimulationRequest.from_dict(
         {
             "country": "uk",
+            "version": uk_model_version,
             "scope": "macro",
             "reform": {
                 "gov.hmrc.income_tax.rates.uk[0].rate": {"2023-01-01.2100-12-31": 0.21}
@@ -209,6 +227,9 @@ def test_calculate_uk_model(
     )
     assert isinstance(submit_response, JobSubmitResponse), (
         f"Unexpected response type: {type(submit_response)}"
+    )
+    assert submit_response.version == uk_model_version, (
+        f"Version mismatch: expected {uk_model_version}, got {submit_response.version}"
     )
     job_id = submit_response.job_id
 

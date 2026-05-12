@@ -30,7 +30,7 @@ def test_budget_window_multi_year_batch_completes(
     """
     Given a two-year US budget-window request
     When the batch is submitted and polled to completion
-    Then the response contains 2026 and 2027 annual impacts plus totals.
+    Then the response contains 2026 and 2027 full outputs plus totals.
     """
     submit_response = submit_budget_window_batch(budget_window_request)
 
@@ -60,10 +60,12 @@ def test_budget_window_multi_year_batch_completes(
     assert result.start_year == budget_window_years[0]
     assert result.end_year == budget_window_years[-1]
     assert result.window_size == len(budget_window_years)
-    annual_impacts = result.annual_impacts
-    assert not isinstance(annual_impacts, Unset)
-    assert [impact.year for impact in annual_impacts] == budget_window_years
-    assert result.totals.year == "Total"
+    assert result.years == budget_window_years
+    outputs_by_year = result.outputs_by_year
+    assert not isinstance(outputs_by_year, Unset)
+    assert outputs_by_year.additional_keys == budget_window_years
     assert all(
-        isinstance(impact.budgetary_impact, int | float) for impact in annual_impacts
+        outputs_by_year[year].budget.budgetary_impact is not None
+        for year in budget_window_years
     )
+    assert isinstance(result.totals.budgetary_impact, int | float)

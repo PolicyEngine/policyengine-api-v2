@@ -18,7 +18,7 @@ dependencies = [
     "policyengine-fastapi",
     "policyengine==4.4.3",
     "policyengine-core>=3.26.1",
-    "policyengine-uk==2.88.0",
+    "policyengine-uk==2.88.14",
     "policyengine-us==1.690.7",
     "tables>=3.10.2",
     "modal>=0.73.0",

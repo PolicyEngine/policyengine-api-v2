@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     timeout_in_millis: int = 600_000  # 10 minutes for full simulations
     poll_interval_seconds: float = 5.0
     us_model_version: str = "1.562.3"
+    uk_model_version: str = "2.88.14"
 
     model_config = SettingsConfigDict(
         env_prefix="simulation_integ_test_",
@@ -59,6 +60,12 @@ def client() -> Client | AuthenticatedClient:
 def us_model_version() -> str:
     """Return the US model version for testing specific version scenarios."""
     return settings.us_model_version
+
+
+@pytest.fixture()
+def uk_model_version() -> str:
+    """Return the UK model version for testing specific version scenarios."""
+    return settings.uk_model_version
 
 
 @pytest.fixture()
