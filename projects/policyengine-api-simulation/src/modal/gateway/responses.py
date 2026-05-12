@@ -37,6 +37,8 @@ def batch_status_response(response: BudgetWindowBatchStatusResponse):
         return AcceptedResponse(payload)
     if response.status == "failed":
         return ServerErrorResponse(payload)
+    if response.status == "complete":
+        return JSONResponse(status_code=200, content=payload)
     return response
 
 

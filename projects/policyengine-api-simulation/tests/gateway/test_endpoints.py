@@ -733,6 +733,13 @@ class TestBudgetWindowBatchEndpoints:
         assert response.json()["status"] == "complete"
         assert response.json()["result"]["years"] == ["2026", "2027"]
         assert "annualImpacts" not in response.json()["result"]
+        output = response.json()["result"]["outputsByYear"]["2026"]
+        assert output["poverty_by_race"] is None
+        assert output["wealth_decile"] is None
+        assert output["intra_wealth_decile"] is None
+        assert output["constituency_impact"] is None
+        assert output["local_authority_impact"] is None
+        assert output["cliff_impact"] is None
         assert response.json()["result"]["totals"]["budgetaryImpact"] == 32
         assert response.json()["run_id"] == "batch-run-123"
 
