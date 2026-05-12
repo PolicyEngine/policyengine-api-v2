@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     gateway_auth_required: bool = False
     timeout_in_millis: int = 600_000  # 10 minutes for full simulations
     poll_interval_seconds: float = 5.0
-    us_model_version: str = "1.562.3"
+    us_model_version: str = "1.690.7"
     uk_model_version: str = "2.88.14"
 
     model_config = SettingsConfigDict(
