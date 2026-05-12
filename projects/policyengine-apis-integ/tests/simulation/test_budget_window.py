@@ -14,8 +14,27 @@ import pytest
 from policyengine_api_simulation_client.models import (
     BudgetWindowBatchSubmitResponse,
     BudgetWindowResult,
+    SingleYearMacroOutput,
 )
 from policyengine_api_simulation_client.types import Unset
+
+SINGLE_YEAR_MACRO_OUTPUT_KEYS = {
+    "budget",
+    "detailed_budget",
+    "decile",
+    "inequality",
+    "poverty",
+    "poverty_by_gender",
+    "poverty_by_race",
+    "intra_decile",
+    "wealth_decile",
+    "intra_wealth_decile",
+    "labor_supply_response",
+    "constituency_impact",
+    "local_authority_impact",
+    "congressional_district_impact",
+    "cliff_impact",
+}
 
 
 @pytest.mark.beta_only
@@ -61,11 +80,24 @@ def test_budget_window_multi_year_batch_completes(
     assert result.end_year == budget_window_years[-1]
     assert result.window_size == len(budget_window_years)
     assert result.years == budget_window_years
+    result_payload = result.to_dict()
+    assert "annualImpacts" not in result_payload
+    assert "outputsByYear" in result_payload
+
     outputs_by_year = result.outputs_by_year
     assert not isinstance(outputs_by_year, Unset)
     assert outputs_by_year.additional_keys == budget_window_years
-    assert all(
-        outputs_by_year[year].budget.budgetary_impact is not None
-        for year in budget_window_years
-    )
+    for year in budget_window_years:
+        output = outputs_by_year[year]
+        assert isinstance(output, SingleYearMacroOutput)
+        output_payload = output.to_dict()
+        assert SINGLE_YEAR_MACRO_OUTPUT_KEYS <= set(output_payload)
+        assert output.budget.budgetary_impact is not None
+        assert isinstance(output_payload["decile"], dict)
+        assert isinstance(output_payload["inequality"], dict)
+        assert isinstance(output_payload["poverty"], dict)
+        assert isinstance(output_payload["poverty_by_gender"], dict)
+        assert isinstance(output_payload["intra_decile"], dict)
+        assert isinstance(output_payload["labor_supply_response"], dict)
+
     assert isinstance(result.totals.budgetary_impact, int | float)
