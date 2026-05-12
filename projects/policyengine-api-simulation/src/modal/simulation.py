@@ -10,13 +10,7 @@ import json
 import logging
 import os
 import tempfile
-import importlib
 from typing import Any, Iterator
-
-# policyengine.core is imported for every simulation. Without this guard,
-# importing the package pulls both country modules into the process; a US run
-# can then fail before it starts if UK private-data credentials are absent.
-os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
 
 try:
     from src.modal.telemetry import split_internal_payload
@@ -242,11 +236,13 @@ def _subsample_us_dataset(dataset, subsample: int | None):
 
 
 def _country_module(country: str):
+    import policyengine as pe
+
     country = country.lower()
     if country == "us":
-        return importlib.import_module("policyengine.tax_benefit_models.us")
+        return pe.us
     if country == "uk":
-        return importlib.import_module("policyengine.tax_benefit_models.uk")
+        return pe.uk
     raise ValueError(f"Unsupported country: {country}")
 
 
@@ -331,10 +327,18 @@ def _budget_result(country: str, baseline, reform) -> dict[str, float]:
 
 
 def _poverty_result(country: str, baseline, reform) -> dict[str, list[dict[str, Any]]]:
-    country_module = _country_module(country)
-    impact = country_module.economic_impact_analysis(baseline, reform)
-    baseline_poverty = impact.baseline_poverty
-    reform_poverty = impact.reform_poverty
+    import policyengine as pe
+
+    if country == "us":
+        baseline_poverty = pe.us.economic_impact_analysis(
+            baseline, reform
+        ).baseline_poverty
+        reform_poverty = pe.us.economic_impact_analysis(baseline, reform).reform_poverty
+    else:
+        baseline_poverty = pe.uk.economic_impact_analysis(
+            baseline, reform
+        ).baseline_poverty
+        reform_poverty = pe.uk.economic_impact_analysis(baseline, reform).reform_poverty
 
     return {
         "baseline": baseline_poverty.dataframe.to_dict("records"),
@@ -343,8 +347,12 @@ def _poverty_result(country: str, baseline, reform) -> dict[str, list[dict[str, 
 
 
 def _analysis_result(country: str, baseline, reform) -> dict[str, Any]:
-    country_module = _country_module(country)
-    analysis = country_module.economic_impact_analysis(baseline, reform)
+    import policyengine as pe
+
+    if country == "us":
+        analysis = pe.us.economic_impact_analysis(baseline, reform)
+    else:
+        analysis = pe.uk.economic_impact_analysis(baseline, reform)
 
     return {
         "decile_impacts": analysis.decile_impacts.dataframe.to_dict("records"),
