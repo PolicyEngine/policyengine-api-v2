@@ -62,6 +62,11 @@ if [ -n "${GCP_CREDENTIALS_JSON:-}" ]; then
     --force || true
 fi
 
+uv run modal secret create policyengine-data-credentials \
+  "HUGGING_FACE_TOKEN=${HUGGING_FACE_TOKEN:-}" \
+  --env="$MODAL_ENV" \
+  --force || true
+
 # Sync gateway auth config. The gateway runtime only needs issuer/audience and
 # the explicit requirement flag; client credentials stay on the GitHub side and
 # are only used to mint integration-test tokens.

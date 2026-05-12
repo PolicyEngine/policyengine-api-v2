@@ -14,8 +14,8 @@ from src.modal._image_setup import snapshot_models
 from src.modal.logging_redaction import redact_params_for_logging
 
 # Get versions from environment or use defaults
-US_VERSION = os.environ.get("POLICYENGINE_US_VERSION", "1.562.3")
-UK_VERSION = os.environ.get("POLICYENGINE_UK_VERSION", "2.65.9")
+US_VERSION = os.environ.get("POLICYENGINE_US_VERSION", "1.690.7")
+UK_VERSION = os.environ.get("POLICYENGINE_UK_VERSION", "2.88.0")
 
 
 def get_app_name(us_version: str, uk_version: str) -> str:
@@ -39,6 +39,7 @@ app = modal.App(APP_NAME)
 # Secrets
 # GCP credentials are shared across environments (always from main)
 gcp_secret = modal.Secret.from_name("gcp-credentials", environment_name="main")
+data_secret = modal.Secret.from_name("policyengine-data-credentials")
 # Logfire secret is environment-specific
 logfire_secret = modal.Secret.from_name("policyengine-logfire")
 
@@ -48,7 +49,7 @@ simulation_image = (
     .pip_install(
         f"policyengine-us=={US_VERSION}",
         f"policyengine-uk=={UK_VERSION}",
-        "policyengine==0.13.0",
+        "policyengine==4.4.3",
         "tables>=3.10.2",
         "logfire",
     )
@@ -80,7 +81,7 @@ def configure_logfire(service_name: str = "policyengine-simulation"):
     timeout=3600,
     retries=0,
     max_containers=100,
-    secrets=[gcp_secret, logfire_secret],
+    secrets=[gcp_secret, data_secret, logfire_secret],
 )
 def run_simulation(params: dict) -> dict:
     """
@@ -118,7 +119,7 @@ def run_simulation(params: dict) -> dict:
     timeout=3600,
     retries=0,
     max_containers=100,
-    secrets=[gcp_secret, logfire_secret],
+    secrets=[gcp_secret, data_secret, logfire_secret],
 )
 def run_budget_window_batch(params: dict) -> dict:
     """Execute a multi-year budget-window batch orchestration."""

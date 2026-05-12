@@ -41,8 +41,8 @@ router = APIRouter()
 JOB_METADATA_DICT_NAME = "simulation-api-job-metadata"
 DATASET_URIS = {
     "us": {
-        "enhanced_cps": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
-        "enhanced_cps_2024": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
+        "enhanced_cps": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
+        "enhanced_cps_2024": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
         "cps": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.77.0",
         "cps_2023": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.77.0",
         "pooled_cps": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.77.0",
