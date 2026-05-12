@@ -39,6 +39,7 @@ app = modal.App(APP_NAME)
 # Secrets
 # GCP credentials are shared across environments (always from main)
 gcp_secret = modal.Secret.from_name("gcp-credentials", environment_name="main")
+data_secret = modal.Secret.from_name("policyengine-data-credentials")
 # Logfire secret is environment-specific
 logfire_secret = modal.Secret.from_name("policyengine-logfire")
 
@@ -80,7 +81,7 @@ def configure_logfire(service_name: str = "policyengine-simulation"):
     timeout=3600,
     retries=0,
     max_containers=100,
-    secrets=[gcp_secret, logfire_secret],
+    secrets=[gcp_secret, data_secret, logfire_secret],
 )
 def run_simulation(params: dict) -> dict:
     """
@@ -118,7 +119,7 @@ def run_simulation(params: dict) -> dict:
     timeout=3600,
     retries=0,
     max_containers=100,
-    secrets=[gcp_secret, logfire_secret],
+    secrets=[gcp_secret, data_secret, logfire_secret],
 )
 def run_budget_window_batch(params: dict) -> dict:
     """Execute a multi-year budget-window batch orchestration."""
