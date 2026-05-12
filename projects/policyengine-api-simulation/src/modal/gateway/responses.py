@@ -26,6 +26,10 @@ class ServerErrorResponse(JSONResponse):
         super().__init__(status_code=500, content=content)
 
 
+def _omit_top_level_none(payload: dict) -> dict:
+    return {key: value for key, value in payload.items() if value is not None}
+
+
 def batch_status_payload(response: BudgetWindowBatchStatusResponse) -> dict:
     payload = response.model_dump(mode="json")
     if response.policyengine_bundle is not None:
@@ -44,7 +48,7 @@ def batch_status_response(response: BudgetWindowBatchStatusResponse):
         return ServerErrorResponse(payload)
     # Preserve null-valued annual sections inside outputsByYear. Returning the
     # model directly would let FastAPI's route-level exclude_none prune them.
-    return JSONResponse(payload)
+    return JSONResponse(_omit_top_level_none(payload))
 
 
 def complete_job_response(*, result: Any, job_metadata: dict | None = None):
@@ -60,7 +64,7 @@ def complete_job_response(*, result: Any, job_metadata: dict | None = None):
             exclude_none=True,
         )
     # Preserve null-valued legacy sections inside pass-through result payloads.
-    return JSONResponse(payload)
+    return JSONResponse(_omit_top_level_none(payload))
 
 
 def running_job_response(job_metadata: dict | None = None) -> AcceptedResponse:

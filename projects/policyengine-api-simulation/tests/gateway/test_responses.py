@@ -48,6 +48,8 @@ def test_complete_budget_window_response_preserves_null_annual_sections():
     body = json.loads(serialized.body)
     output = body["result"]["outputsByYear"]["2026"]
 
+    assert "run_id" not in body
+    assert "error" not in body
     assert "wealth_decile" in output
     assert output["wealth_decile"] is None
     assert "congressional_district_impact" in output
@@ -66,6 +68,8 @@ def test_complete_job_response_preserves_null_result_sections():
     body = json.loads(serialized.body)
     output = body["result"]
 
+    assert "run_id" not in body
+    assert "error" not in body
     assert "wealth_decile" in output
     assert output["wealth_decile"] is None
     assert "congressional_district_impact" in output
