@@ -342,6 +342,16 @@ class TestJobStatusResponse:
         assert response.result["budget"]["tax_revenue_impact"] == 1000000
         assert response.error is None
 
+    def test_job_status_response_keeps_legacy_dict_result_pass_through(self):
+        """Older generated-client callers access single-job results as dicts."""
+
+        result = {"budget": {"total": 1000000}, "custom": ["legacy-shape"]}
+
+        response = JobStatusResponse(status="complete", result=result)
+
+        assert response.result == result
+        assert response.model_dump(mode="json")["result"] == result
+
     def test_job_status_response_running_without_result(self):
         """
         Given a running job
@@ -613,6 +623,7 @@ class TestBudgetWindowBatchStatusResponse:
         assert dumped["result"]["kind"] == "budgetWindow"
         assert dumped["result"]["years"] == ["2026", "2027"]
         assert "annualImpacts" not in dumped["result"]
-        assert dumped["result"]["outputsByYear"]["2026"]["budget"][
-            "tax_revenue_impact"
-        ] == 10
+        assert (
+            dumped["result"]["outputsByYear"]["2026"]["budget"]["tax_revenue_impact"]
+            == 10
+        )

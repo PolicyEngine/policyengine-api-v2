@@ -223,8 +223,7 @@ def test_budget_window_submit_and_poll_exercise_gateway_worker_seams(
     assert list(body["result"]["outputsByYear"]) == ["2026", "2027", "2028"]
     assert "annualImpacts" not in body["result"]
     assert (
-        body["result"]["outputsByYear"]["2026"]["budget"]["tax_revenue_impact"]
-        == 100.0
+        body["result"]["outputsByYear"]["2026"]["budget"]["tax_revenue_impact"] == 100.0
     )
     assert body["result"]["totals"] == {
         "taxRevenueImpact": 600.0,
@@ -246,3 +245,56 @@ def test_budget_window_submit_and_poll_exercise_gateway_worker_seams(
     assert all("window_size" not in payload for payload in runtime.child_payloads)
     assert all("max_parallel" not in payload for payload in runtime.child_payloads)
     assert all("_metadata" not in payload for payload in runtime.child_payloads)
+
+
+def test_budget_window_submit_and_poll_defaults_missing_state_tax_for_uk_like_outputs(
+    budget_window_semi_integration_client,
+):
+    client, runtime = budget_window_semi_integration_client
+    runtime.dicts["simulation-api-uk-versions"] = {
+        "latest": "2.66.0",
+        "2.66.0": "policyengine-simulation-uk2-66-0",
+    }
+
+    def child_result_without_state_tax(simulation_year: str) -> dict:
+        offset = int(simulation_year) - 2025
+        return make_single_year_macro_output(
+            tax_revenue_impact=offset * 100,
+            state_tax_revenue_impact=None,
+            benefit_spending_impact=offset + 4,
+            budgetary_impact=offset * 100 - (offset + 4),
+        )
+
+    runtime.child_result_for_year = child_result_without_state_tax
+    runtime.next_parent_call_id = "parent-uk-batch-123"
+
+    submit_response = client.post(
+        "/simulate/economy/budget-window",
+        json={
+            "country": "uk",
+            "region": "uk",
+            "scope": "macro",
+            "reform": {},
+            "start_year": "2026",
+            "window_size": 2,
+            "max_parallel": 2,
+        },
+    )
+
+    assert submit_response.status_code == 200
+
+    first_poll = client.get("/budget-window-jobs/parent-uk-batch-123")
+    assert first_poll.status_code == 202
+
+    second_poll = client.get("/budget-window-jobs/parent-uk-batch-123")
+    assert second_poll.status_code == 200
+    body = second_poll.json()
+
+    assert body["status"] == "complete"
+    assert body["result"]["years"] == ["2026", "2027"]
+    assert (
+        body["result"]["outputsByYear"]["2026"]["budget"]["state_tax_revenue_impact"]
+        == 0.0
+    )
+    assert body["result"]["totals"]["stateTaxRevenueImpact"] == 0.0
+    assert body["result"]["totals"]["federalTaxRevenueImpact"] == 300.0
