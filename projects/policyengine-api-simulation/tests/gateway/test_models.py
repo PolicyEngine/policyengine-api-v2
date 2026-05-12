@@ -15,6 +15,10 @@ from src.modal.gateway.models import (
     SimulationRequest,
     JobSubmitResponse,
     JobStatusResponse,
+    _default_missing_state_tax_revenue_impact,
+    _enforce_max_payload_size,
+    _move_internal_telemetry_alias,
+    _strip_internal_passthrough_fields,
 )
 from tests.fixtures.budget_window_outputs import make_single_year_macro_output
 
@@ -112,6 +116,15 @@ class TestPingResponse:
 
 class TestSimulationRequest:
     """Tests for SimulationRequest model."""
+
+    def test_request_pre_validators_ignore_non_dict_payloads(self):
+        """Defensive pre-validators must leave non-mapping input to Pydantic."""
+
+        value = "not-a-request-object"
+
+        assert _move_internal_telemetry_alias(value) == value
+        assert _strip_internal_passthrough_fields(value) == value
+        assert _enforce_max_payload_size(value) == value
 
     def test_simulation_request_requires_country(self):
         """
@@ -251,6 +264,13 @@ class TestSimulationRequest:
 
         with pytest.raises(ValidationError, match="too large"):
             SimulationRequest(**payload)
+
+    def test_simulation_request_size_cap_defers_non_json_serializable_payloads(self):
+        """The size cap is best-effort; non-JSON objects fail later."""
+
+        payload = {("tuple", "key"): "not-json-serializable"}
+
+        assert _enforce_max_payload_size(payload) is payload
 
     def test_simulation_request_accepts_typed_telemetry_envelope(self):
         """
@@ -554,6 +574,34 @@ class TestBudgetWindowBatchSubmitResponse:
 
 class TestBudgetWindowBatchStatusResponse:
     """Tests for budget-window batch status responses."""
+
+    def test_single_year_macro_output_budget_normalizer_defensive_branches(self):
+        """The state-tax default only applies to object outputs with budgets."""
+
+        raw_value = "not-a-macro-output"
+        assert _default_missing_state_tax_revenue_impact(raw_value) == raw_value
+
+        no_budget = {"poverty": {}}
+        assert _default_missing_state_tax_revenue_impact(no_budget) is no_budget
+
+        non_object_budget = {"budget": "not-an-object"}
+        assert (
+            _default_missing_state_tax_revenue_impact(non_object_budget)
+            is non_object_budget
+        )
+
+        existing_state_tax = {"budget": {"state_tax_revenue_impact": 12}}
+        assert (
+            _default_missing_state_tax_revenue_impact(existing_state_tax)
+            is existing_state_tax
+        )
+
+        missing_state_tax = {"budget": {"tax_revenue_impact": 12}}
+        normalized = _default_missing_state_tax_revenue_impact(missing_state_tax)
+
+        assert normalized is not missing_state_tax
+        assert missing_state_tax["budget"].get("state_tax_revenue_impact") is None
+        assert normalized["budget"]["state_tax_revenue_impact"] == 0.0
 
     def test_budget_window_result_requires_years_and_outputs_by_year(self):
         with pytest.raises(ValidationError):

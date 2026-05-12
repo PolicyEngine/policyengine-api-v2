@@ -88,6 +88,55 @@ def test_validate_single_year_output_rejects_malformed_child_result():
         )
 
 
+def test_validate_single_year_output_rejects_non_object_child_result():
+    with pytest.raises(
+        ValueError,
+        match="Malformed budget-window child result: expected object for 2026",
+    ):
+        validate_single_year_output(
+            simulation_year="2026",
+            child_result="not-an-object",
+        )
+
+
+def test_validate_single_year_output_rejects_non_object_budget():
+    child_result = make_single_year_macro_output(
+        tax_revenue_impact=100,
+        state_tax_revenue_impact=40,
+        benefit_spending_impact=20,
+        budgetary_impact=80,
+    )
+    child_result["budget"] = "not-an-object"
+
+    with pytest.raises(
+        ValueError,
+        match="Malformed budget-window child result: missing budget object",
+    ):
+        validate_single_year_output(
+            simulation_year="2026",
+            child_result=child_result,
+        )
+
+
+def test_validate_single_year_output_wraps_model_shape_errors():
+    child_result = make_single_year_macro_output(
+        tax_revenue_impact=100,
+        state_tax_revenue_impact=40,
+        benefit_spending_impact=20,
+        budgetary_impact=80,
+    )
+    child_result["decile"] = "not-an-object"
+
+    with pytest.raises(
+        ValueError,
+        match="Malformed budget-window child result for 2026",
+    ):
+        validate_single_year_output(
+            simulation_year="2026",
+            child_result=child_result,
+        )
+
+
 def test_validate_single_year_output_rejects_malformed_state_tax_value():
     child_result = make_single_year_macro_output(
         tax_revenue_impact=100,

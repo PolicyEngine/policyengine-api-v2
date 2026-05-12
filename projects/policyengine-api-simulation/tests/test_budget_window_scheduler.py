@@ -15,10 +15,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 import src.modal.budget_window_batch as batch_module
+from src.modal.budget_window_context import BudgetWindowBatchContext
 import src.modal.budget_window_scheduler as scheduler_module
 import src.modal.budget_window_state as state_module
 from fixtures.gateway.shared import create_gateway_app
 from src.modal.gateway import endpoints
+from src.modal.gateway.models import (
+    BatchChildJobStatus,
+    BudgetWindowBatchRequest,
+    PolicyEngineBundle,
+)
 from tests.fixtures.budget_window_outputs import make_single_year_macro_output
 
 
@@ -298,3 +304,43 @@ def test_budget_window_submit_and_poll_defaults_missing_state_tax_for_uk_like_ou
     )
     assert body["result"]["totals"]["stateTaxRevenueImpact"] == 0.0
     assert body["result"]["totals"]["federalTaxRevenueImpact"] == 300.0
+
+
+def test_budget_window_runner_resolves_persisted_child_handle_fallback(
+    budget_window_semi_integration_client,
+):
+    _, runtime = budget_window_semi_integration_client
+    child_call = object()
+    runtime.calls["child-2026"] = child_call
+
+    request = BudgetWindowBatchRequest.model_validate(
+        {
+            "country": "us",
+            "region": "us",
+            "scope": "macro",
+            "reform": {},
+            "start_year": "2026",
+            "window_size": 1,
+            "max_parallel": 1,
+        }
+    )
+    context = BudgetWindowBatchContext(
+        batch_job_id="parent-resume-123",
+        request=request,
+        resolved_version="1.500.0",
+        resolved_app_name="policyengine-simulation-us1-500-0-uk2-66-0",
+        bundle=PolicyEngineBundle(model_version="1.500.0"),
+        raw_params=request.model_dump(mode="json"),
+    )
+    runner = scheduler_module.BudgetWindowBatchRunner(context)
+    runner.state.child_jobs["2026"] = BatchChildJobStatus(
+        job_id="child-2026",
+        status="running",
+    )
+
+    handle = runner.resolve_child_handle("2026")
+
+    assert handle.simulation_year == "2026"
+    assert handle.job_id == "child-2026"
+    assert handle.call is child_call
+    assert runner.child_handles["2026"] is handle
