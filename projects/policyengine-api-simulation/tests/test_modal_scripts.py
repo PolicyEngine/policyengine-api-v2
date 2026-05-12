@@ -439,6 +439,55 @@ class TestModalRunIntegTests:
         assert result.returncode != 0
         assert "GATEWAY_AUTH_REQUIRED is enabled" in result.stderr
 
+    def test_exports_us_and_uk_model_versions_to_integration_tests(self, tmp_path):
+        """Deploy-extracted model versions should reach the pytest settings."""
+        uv_calls_log = tmp_path / "uv_calls.log"
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
+        fake_uv = fake_bin / "uv"
+        fake_uv.write_text(
+            '#!/bin/bash\n'
+            'printf "%s|base=%s|us=%s|uk=%s\\n" "$*" '
+            '"${simulation_integ_test_base_url:-}" '
+            '"${simulation_integ_test_us_model_version:-}" '
+            '"${simulation_integ_test_uk_model_version:-}" >> "$UV_CALLS_LOG"\n'
+        )
+        fake_uv.chmod(0o755)
+
+        env = os.environ.copy()
+        env["PATH"] = f"{fake_bin}:{env['PATH']}"
+        env["UV_CALLS_LOG"] = str(uv_calls_log)
+        for key in (
+            "GATEWAY_AUTH_REQUIRED",
+            "GATEWAY_AUTH_ISSUER",
+            "GATEWAY_AUTH_AUDIENCE",
+            "GATEWAY_AUTH_CLIENT_ID",
+            "GATEWAY_AUTH_CLIENT_SECRET",
+        ):
+            env.pop(key, None)
+
+        result = subprocess.run(
+            [
+                "bash",
+                str(self.script),
+                "prod",
+                "https://example.com",
+                "1.690.7",
+                "2.88.14",
+            ],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=REPO_ROOT,
+        )
+
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        log = uv_calls_log.read_text()
+        assert "run pytest tests/simulation/ -v -m not beta_only" in log
+        assert "base=https://example.com" in log
+        assert "us=1.690.7" in log
+        assert "uk=2.88.14" in log
+
 
 class TestAllScriptsHaveShebang:
     """Verify all scripts have proper shebang and error handling."""
