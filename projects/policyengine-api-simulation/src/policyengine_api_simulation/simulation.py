@@ -4,7 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from pathlib import Path
 import logging
 
-from src.modal.simulation import run_simulation_impl
+try:
+    from modal.simulation import run_simulation_impl
+except ModuleNotFoundError:
+    from src.modal.simulation import run_simulation_impl
 
 logger = logging.getLogger(__file__)
 

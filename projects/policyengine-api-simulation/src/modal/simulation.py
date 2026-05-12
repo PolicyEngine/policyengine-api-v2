@@ -12,7 +12,10 @@ import os
 import tempfile
 from typing import Any, Iterator
 
-from src.modal.telemetry import split_internal_payload
+try:
+    from src.modal.telemetry import split_internal_payload
+except ModuleNotFoundError:
+    from modal.telemetry import split_internal_payload
 
 logger = logging.getLogger(__name__)
 
