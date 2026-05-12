@@ -403,9 +403,19 @@ def _budget_result(country: str, baseline, reform) -> dict[str, float]:
         baseline, reform, "household_benefits", entity="household"
     )
     budgetary_impact = tax_revenue_impact - benefit_spending_impact
+    if country == "us":
+        state_tax_revenue_impact = _try_change_sum(
+            baseline,
+            reform,
+            "household_state_income_tax",
+            entity="tax_unit",
+        )
+    else:
+        state_tax_revenue_impact = 0.0
+
     result = {
         "tax_revenue_impact": tax_revenue_impact,
-        "state_tax_revenue_impact": 0.0,
+        "state_tax_revenue_impact": state_tax_revenue_impact,
         "benefit_spending_impact": benefit_spending_impact,
         "budgetary_impact": budgetary_impact,
         "baseline_net_income": _try_aggregate_sum(
@@ -419,13 +429,6 @@ def _budget_result(country: str, baseline, reform) -> dict[str, float]:
             entity="household",
         ),
     }
-    if country == "us":
-        result["state_tax_revenue_impact"] = _try_change_sum(
-            baseline,
-            reform,
-            "household_state_income_tax",
-            entity="tax_unit",
-        )
     return result
 
 
