@@ -70,6 +70,22 @@ def _enforce_max_payload_size(value):
     return value
 
 
+def _default_missing_state_tax_revenue_impact(value):
+    if not isinstance(value, dict):
+        return value
+    budget = value.get("budget")
+    if not isinstance(budget, dict):
+        return value
+    if "state_tax_revenue_impact" in budget:
+        return value
+
+    normalized = dict(value)
+    normalized_budget = dict(budget)
+    normalized_budget["state_tax_revenue_impact"] = 0.0
+    normalized["budget"] = normalized_budget
+    return normalized
+
+
 class GatewayRequestBase(BaseModel):
     """Base request model with strict passthrough of documented fields only.
 
@@ -145,11 +161,64 @@ class JobSubmitResponse(BaseModel):
     run_id: Optional[str] = None
 
 
+class SingleYearBudgetOutput(BaseModel):
+    """Budget section for one macro-scoped economy comparison.
+
+    The gateway owns only the stable fields it needs for budget-window
+    aggregation. Additional worker-provided budget fields are passed through.
+    """
+
+    budgetary_impact: float
+    tax_revenue_impact: float
+    state_tax_revenue_impact: float = 0.0
+    benefit_spending_impact: float
+
+    model_config = ConfigDict(extra="allow")
+
+
+class SingleYearMacroOutput(BaseModel):
+    """Gateway-owned full output shape for one macro-scoped comparison.
+
+    This intentionally avoids subclassing policyengine's internal
+    EconomyComparison model. The gateway validates the stable top-level shape
+    and fiscal fields it relies on, while passing nested result sections
+    through without coupling to a specific worker package version.
+    """
+
+    model_version: Optional[str] = None
+    data_version: Optional[str] = None
+    budget: SingleYearBudgetOutput
+    detailed_budget: dict[str, Any] | None
+    decile: dict[str, Any]
+    inequality: dict[str, Any]
+    poverty: dict[str, Any]
+    poverty_by_gender: dict[str, Any]
+    poverty_by_race: dict[str, Any] | None
+    intra_decile: dict[str, Any]
+    wealth_decile: dict[str, Any] | None
+    intra_wealth_decile: dict[str, Any] | None
+    labor_supply_response: dict[str, Any]
+    constituency_impact: dict[str, Any] | None
+    local_authority_impact: dict[str, Any] | None
+    congressional_district_impact: dict[str, Any] | None
+    cliff_impact: dict[str, Any] | None
+
+    model_config = ConfigDict(extra="allow")
+
+    @model_validator(mode="before")
+    @classmethod
+    def default_missing_state_tax_revenue_impact(cls, value):
+        return _default_missing_state_tax_revenue_impact(value)
+
+
 class JobStatusResponse(BaseModel):
     """Response model for job status polling."""
 
     status: str
-    result: Optional[dict] = None
+    # Keep single-job results as pass-through data. Older generated-client
+    # callers expect dict-style access here; only budget-window child outputs
+    # are promoted into the gateway-owned SingleYearMacroOutput DTO.
+    result: Optional[Any] = None
     error: Optional[str] = None
     resolved_app_name: Optional[str] = None
     policyengine_bundle: Optional[PolicyEngineBundle] = None
@@ -187,21 +256,9 @@ class BudgetWindowBatchRequest(GatewayRequestBase):
         return self
 
 
-class BudgetWindowAnnualImpact(BaseModel):
-    """Annual budget-window impact row."""
-
-    year: str
-    taxRevenueImpact: float
-    federalTaxRevenueImpact: float
-    stateTaxRevenueImpact: float
-    benefitSpendingImpact: float
-    budgetaryImpact: float
-
-
 class BudgetWindowTotals(BaseModel):
     """Aggregate totals for a completed budget-window response."""
 
-    year: Literal["Total"] = "Total"
     taxRevenueImpact: float
     federalTaxRevenueImpact: float
     stateTaxRevenueImpact: float
@@ -216,7 +273,8 @@ class BudgetWindowResult(BaseModel):
     startYear: str
     endYear: str
     windowSize: int
-    annualImpacts: list[BudgetWindowAnnualImpact] = Field(default_factory=list)
+    years: list[str]
+    outputsByYear: dict[str, SingleYearMacroOutput]
     totals: BudgetWindowTotals
 
 
@@ -279,7 +337,7 @@ class BudgetWindowBatchState(BaseModel):
     completed_years: list[str] = Field(default_factory=list)
     failed_years: list[str] = Field(default_factory=list)
     child_jobs: dict[str, BatchChildJobStatus] = Field(default_factory=dict)
-    partial_annual_impacts: dict[str, BudgetWindowAnnualImpact] = Field(
+    partial_outputs_by_year: dict[str, SingleYearMacroOutput] = Field(
         default_factory=dict
     )
     result: Optional[BudgetWindowResult] = None

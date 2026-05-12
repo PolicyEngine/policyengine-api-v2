@@ -665,12 +665,12 @@ class TestBudgetWindowBatchEndpoints:
     ):
         from src.modal.budget_window_state import put_batch_job_state
         from src.modal.gateway.models import (
-            BudgetWindowAnnualImpact,
             BudgetWindowBatchState,
             BudgetWindowResult,
             BudgetWindowTotals,
             PolicyEngineBundle,
         )
+        from tests.fixtures.budget_window_outputs import make_single_year_macro_output
 
         put_batch_job_state(
             BudgetWindowBatchState(
@@ -692,29 +692,26 @@ class TestBudgetWindowBatchEndpoints:
                 completed_years=["2026", "2027"],
                 failed_years=[],
                 child_jobs={},
-                partial_annual_impacts={},
+                partial_outputs_by_year={},
                 result=BudgetWindowResult(
                     startYear="2026",
                     endYear="2027",
                     windowSize=2,
-                    annualImpacts=[
-                        BudgetWindowAnnualImpact(
-                            year="2026",
-                            taxRevenueImpact=10,
-                            federalTaxRevenueImpact=7,
-                            stateTaxRevenueImpact=3,
-                            benefitSpendingImpact=5,
-                            budgetaryImpact=15,
+                    years=["2026", "2027"],
+                    outputsByYear={
+                        "2026": make_single_year_macro_output(
+                            tax_revenue_impact=10,
+                            state_tax_revenue_impact=3,
+                            benefit_spending_impact=5,
+                            budgetary_impact=15,
                         ),
-                        BudgetWindowAnnualImpact(
-                            year="2027",
-                            taxRevenueImpact=11,
-                            federalTaxRevenueImpact=8,
-                            stateTaxRevenueImpact=3,
-                            benefitSpendingImpact=6,
-                            budgetaryImpact=17,
+                        "2027": make_single_year_macro_output(
+                            tax_revenue_impact=11,
+                            state_tax_revenue_impact=3,
+                            benefit_spending_impact=6,
+                            budgetary_impact=17,
                         ),
-                    ],
+                    },
                     totals=BudgetWindowTotals(
                         taxRevenueImpact=21,
                         federalTaxRevenueImpact=15,
@@ -734,6 +731,8 @@ class TestBudgetWindowBatchEndpoints:
 
         assert response.status_code == 200
         assert response.json()["status"] == "complete"
+        assert response.json()["result"]["years"] == ["2026", "2027"]
+        assert "annualImpacts" not in response.json()["result"]
         assert response.json()["result"]["totals"]["budgetaryImpact"] == 32
         assert response.json()["run_id"] == "batch-run-123"
 

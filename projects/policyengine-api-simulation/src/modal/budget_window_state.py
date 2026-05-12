@@ -9,12 +9,12 @@ import modal
 
 from src.modal.gateway.models import (
     BatchChildJobStatus,
-    BudgetWindowAnnualImpact,
     BudgetWindowBatchRequest,
     BudgetWindowBatchState,
     BudgetWindowBatchStatusResponse,
     BudgetWindowResult,
     PolicyEngineBundle,
+    SingleYearMacroOutput,
 )
 
 logger = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ def create_initial_batch_state(
         completed_years=[],
         failed_years=[],
         child_jobs={},
-        partial_annual_impacts={},
+        partial_outputs_by_year={},
         result=None,
         error=None,
         created_at=now,
@@ -166,7 +166,7 @@ def mark_child_completed(
     state: BudgetWindowBatchState,
     *,
     year: str,
-    annual_impact: BudgetWindowAnnualImpact,
+    single_year_output: SingleYearMacroOutput,
 ) -> BudgetWindowBatchState:
     if year in state.running_years:
         state.running_years.remove(year)
@@ -178,7 +178,7 @@ def mark_child_completed(
         job_id=child.job_id,
         status="complete",
     )
-    state.partial_annual_impacts[year] = annual_impact
+    state.partial_outputs_by_year[year] = single_year_output
     return _touch(state)
 
 
