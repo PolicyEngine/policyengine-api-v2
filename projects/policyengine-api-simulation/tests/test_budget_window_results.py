@@ -31,6 +31,26 @@ def test_validate_single_year_output_preserves_full_macro_output():
     assert "annualImpacts" not in dumped
 
 
+def test_validate_single_year_output_preserves_extra_worker_fields():
+    child_result = make_single_year_macro_output(
+        tax_revenue_impact=100,
+        state_tax_revenue_impact=40,
+        benefit_spending_impact=20,
+        budgetary_impact=80,
+    )
+    child_result["worker_specific_section"] = {"value": "preserved"}
+    child_result["budget"]["worker_specific_budget_metric"] = 123
+
+    output = validate_single_year_output(
+        simulation_year="2026",
+        child_result=child_result,
+    )
+
+    dumped = output.model_dump(mode="json")
+    assert dumped["worker_specific_section"] == {"value": "preserved"}
+    assert dumped["budget"]["worker_specific_budget_metric"] == 123
+
+
 def test_validate_single_year_output_defaults_state_tax_for_uk_child_result():
     """UK worker results omit ``state_tax_revenue_impact`` because the UK
     microsimulation has no devolved fiscal layer. The canonical output keeps a
@@ -162,3 +182,27 @@ def test_build_budget_window_result_sums_totals_and_keeps_outputs_by_year():
     assert result.totals.taxRevenueImpact == 21
     assert result.totals.budgetaryImpact == 32
     assert not hasattr(result.totals, "year")
+
+
+def test_build_budget_window_result_rejects_missing_year_outputs():
+    outputs_by_year = {
+        "2026": validate_single_year_output(
+            simulation_year="2026",
+            child_result=make_single_year_macro_output(
+                tax_revenue_impact=10,
+                state_tax_revenue_impact=3,
+                benefit_spending_impact=5,
+                budgetary_impact=15,
+            ),
+        ),
+    }
+
+    with pytest.raises(
+        ValueError,
+        match="Cannot build budget-window result: missing outputs for 2027",
+    ):
+        build_budget_window_result(
+            start_year="2026",
+            window_size=2,
+            outputs_by_year=outputs_by_year,
+        )
