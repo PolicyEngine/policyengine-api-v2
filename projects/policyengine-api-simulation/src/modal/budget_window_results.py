@@ -58,9 +58,7 @@ def validate_single_year_output(
         raise ValueError("Malformed budget-window child result: missing budget object")
 
     missing_keys = [
-        key
-        for key in REQUIRED_BUDGET_KEYS
-        if not _is_number(budget.get(key))
+        key for key in REQUIRED_BUDGET_KEYS if not _is_number(budget.get(key))
     ]
     if missing_keys:
         missing = ", ".join(f"budget.{key}" for key in missing_keys)
