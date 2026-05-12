@@ -31,6 +31,7 @@ from src.modal.gateway.models import (
 )
 from src.modal.gateway.responses import (
     batch_status_response,
+    complete_job_response,
     failed_job_response,
     running_job_response,
 )
@@ -298,9 +299,7 @@ async def get_job_status(job_id: str):
 
     try:
         result = call.get(timeout=0)
-        return JobStatusResponse(
-            status="complete", result=result, **(job_metadata or {})
-        )
+        return complete_job_response(result=result, job_metadata=job_metadata)
     except TimeoutError:
         return running_job_response(job_metadata)
     except Exception as exc:

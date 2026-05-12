@@ -7,7 +7,10 @@ from src.modal.budget_window_results import (
     sum_single_year_outputs,
     validate_single_year_output,
 )
-from tests.fixtures.budget_window_outputs import make_single_year_macro_output
+from tests.fixtures.budget_window_outputs import (
+    FULL_SINGLE_YEAR_MACRO_OUTPUT_KEYS,
+    make_single_year_macro_output,
+)
 
 
 def test_validate_single_year_output_preserves_full_macro_output():
@@ -24,10 +27,15 @@ def test_validate_single_year_output_preserves_full_macro_output():
     )
 
     dumped = output.model_dump(mode="json")
+    assert FULL_SINGLE_YEAR_MACRO_OUTPUT_KEYS <= dumped.keys()
     assert dumped["budget"]["tax_revenue_impact"] == 100
     assert dumped["budget"]["state_tax_revenue_impact"] == 40
-    assert "poverty" in dumped
-    assert "decile" in dumped
+    assert dumped["detailed_budget"]["income_tax"]["difference"] == 10
+    assert dumped["decile"]["average"]["1"] == 100
+    assert dumped["decile_impacts"] == [
+        {"decile": 1, "absolute_change": 100.0, "relative_change": 0.01}
+    ]
+    assert dumped["program_statistics"][0]["program_name"] == "income_tax"
     assert "annualImpacts" not in dumped
 
 

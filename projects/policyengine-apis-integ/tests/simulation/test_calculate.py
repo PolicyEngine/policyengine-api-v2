@@ -5,6 +5,7 @@ These tests run against the staging Modal deployment and verify
 that economy-wide simulations complete successfully.
 """
 
+from collections.abc import Mapping
 import time
 from http import HTTPStatus
 
@@ -20,6 +21,61 @@ from policyengine_api_simulation_client.models import (
     JobSubmitResponse,
     SimulationRequest,
 )
+
+
+FULL_SINGLE_YEAR_MACRO_OUTPUT_KEYS = {
+    "budget",
+    "detailed_budget",
+    "decile",
+    "inequality",
+    "poverty",
+    "poverty_by_gender",
+    "poverty_by_race",
+    "intra_decile",
+    "wealth_decile",
+    "intra_wealth_decile",
+    "labor_supply_response",
+    "constituency_impact",
+    "local_authority_impact",
+    "congressional_district_impact",
+    "cliff_impact",
+}
+BUDGET_OUTPUT_KEYS = {
+    "baseline_net_income",
+    "benefit_spending_impact",
+    "budgetary_impact",
+    "households",
+    "state_tax_revenue_impact",
+    "tax_revenue_impact",
+}
+
+
+def assert_full_single_year_macro_result(
+    economy_result: object, *, country: str
+) -> None:
+    assert isinstance(economy_result, Mapping)
+    missing = FULL_SINGLE_YEAR_MACRO_OUTPUT_KEYS - economy_result.keys()
+    assert not missing, f"Missing full macro fields: {sorted(missing)}"
+    assert "annualImpacts" not in economy_result
+
+    budget = economy_result["budget"]
+    assert isinstance(budget, Mapping)
+    missing_budget_keys = BUDGET_OUTPUT_KEYS - budget.keys()
+    assert not missing_budget_keys, (
+        f"Missing budget fields: {sorted(missing_budget_keys)}"
+    )
+    assert isinstance(budget["state_tax_revenue_impact"], int | float)
+    if country == "uk":
+        assert budget["state_tax_revenue_impact"] == 0
+
+    assert isinstance(economy_result["detailed_budget"], Mapping)
+    assert isinstance(economy_result["decile"], Mapping)
+    assert isinstance(economy_result["poverty"], Mapping)
+    assert isinstance(economy_result["poverty_by_gender"], Mapping)
+    assert isinstance(economy_result["intra_decile"], Mapping)
+    assert isinstance(economy_result["labor_supply_response"], Mapping)
+    assert "decile_impacts" in economy_result
+    assert "program_statistics" in economy_result
 
 
 def test_generated_client_job_status_result_remains_pass_through_dict():
@@ -130,17 +186,8 @@ def test_calculate_default_model(
     assert result.status == "complete"
     assert result.result is not None
 
-    # Verify key economic impact sections are present
     economy_result = result.result
-    assert "budget" in economy_result, (
-        f"Missing 'budget' in result: {economy_result.keys()}"
-    )
-    assert "poverty" in economy_result, (
-        f"Missing 'poverty' in result: {economy_result.keys()}"
-    )
-    assert "inequality" in economy_result, (
-        f"Missing 'inequality' in result: {economy_result.keys()}"
-    )
+    assert_full_single_year_macro_result(economy_result, country="us")
 
 
 @pytest.mark.beta_only
@@ -191,9 +238,7 @@ def test_calculate_specific_model(
     assert result.result is not None
 
     economy_result = result.result
-    assert "budget" in economy_result
-    assert "poverty" in economy_result
-    assert "inequality" in economy_result
+    assert_full_single_year_macro_result(economy_result, country="us")
 
 
 @pytest.mark.beta_only
@@ -241,6 +286,4 @@ def test_calculate_uk_model(
     assert result.result is not None
 
     economy_result = result.result
-    assert "budget" in economy_result
-    assert "poverty" in economy_result
-    assert "inequality" in economy_result
+    assert_full_single_year_macro_result(economy_result, country="uk")

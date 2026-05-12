@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi.responses import JSONResponse
 
-from src.modal.gateway.models import BudgetWindowBatchStatusResponse
+from src.modal.gateway.models import (
+    BudgetWindowBatchStatusResponse,
+    JobStatusResponse,
+)
 
 
 class AcceptedResponse(JSONResponse):
@@ -37,7 +42,25 @@ def batch_status_response(response: BudgetWindowBatchStatusResponse):
         return AcceptedResponse(payload)
     if response.status == "failed":
         return ServerErrorResponse(payload)
-    return response
+    # Preserve null-valued annual sections inside outputsByYear. Returning the
+    # model directly would let FastAPI's route-level exclude_none prune them.
+    return JSONResponse(payload)
+
+
+def complete_job_response(*, result: Any, job_metadata: dict | None = None):
+    response = JobStatusResponse(
+        status="complete",
+        result=result,
+        **(job_metadata or {}),
+    )
+    payload = response.model_dump(mode="json")
+    if response.policyengine_bundle is not None:
+        payload["policyengine_bundle"] = response.policyengine_bundle.model_dump(
+            mode="json",
+            exclude_none=True,
+        )
+    # Preserve null-valued legacy sections inside pass-through result payloads.
+    return JSONResponse(payload)
 
 
 def running_job_response(job_metadata: dict | None = None) -> AcceptedResponse:

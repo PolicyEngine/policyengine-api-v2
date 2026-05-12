@@ -20,7 +20,10 @@ from src.modal.gateway.models import (
     _move_internal_telemetry_alias,
     _strip_internal_passthrough_fields,
 )
-from tests.fixtures.budget_window_outputs import make_single_year_macro_output
+from tests.fixtures.budget_window_outputs import (
+    FULL_SINGLE_YEAR_MACRO_OUTPUT_KEYS,
+    make_single_year_macro_output,
+)
 
 
 class TestPingRequest:
@@ -671,7 +674,9 @@ class TestBudgetWindowBatchStatusResponse:
         assert dumped["result"]["kind"] == "budgetWindow"
         assert dumped["result"]["years"] == ["2026", "2027"]
         assert "annualImpacts" not in dumped["result"]
+        first_year_output = dumped["result"]["outputsByYear"]["2026"]
+        assert FULL_SINGLE_YEAR_MACRO_OUTPUT_KEYS <= first_year_output.keys()
         assert (
-            dumped["result"]["outputsByYear"]["2026"]["budget"]["tax_revenue_impact"]
-            == 10
+            first_year_output["budget"]["tax_revenue_impact"] == 10
         )
+        assert first_year_output["detailed_budget"]["income_tax"]["difference"] == 10

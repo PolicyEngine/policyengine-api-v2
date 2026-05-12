@@ -14,7 +14,10 @@ from src.modal.gateway.models import (
     BudgetWindowBatchRequest,
     PolicyEngineBundle,
 )
-from tests.fixtures.budget_window_outputs import make_single_year_macro_output
+from tests.fixtures.budget_window_outputs import (
+    FULL_SINGLE_YEAR_MACRO_OUTPUT_KEYS,
+    make_single_year_macro_output,
+)
 
 
 class SequencedCall:
@@ -236,10 +239,13 @@ def test_run_budget_window_batch_impl_completes_and_respects_max_parallel(
     assert result["result"]["years"] == ["2026", "2027", "2028"]
     assert list(result["result"]["outputsByYear"]) == ["2026", "2027", "2028"]
     assert "annualImpacts" not in result["result"]
+    first_year_output = result["result"]["outputsByYear"]["2026"]
+    assert FULL_SINGLE_YEAR_MACRO_OUTPUT_KEYS <= first_year_output.keys()
     assert (
-        result["result"]["outputsByYear"]["2026"]["budget"]["tax_revenue_impact"]
-        == 10
+        first_year_output["budget"]["tax_revenue_impact"] == 10
     )
+    assert first_year_output["detailed_budget"]["income_tax"]["difference"] == 10.0
+    assert first_year_output["program_statistics"][0]["program_name"] == "income_tax"
     assert result["result"]["totals"]["budgetaryImpact"] == 51
     assert state is not None
     assert state.status == "complete"

@@ -25,7 +25,10 @@ from src.modal.gateway.models import (
     BudgetWindowBatchRequest,
     PolicyEngineBundle,
 )
-from tests.fixtures.budget_window_outputs import make_single_year_macro_output
+from tests.fixtures.budget_window_outputs import (
+    FULL_SINGLE_YEAR_MACRO_OUTPUT_KEYS,
+    make_single_year_macro_output,
+)
 
 
 @dataclass
@@ -228,9 +231,13 @@ def test_budget_window_submit_and_poll_exercise_gateway_worker_seams(
     assert body["result"]["years"] == ["2026", "2027", "2028"]
     assert list(body["result"]["outputsByYear"]) == ["2026", "2027", "2028"]
     assert "annualImpacts" not in body["result"]
+    first_year_output = body["result"]["outputsByYear"]["2026"]
+    assert FULL_SINGLE_YEAR_MACRO_OUTPUT_KEYS <= first_year_output.keys()
     assert (
-        body["result"]["outputsByYear"]["2026"]["budget"]["tax_revenue_impact"] == 100.0
+        first_year_output["budget"]["tax_revenue_impact"] == 100.0
     )
+    assert first_year_output["detailed_budget"]["income_tax"]["difference"] == 10.0
+    assert first_year_output["decile_impacts"][0]["absolute_change"] == 100.0
     assert body["result"]["totals"] == {
         "taxRevenueImpact": 600.0,
         "federalTaxRevenueImpact": 540.0,

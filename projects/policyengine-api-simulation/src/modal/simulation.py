@@ -6,11 +6,12 @@ captured in Modal's image snapshot. No Modal dependencies here.
 """
 
 import contextlib
+import importlib
 import json
 import logging
 import os
 import tempfile
-import importlib
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any, Iterator
 
 # policyengine.core is imported for every simulation. Without this guard,
@@ -27,6 +28,44 @@ logger = logging.getLogger(__name__)
 
 
 DEFAULT_YEAR = 2026
+POVERTY_TYPES = ("poverty", "deep_poverty")
+AGE_GROUPS = {
+    "all": {},
+    "child": {"filter_variable": "age", "filter_variable_leq": 17},
+    "adult": {
+        "filter_variable": "age",
+        "filter_variable_geq": 18,
+        "filter_variable_leq": 64,
+    },
+    "senior": {"filter_variable": "age", "filter_variable_geq": 65},
+}
+GENDER_GROUPS = {
+    "male": {"filter_variable": "is_male", "filter_variable_eq": True},
+    "female": {"filter_variable": "is_male", "filter_variable_eq": False},
+}
+RACE_GROUPS = {
+    "white": {"filter_variable": "race", "filter_variable_eq": "WHITE"},
+    "black": {"filter_variable": "race", "filter_variable_eq": "BLACK"},
+    "hispanic": {"filter_variable": "race", "filter_variable_eq": "HISPANIC"},
+    "other": {"filter_variable": "race", "filter_variable_eq": "OTHER"},
+}
+POVERTY_VARIABLES = {
+    "us": {
+        "poverty": "spm_unit_is_in_spm_poverty",
+        "deep_poverty": "spm_unit_is_in_deep_spm_poverty",
+    },
+    "uk": {
+        "poverty": "in_poverty_bhc",
+        "deep_poverty": None,
+    },
+}
+INTRA_DECILE_FIELDS = {
+    "Gain less than 5%": "gain_less_than_5pct",
+    "Gain more than 5%": "gain_more_than_5pct",
+    "Lose less than 5%": "lose_less_than_5pct",
+    "Lose more than 5%": "lose_more_than_5pct",
+    "No change": "no_change",
+}
 DATASET_ALIASES = {
     "us": {
         "enhanced_cps": "enhanced_cps_2024",
@@ -250,6 +289,13 @@ def _country_module(country: str):
     raise ValueError(f"Unsupported country: {country}")
 
 
+def _package_version(package_name: str) -> str | None:
+    try:
+        return version(package_name)
+    except PackageNotFoundError:
+        return None
+
+
 def _load_dataset(params: dict[str, Any]):
     country = params.get("country", "us").lower()
     year = _parse_year(params)
@@ -297,6 +343,32 @@ def _change_sum(baseline, reform, variable: str, entity: str | None = None) -> f
     return float(output.result)
 
 
+def _aggregate_sum(simulation, variable: str, entity: str | None = None) -> float:
+    from policyengine.outputs import Aggregate, AggregateType
+
+    output = Aggregate(
+        simulation=simulation,
+        variable=variable,
+        entity=entity,
+        aggregate_type=AggregateType.SUM,
+    )
+    output.run()
+    return float(output.result)
+
+
+def _aggregate_count(simulation, variable: str, entity: str | None = None) -> float:
+    from policyengine.outputs import Aggregate, AggregateType
+
+    output = Aggregate(
+        simulation=simulation,
+        variable=variable,
+        entity=entity,
+        aggregate_type=AggregateType.COUNT,
+    )
+    output.run()
+    return float(output.result)
+
+
 def _try_change_sum(
     baseline, reform, variable: str, entity: str | None = None
 ) -> float:
@@ -304,6 +376,22 @@ def _try_change_sum(
         return _change_sum(baseline, reform, variable, entity)
     except Exception:
         logger.warning("Unable to calculate change for %s", variable, exc_info=True)
+        return 0.0
+
+
+def _try_aggregate_sum(simulation, variable: str, entity: str | None = None) -> float:
+    try:
+        return _aggregate_sum(simulation, variable, entity)
+    except Exception:
+        logger.warning("Unable to calculate sum for %s", variable, exc_info=True)
+        return 0.0
+
+
+def _try_aggregate_count(simulation, variable: str, entity: str | None = None) -> float:
+    try:
+        return _aggregate_count(simulation, variable, entity)
+    except Exception:
+        logger.warning("Unable to calculate count for %s", variable, exc_info=True)
         return 0.0
 
 
@@ -317,8 +405,19 @@ def _budget_result(country: str, baseline, reform) -> dict[str, float]:
     budgetary_impact = tax_revenue_impact - benefit_spending_impact
     result = {
         "tax_revenue_impact": tax_revenue_impact,
+        "state_tax_revenue_impact": 0.0,
         "benefit_spending_impact": benefit_spending_impact,
         "budgetary_impact": budgetary_impact,
+        "baseline_net_income": _try_aggregate_sum(
+            baseline,
+            "household_net_income",
+            entity="household",
+        ),
+        "households": _try_aggregate_count(
+            baseline,
+            "household_net_income",
+            entity="household",
+        ),
     }
     if country == "us":
         result["state_tax_revenue_impact"] = _try_change_sum(
@@ -330,44 +429,291 @@ def _budget_result(country: str, baseline, reform) -> dict[str, float]:
     return result
 
 
-def _poverty_result(country: str, baseline, reform) -> dict[str, list[dict[str, Any]]]:
-    country_module = _country_module(country)
-    impact = country_module.economic_impact_analysis(baseline, reform)
-    baseline_poverty = impact.baseline_poverty
-    reform_poverty = impact.reform_poverty
+def _rows(collection) -> list[dict[str, Any]]:
+    return collection.dataframe.to_dict("records")
 
+
+def _number_or_zero(value: Any) -> float:
+    return float(value) if isinstance(value, int | float) else 0.0
+
+
+def _empty_metric_pair() -> dict[str, float]:
+    return {"baseline": 0.0, "reform": 0.0}
+
+
+def _empty_labor_supply_response() -> dict[str, Any]:
     return {
-        "baseline": baseline_poverty.dataframe.to_dict("records"),
-        "reform": reform_poverty.dataframe.to_dict("records"),
+        "decile": {
+            "average": {"income": {}, "substitution": {}},
+            "relative": {"income": {}, "substitution": {}},
+        },
+        "hours": {
+            "baseline": 0.0,
+            "reform": 0.0,
+            "change": 0.0,
+            "income_effect": 0.0,
+            "substitution_effect": 0.0,
+        },
+        "income_lsr": 0.0,
+        "substitution_lsr": 0.0,
+        "relative_lsr": {"income": 0.0, "substitution": 0.0},
+        "total_change": 0.0,
+        "revenue_change": 0.0,
     }
 
 
-def _analysis_result(country: str, baseline, reform) -> dict[str, Any]:
-    country_module = _country_module(country)
-    analysis = country_module.economic_impact_analysis(baseline, reform)
+def _decile_result(decile_rows: list[dict[str, Any]]) -> dict[str, dict[str, float]]:
+    average: dict[str, float] = {}
+    relative: dict[str, float] = {}
+    for row in sorted(decile_rows, key=lambda item: item["decile"]):
+        decile = str(row["decile"])
+        average[decile] = _number_or_zero(row.get("absolute_change"))
+        relative[decile] = _number_or_zero(row.get("relative_change"))
+    return {"average": average, "relative": relative}
 
+
+def _detailed_budget_result(
+    program_rows: list[dict[str, Any]],
+) -> dict[str, dict[str, float]]:
     return {
-        "decile_impacts": analysis.decile_impacts.dataframe.to_dict("records"),
-        "program_statistics": analysis.program_statistics.dataframe.to_dict("records"),
+        row["program_name"]: {
+            "baseline": _number_or_zero(row.get("baseline_total")),
+            "reform": _number_or_zero(row.get("reform_total")),
+            "difference": _number_or_zero(row.get("change")),
+        }
+        for row in program_rows
+    }
+
+
+def _inequality_result(analysis) -> dict[str, dict[str, float]]:
+    return {
+        "gini": {
+            "baseline": _number_or_zero(analysis.baseline_inequality.gini),
+            "reform": _number_or_zero(analysis.reform_inequality.gini),
+        },
+        "top_10_pct_share": {
+            "baseline": _number_or_zero(analysis.baseline_inequality.top_10_share),
+            "reform": _number_or_zero(analysis.reform_inequality.top_10_share),
+        },
+        "top_1_pct_share": {
+            "baseline": _number_or_zero(analysis.baseline_inequality.top_1_share),
+            "reform": _number_or_zero(analysis.reform_inequality.top_1_share),
+        },
+    }
+
+
+def _poverty_rate(
+    country: str,
+    simulation,
+    poverty_type: str,
+    filters: dict[str, Any],
+) -> float:
+    from policyengine.outputs.poverty import Poverty
+
+    variable = POVERTY_VARIABLES[country][poverty_type]
+    if variable is None:
+        return 0.0
+
+    poverty = Poverty(
+        simulation=simulation,
+        poverty_variable=variable,
+        poverty_type=poverty_type,
+        entity="person",
+        **filters,
+    )
+    poverty.run()
+    return _number_or_zero(poverty.rate)
+
+
+def _try_poverty_pair(
+    country: str,
+    baseline,
+    reform,
+    poverty_type: str,
+    filters: dict[str, Any],
+) -> dict[str, float]:
+    try:
+        return {
+            "baseline": _poverty_rate(country, baseline, poverty_type, filters),
+            "reform": _poverty_rate(country, reform, poverty_type, filters),
+        }
+    except Exception:
+        logger.warning(
+            "Unable to calculate %s poverty for filters %s",
+            poverty_type,
+            filters,
+            exc_info=True,
+        )
+        return _empty_metric_pair()
+
+
+def _poverty_result(country: str, baseline, reform) -> dict[str, Any]:
+    return {
+        poverty_type: {
+            group: _try_poverty_pair(country, baseline, reform, poverty_type, filters)
+            for group, filters in AGE_GROUPS.items()
+        }
+        for poverty_type in POVERTY_TYPES
+    }
+
+
+def _poverty_by_gender_result(country: str, baseline, reform) -> dict[str, Any]:
+    return {
+        poverty_type: {
+            group: _try_poverty_pair(country, baseline, reform, poverty_type, filters)
+            for group, filters in GENDER_GROUPS.items()
+        }
+        for poverty_type in POVERTY_TYPES
+    }
+
+
+def _poverty_by_race_result(country: str, baseline, reform) -> dict[str, Any] | None:
+    if country != "us":
+        return None
+    return {
         "poverty": {
-            "baseline": analysis.baseline_poverty.dataframe.to_dict("records"),
-            "reform": analysis.reform_poverty.dataframe.to_dict("records"),
-        },
-        "inequality": {
-            "baseline": _inequality_summary(analysis.baseline_inequality),
-            "reform": _inequality_summary(analysis.reform_inequality),
-        },
+            group: _try_poverty_pair(country, baseline, reform, "poverty", filters)
+            for group, filters in RACE_GROUPS.items()
+        }
     }
 
 
-def _inequality_summary(inequality) -> dict[str, Any]:
+def _intra_decile_rows(country: str, baseline, reform) -> list[dict[str, Any]]:
+    from policyengine.outputs import compute_intra_decile_impacts
+
+    income_variable = (
+        "household_net_income"
+        if country == "us"
+        else "equiv_hbai_household_net_income"
+    )
+    return _rows(
+        compute_intra_decile_impacts(
+            baseline_simulation=baseline,
+            reform_simulation=reform,
+            income_variable=income_variable,
+        )
+    )
+
+
+def _try_intra_decile_rows(country: str, baseline, reform) -> list[dict[str, Any]]:
+    try:
+        return _intra_decile_rows(country, baseline, reform)
+    except Exception:
+        logger.warning("Unable to calculate intra-decile impact", exc_info=True)
+        return []
+
+
+def _intra_decile_result(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    output = {
+        "all": {label: 0.0 for label in INTRA_DECILE_FIELDS},
+        "deciles": {label: [] for label in INTRA_DECILE_FIELDS},
+    }
+    sorted_rows = sorted(rows, key=lambda row: row["decile"])
+
+    for label, field in INTRA_DECILE_FIELDS.items():
+        decile_values = [
+            _number_or_zero(row.get(field))
+            for row in sorted_rows
+            if row.get("decile") != 0
+        ]
+        output["deciles"][label] = decile_values
+
+        overall = next((row for row in sorted_rows if row.get("decile") == 0), None)
+        if overall is not None:
+            output["all"][label] = _number_or_zero(overall.get(field))
+        elif decile_values:
+            output["all"][label] = sum(decile_values) / len(decile_values)
+
+    return output
+
+
+def _congressional_district_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    for row in rows:
+        state_fips = int(_number_or_zero(row.get("state_fips")))
+        district_number = int(_number_or_zero(row.get("district_number")))
+        output.append(
+            {
+                "district": f"{state_fips:02d}-{district_number:02d}",
+                "average_household_income_change": _number_or_zero(
+                    row.get("average_household_income_change")
+                ),
+                "relative_household_income_change": _number_or_zero(
+                    row.get("relative_household_income_change")
+                ),
+                "winner_percentage": _number_or_zero(row.get("winner_percentage")),
+                "loser_percentage": _number_or_zero(row.get("loser_percentage")),
+                "no_change_percentage": _number_or_zero(
+                    row.get("no_change_percentage")
+                ),
+            }
+        )
+    return output
+
+
+def _congressional_district_impact(
+    country: str, baseline, reform
+) -> dict[str, Any] | None:
+    if country != "us":
+        return None
+    try:
+        from policyengine.outputs import compute_us_congressional_district_impacts
+
+        impact = compute_us_congressional_district_impacts(
+            baseline_simulation=baseline,
+            reform_simulation=reform,
+        )
+    except Exception:
+        logger.warning("Unable to calculate congressional district impact", exc_info=True)
+        return None
+
+    return {"districts": _congressional_district_rows(impact.district_results or [])}
+
+
+def _legacy_macro_result(
+    *,
+    country: str,
+    params: dict[str, Any],
+    baseline,
+    reform,
+    analysis,
+    budget: dict[str, float],
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    decile_rows = _rows(analysis.decile_impacts)
+    program_rows = _rows(analysis.program_statistics)
+    intra_decile_rows = _try_intra_decile_rows(country, baseline, reform)
+    country_package = f"policyengine-{country}"
+
     return {
-        "income_variable": inequality.income_variable,
-        "entity": inequality.entity,
-        "gini": inequality.gini,
-        "top_10_share": inequality.top_10_share,
-        "top_1_share": inequality.top_1_share,
-        "bottom_50_share": inequality.bottom_50_share,
+        "budget": budget,
+        "detailed_budget": _detailed_budget_result(program_rows),
+        "decile": _decile_result(decile_rows),
+        "inequality": _inequality_result(analysis),
+        "poverty": _poverty_result(country, baseline, reform),
+        "poverty_by_gender": _poverty_by_gender_result(country, baseline, reform),
+        "poverty_by_race": _poverty_by_race_result(country, baseline, reform),
+        "intra_decile": _intra_decile_result(intra_decile_rows),
+        "wealth_decile": None,
+        "intra_wealth_decile": None,
+        "labor_supply_response": _empty_labor_supply_response(),
+        "constituency_impact": None,
+        "local_authority_impact": None,
+        "congressional_district_impact": _congressional_district_impact(
+            country,
+            baseline,
+            reform,
+        ),
+        "cliff_impact": None,
+        "model_version": _package_version(country_package),
+        "policyengine_version": _package_version("policyengine"),
+        "data_version": params.get("data_version"),
+        "dataset": metadata.get("dataset"),
+        "metadata": metadata,
+        # Preserve the row-oriented PolicyEngine 4.4.x outputs as extra fields.
+        "decile_impacts": decile_rows,
+        "program_statistics": program_rows,
+        "intra_decile_rows": intra_decile_rows,
     }
 
 
@@ -392,12 +738,21 @@ def _run_simulation_impl_core(params: dict) -> dict:
     reform = _build_simulation(simulation_params, reform_policy)
 
     logger.info("Calculating economic impact")
-    analysis = _analysis_result(country, baseline, reform)
-    analysis["budget"] = _budget_result(country, baseline, reform)
-    analysis["metadata"] = {
+    country_module = _country_module(country)
+    analysis = country_module.economic_impact_analysis(baseline, reform)
+    metadata = {
         "country": country,
         "year": _parse_year(simulation_params),
         "dataset": getattr(baseline.dataset, "filepath", None),
     }
+    result = _legacy_macro_result(
+        country=country,
+        params=simulation_params,
+        baseline=baseline,
+        reform=reform,
+        analysis=analysis,
+        budget=_budget_result(country, baseline, reform),
+        metadata=metadata,
+    )
     logger.info("Comparison complete")
-    return analysis
+    return result

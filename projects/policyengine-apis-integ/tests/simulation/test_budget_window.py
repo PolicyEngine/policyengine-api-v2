@@ -7,6 +7,7 @@ simulation workers, and the completed batch result has the public response
 shape expected by API consumers.
 """
 
+from collections.abc import Mapping
 from http import HTTPStatus
 
 import pytest
@@ -16,6 +17,55 @@ from policyengine_api_simulation_client.models import (
     BudgetWindowResult,
 )
 from policyengine_api_simulation_client.types import Unset
+
+
+FULL_SINGLE_YEAR_MACRO_OUTPUT_KEYS = {
+    "budget",
+    "detailed_budget",
+    "decile",
+    "inequality",
+    "poverty",
+    "poverty_by_gender",
+    "poverty_by_race",
+    "intra_decile",
+    "wealth_decile",
+    "intra_wealth_decile",
+    "labor_supply_response",
+    "constituency_impact",
+    "local_authority_impact",
+    "congressional_district_impact",
+    "cliff_impact",
+}
+BUDGET_OUTPUT_KEYS = {
+    "baseline_net_income",
+    "benefit_spending_impact",
+    "budgetary_impact",
+    "households",
+    "state_tax_revenue_impact",
+    "tax_revenue_impact",
+}
+
+
+def assert_full_single_year_macro_output(output: object) -> None:
+    payload = output.to_dict()
+    missing = FULL_SINGLE_YEAR_MACRO_OUTPUT_KEYS - payload.keys()
+    assert not missing, f"Missing full macro fields: {sorted(missing)}"
+    assert "annualImpacts" not in payload
+
+    budget = payload["budget"]
+    assert isinstance(budget, Mapping)
+    missing_budget_keys = BUDGET_OUTPUT_KEYS - budget.keys()
+    assert not missing_budget_keys, (
+        f"Missing budget fields: {sorted(missing_budget_keys)}"
+    )
+    assert isinstance(payload["detailed_budget"], Mapping)
+    assert isinstance(payload["decile"], Mapping)
+    assert isinstance(payload["poverty"], Mapping)
+    assert isinstance(payload["poverty_by_gender"], Mapping)
+    assert isinstance(payload["intra_decile"], Mapping)
+    assert isinstance(payload["labor_supply_response"], Mapping)
+    assert "decile_impacts" in payload
+    assert "program_statistics" in payload
 
 
 @pytest.mark.beta_only
@@ -68,4 +118,6 @@ def test_budget_window_multi_year_batch_completes(
         outputs_by_year[year].budget.budgetary_impact is not None
         for year in budget_window_years
     )
+    for year in budget_window_years:
+        assert_full_single_year_macro_output(outputs_by_year[year])
     assert isinstance(result.totals.budgetary_impact, int | float)
