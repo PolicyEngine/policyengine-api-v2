@@ -2,8 +2,6 @@
 
 import pytest
 
-from tests.fixtures.budget_window_outputs import make_single_year_macro_output
-
 
 class MockDict:
     """Mock for Modal.Dict to simulate version registry."""
@@ -36,12 +34,7 @@ class MockFunctionCall:
 
     def __init__(self, object_id: str = "mock-job-id-123"):
         self.object_id = object_id
-        self.result = make_single_year_macro_output(
-            tax_revenue_impact=1000000,
-            state_tax_revenue_impact=0,
-            benefit_spending_impact=0,
-            budgetary_impact=1000000,
-        )
+        self.result = {"budget": {"total": 1000000}}
         self.error = None
         self.running = False
         self.__class__.registry[object_id] = self

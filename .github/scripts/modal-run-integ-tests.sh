@@ -1,6 +1,6 @@
 #!/bin/bash
 # Run simulation integration tests
-# Usage: ./modal-run-integ-tests.sh <environment> <base-url> [us-version] [uk-version]
+# Usage: ./modal-run-integ-tests.sh <environment> <base-url> [us-version]
 # Environment: beta runs all tests, prod excludes beta_only tests
 
 set -euo pipefail
@@ -8,7 +8,6 @@ set -euo pipefail
 ENVIRONMENT="${1:?Environment required (beta or prod)}"
 BASE_URL="${2:?Base URL required}"
 US_VERSION="${3:-}"
-UK_VERSION="${4:-}"
 
 truthy() {
   case "${1:-}" in
@@ -114,10 +113,6 @@ fi
 
 if [ -n "$US_VERSION" ]; then
   export simulation_integ_test_us_model_version="$US_VERSION"
-fi
-
-if [ -n "$UK_VERSION" ]; then
-  export simulation_integ_test_uk_model_version="$UK_VERSION"
 fi
 
 if [ "$ENVIRONMENT" = "beta" ]; then

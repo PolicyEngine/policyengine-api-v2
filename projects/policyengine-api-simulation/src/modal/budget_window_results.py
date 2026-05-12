@@ -1,4 +1,4 @@
-"""Budget-window result validation and aggregation helpers."""
+"""Budget-window annual result extraction and aggregation helpers."""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ from decimal import Decimal
 from typing import Any
 
 from src.modal.gateway.models import (
+    BudgetWindowAnnualImpact,
     BudgetWindowResult,
     BudgetWindowTotals,
-    SingleYearMacroOutput,
 )
 
 # The UK microsimulation has no state/province fiscal layer, so worker child
@@ -20,10 +20,7 @@ REQUIRED_BUDGET_KEYS = (
     "benefit_spending_impact",
     "budgetary_impact",
 )
-
-
-def _is_number(value: Any) -> bool:
-    return isinstance(value, int | float) and not isinstance(value, bool)
+OPTIONAL_BUDGET_KEYS = ("state_tax_revenue_impact",)
 
 
 def _as_decimal(value: float | int) -> Decimal:
@@ -35,30 +32,19 @@ def _as_decimal(value: float | int) -> Decimal:
     return Decimal(str(value))
 
 
-def validate_single_year_output(
+def extract_annual_impact(
     *,
     simulation_year: str,
     child_result: dict[str, Any],
-) -> SingleYearMacroOutput:
-    """Validate and normalize a child macro result.
-
-    UK worker results can omit ``state_tax_revenue_impact`` because there is
-    no state/province fiscal layer. The canonical output still includes that
-    field, defaulted to zero, so downstream clients receive one stable shape.
-    """
-
-    if not isinstance(child_result, dict):
-        raise ValueError(
-            "Malformed budget-window child result: expected object for "
-            f"{simulation_year}"
-        )
-
+) -> BudgetWindowAnnualImpact:
     budget = child_result.get("budget", {})
     if not isinstance(budget, dict):
         raise ValueError("Malformed budget-window child result: missing budget object")
 
     missing_keys = [
-        key for key in REQUIRED_BUDGET_KEYS if not _is_number(budget.get(key))
+        key
+        for key in REQUIRED_BUDGET_KEYS
+        if not isinstance(budget.get(key), int | float)
     ]
     if missing_keys:
         missing = ", ".join(f"budget.{key}" for key in missing_keys)
@@ -66,29 +52,26 @@ def validate_single_year_output(
             f"Malformed budget-window child result: missing numeric {missing}"
         )
 
-    normalized = dict(child_result)
-    normalized_budget = dict(budget)
-    if "state_tax_revenue_impact" not in normalized_budget:
-        normalized_budget["state_tax_revenue_impact"] = 0.0
-    elif not _is_number(normalized_budget["state_tax_revenue_impact"]):
-        raise ValueError(
-            "Malformed budget-window child result: missing numeric "
-            "budget.state_tax_revenue_impact"
-        )
-    normalized["budget"] = normalized_budget
+    tax_revenue_impact = budget["tax_revenue_impact"]
+    # UK worker results omit the state fiscal layer entirely; coerce to 0.0
+    # so the parent aggregator can still report federal/state splits with a
+    # uniform shape across countries.
+    state_tax_revenue_impact = budget.get("state_tax_revenue_impact")
+    if not isinstance(state_tax_revenue_impact, int | float):
+        state_tax_revenue_impact = 0.0
 
-    try:
-        return SingleYearMacroOutput.model_validate(normalized)
-    except Exception as exc:
-        raise ValueError(
-            f"Malformed budget-window child result for {simulation_year}: {exc}"
-        ) from exc
+    return BudgetWindowAnnualImpact(
+        year=simulation_year,
+        taxRevenueImpact=tax_revenue_impact,
+        federalTaxRevenueImpact=tax_revenue_impact - state_tax_revenue_impact,
+        stateTaxRevenueImpact=state_tax_revenue_impact,
+        benefitSpendingImpact=budget["benefit_spending_impact"],
+        budgetaryImpact=budget["budgetary_impact"],
+    )
 
 
-def sum_single_year_outputs(
-    *,
-    outputs_by_year: dict[str, SingleYearMacroOutput],
-    years: list[str],
+def sum_annual_impacts(
+    annual_impacts: list[BudgetWindowAnnualImpact],
 ) -> BudgetWindowTotals:
     """Sum per-year impacts using Decimal accumulators.
 
@@ -110,21 +93,18 @@ def sum_single_year_outputs(
         "budgetaryImpact": Decimal(0),
     }
 
-    for year in years:
-        output = outputs_by_year[year]
-        budget = output.model_dump(mode="json")["budget"]
-        tax_revenue_impact = budget["tax_revenue_impact"]
-        state_tax_revenue_impact = budget.get("state_tax_revenue_impact")
-
-        totals["taxRevenueImpact"] += _as_decimal(tax_revenue_impact)
+    for annual_impact in annual_impacts:
+        totals["taxRevenueImpact"] += _as_decimal(annual_impact.taxRevenueImpact)
         totals["federalTaxRevenueImpact"] += _as_decimal(
-            tax_revenue_impact - state_tax_revenue_impact
+            annual_impact.federalTaxRevenueImpact
         )
-        totals["stateTaxRevenueImpact"] += _as_decimal(state_tax_revenue_impact)
+        totals["stateTaxRevenueImpact"] += _as_decimal(
+            annual_impact.stateTaxRevenueImpact
+        )
         totals["benefitSpendingImpact"] += _as_decimal(
-            budget["benefit_spending_impact"]
+            annual_impact.benefitSpendingImpact
         )
-        totals["budgetaryImpact"] += _as_decimal(budget["budgetary_impact"])
+        totals["budgetaryImpact"] += _as_decimal(annual_impact.budgetaryImpact)
 
     return BudgetWindowTotals(**{key: float(value) for key, value in totals.items()})
 
@@ -133,25 +113,12 @@ def build_budget_window_result(
     *,
     start_year: str,
     window_size: int,
-    outputs_by_year: dict[str, SingleYearMacroOutput],
+    annual_impacts: list[BudgetWindowAnnualImpact],
 ) -> BudgetWindowResult:
-    years = [str(int(start_year) + offset) for offset in range(window_size)]
-    missing_years = [year for year in years if year not in outputs_by_year]
-    if missing_years:
-        raise ValueError(
-            "Cannot build budget-window result: missing outputs for "
-            + ", ".join(missing_years)
-        )
-
-    ordered_outputs = {year: outputs_by_year[year] for year in years}
     return BudgetWindowResult(
         startYear=start_year,
         endYear=str(int(start_year) + window_size - 1),
         windowSize=window_size,
-        years=years,
-        outputsByYear=ordered_outputs,
-        totals=sum_single_year_outputs(
-            outputs_by_year=ordered_outputs,
-            years=years,
-        ),
+        annualImpacts=annual_impacts,
+        totals=sum_annual_impacts(annual_impacts),
     )

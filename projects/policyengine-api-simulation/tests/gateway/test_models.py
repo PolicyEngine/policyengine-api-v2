@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from src.modal.gateway.models import (
     BatchChildJobStatus,
+    BudgetWindowAnnualImpact,
     BudgetWindowBatchRequest,
     BudgetWindowBatchStatusResponse,
     BudgetWindowBatchSubmitResponse,
@@ -15,12 +16,7 @@ from src.modal.gateway.models import (
     SimulationRequest,
     JobSubmitResponse,
     JobStatusResponse,
-    _default_missing_state_tax_revenue_impact,
-    _enforce_max_payload_size,
-    _move_internal_telemetry_alias,
-    _strip_internal_passthrough_fields,
 )
-from tests.fixtures.budget_window_outputs import make_single_year_macro_output
 
 
 class TestPingRequest:
@@ -116,15 +112,6 @@ class TestPingResponse:
 
 class TestSimulationRequest:
     """Tests for SimulationRequest model."""
-
-    def test_request_pre_validators_ignore_non_dict_payloads(self):
-        """Defensive pre-validators must leave non-mapping input to Pydantic."""
-
-        value = "not-a-request-object"
-
-        assert _move_internal_telemetry_alias(value) == value
-        assert _strip_internal_passthrough_fields(value) == value
-        assert _enforce_max_payload_size(value) == value
 
     def test_simulation_request_requires_country(self):
         """
@@ -265,13 +252,6 @@ class TestSimulationRequest:
         with pytest.raises(ValidationError, match="too large"):
             SimulationRequest(**payload)
 
-    def test_simulation_request_size_cap_defers_non_json_serializable_payloads(self):
-        """The size cap is best-effort; non-JSON objects fail later."""
-
-        payload = {("tuple", "key"): "not-json-serializable"}
-
-        assert _enforce_max_payload_size(payload) is payload
-
     def test_simulation_request_accepts_typed_telemetry_envelope(self):
         """
         Given a telemetry envelope
@@ -346,31 +326,15 @@ class TestJobStatusResponse:
         Then the model contains the result.
         """
         # Given
-        result = make_single_year_macro_output(
-            tax_revenue_impact=1000000,
-            state_tax_revenue_impact=0,
-            benefit_spending_impact=0,
-            budgetary_impact=1000000,
-        )
+        result = {"budget": {"total": 1000000}}
 
         # When
         response = JobStatusResponse(status="complete", result=result)
 
         # Then
         assert response.status == "complete"
-        assert response.result == result
-        assert response.result["budget"]["tax_revenue_impact"] == 1000000
+        assert response.result == {"budget": {"total": 1000000}}
         assert response.error is None
-
-    def test_job_status_response_keeps_legacy_dict_result_pass_through(self):
-        """Older generated-client callers access single-job results as dicts."""
-
-        result = {"budget": {"total": 1000000}, "custom": ["legacy-shape"]}
-
-        response = JobStatusResponse(status="complete", result=result)
-
-        assert response.result == result
-        assert response.model_dump(mode="json")["result"] == result
 
     def test_job_status_response_running_without_result(self):
         """
@@ -406,12 +370,7 @@ class TestJobStatusResponse:
     def test_job_status_response_accepts_bundle_metadata(self):
         response = JobStatusResponse(
             status="complete",
-            result=make_single_year_macro_output(
-                tax_revenue_impact=1000000,
-                state_tax_revenue_impact=0,
-                benefit_spending_impact=0,
-                budgetary_impact=1000000,
-            ),
+            result={"budget": {"total": 1000000}},
             resolved_app_name="policyengine-simulation-us1-459-0-uk2-65-9",
             policyengine_bundle={
                 "model_version": "1.459.0",
@@ -575,49 +534,6 @@ class TestBudgetWindowBatchSubmitResponse:
 class TestBudgetWindowBatchStatusResponse:
     """Tests for budget-window batch status responses."""
 
-    def test_single_year_macro_output_budget_normalizer_defensive_branches(self):
-        """The state-tax default only applies to object outputs with budgets."""
-
-        raw_value = "not-a-macro-output"
-        assert _default_missing_state_tax_revenue_impact(raw_value) == raw_value
-
-        no_budget = {"poverty": {}}
-        assert _default_missing_state_tax_revenue_impact(no_budget) is no_budget
-
-        non_object_budget = {"budget": "not-an-object"}
-        assert (
-            _default_missing_state_tax_revenue_impact(non_object_budget)
-            is non_object_budget
-        )
-
-        existing_state_tax = {"budget": {"state_tax_revenue_impact": 12}}
-        assert (
-            _default_missing_state_tax_revenue_impact(existing_state_tax)
-            is existing_state_tax
-        )
-
-        missing_state_tax = {"budget": {"tax_revenue_impact": 12}}
-        normalized = _default_missing_state_tax_revenue_impact(missing_state_tax)
-
-        assert normalized is not missing_state_tax
-        assert missing_state_tax["budget"].get("state_tax_revenue_impact") is None
-        assert normalized["budget"]["state_tax_revenue_impact"] == 0.0
-
-    def test_budget_window_result_requires_years_and_outputs_by_year(self):
-        with pytest.raises(ValidationError):
-            BudgetWindowResult(
-                startYear="2026",
-                endYear="2027",
-                windowSize=2,
-                totals=BudgetWindowTotals(
-                    taxRevenueImpact=30,
-                    federalTaxRevenueImpact=24,
-                    stateTaxRevenueImpact=6,
-                    benefitSpendingImpact=-9,
-                    budgetaryImpact=39,
-                ),
-            )
-
     def test_budget_window_batch_status_response_accepts_child_jobs_and_result(self):
         response = BudgetWindowBatchStatusResponse(
             status="complete",
@@ -634,27 +550,22 @@ class TestBudgetWindowBatchStatusResponse:
                 startYear="2026",
                 endYear="2027",
                 windowSize=2,
-                years=["2026", "2027"],
-                outputsByYear={
-                    "2026": make_single_year_macro_output(
-                        tax_revenue_impact=10,
-                        state_tax_revenue_impact=2,
-                        benefit_spending_impact=-3,
-                        budgetary_impact=13,
-                    ),
-                    "2027": make_single_year_macro_output(
-                        tax_revenue_impact=20,
-                        state_tax_revenue_impact=4,
-                        benefit_spending_impact=-6,
-                        budgetary_impact=26,
-                    ),
-                },
+                annualImpacts=[
+                    BudgetWindowAnnualImpact(
+                        year="2026",
+                        taxRevenueImpact=10,
+                        federalTaxRevenueImpact=8,
+                        stateTaxRevenueImpact=2,
+                        benefitSpendingImpact=-3,
+                        budgetaryImpact=13,
+                    )
+                ],
                 totals=BudgetWindowTotals(
-                    taxRevenueImpact=30,
-                    federalTaxRevenueImpact=24,
-                    stateTaxRevenueImpact=6,
-                    benefitSpendingImpact=-9,
-                    budgetaryImpact=39,
+                    taxRevenueImpact=10,
+                    federalTaxRevenueImpact=8,
+                    stateTaxRevenueImpact=2,
+                    benefitSpendingImpact=-3,
+                    budgetaryImpact=13,
                 ),
             ),
         )
@@ -669,9 +580,3 @@ class TestBudgetWindowBatchStatusResponse:
             "error": None,
         }
         assert dumped["result"]["kind"] == "budgetWindow"
-        assert dumped["result"]["years"] == ["2026", "2027"]
-        assert "annualImpacts" not in dumped["result"]
-        assert (
-            dumped["result"]["outputsByYear"]["2026"]["budget"]["tax_revenue_impact"]
-            == 10
-        )

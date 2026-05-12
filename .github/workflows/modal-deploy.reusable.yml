@@ -15,12 +15,6 @@ on:
       simulation_api_url:
         description: 'The deployed simulation API URL'
         value: ${{ jobs.deploy.outputs.simulation_api_url }}
-      us_version:
-        description: 'The deployed policyengine-us package version'
-        value: ${{ jobs.deploy.outputs.us_version }}
-      uk_version:
-        description: 'The deployed policyengine-uk package version'
-        value: ${{ jobs.deploy.outputs.uk_version }}
 
 jobs:
   deploy:
@@ -30,7 +24,6 @@ jobs:
     outputs:
       simulation_api_url: ${{ steps.get-url.outputs.simulation_api_url }}
       us_version: ${{ steps.versions.outputs.us_version }}
-      uk_version: ${{ steps.versions.outputs.uk_version }}
 
     steps:
     - name: Checkout repo
@@ -121,4 +114,4 @@ jobs:
         GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
         GATEWAY_AUTH_CLIENT_SECRET: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET }}
         GATEWAY_AUTH_REQUIRED: ${{ vars.GATEWAY_AUTH_REQUIRED }}
-      run: .github/scripts/modal-run-integ-tests.sh "${{ inputs.environment }}" "${{ needs.deploy.outputs.simulation_api_url }}" "${{ needs.deploy.outputs.us_version }}" "${{ needs.deploy.outputs.uk_version }}"
+      run: .github/scripts/modal-run-integ-tests.sh "${{ inputs.environment }}" "${{ needs.deploy.outputs.simulation_api_url }}" "${{ needs.deploy.outputs.us_version }}"

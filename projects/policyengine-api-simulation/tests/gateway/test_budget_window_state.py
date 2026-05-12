@@ -13,12 +13,12 @@ from src.modal.budget_window_state import (
     put_batch_job_state,
 )
 from src.modal.gateway.models import (
+    BudgetWindowAnnualImpact,
     BudgetWindowBatchRequest,
     BudgetWindowResult,
     BudgetWindowTotals,
     PolicyEngineBundle,
 )
-from tests.fixtures.budget_window_outputs import make_single_year_macro_output
 
 
 def test_create_initial_batch_state_builds_queued_years_and_run_id():
@@ -135,11 +135,13 @@ def test_state_transition_helpers_track_completion_path():
     mark_child_completed(
         state,
         year="2026",
-        single_year_output=make_single_year_macro_output(
-            tax_revenue_impact=10,
-            state_tax_revenue_impact=3,
-            benefit_spending_impact=5,
-            budgetary_impact=15,
+        annual_impact=BudgetWindowAnnualImpact(
+            year="2026",
+            taxRevenueImpact=10,
+            federalTaxRevenueImpact=7,
+            stateTaxRevenueImpact=3,
+            benefitSpendingImpact=5,
+            budgetaryImpact=15,
         ),
     )
     mark_batch_complete(
@@ -148,15 +150,16 @@ def test_state_transition_helpers_track_completion_path():
             startYear="2026",
             endYear="2027",
             windowSize=2,
-            years=["2026", "2027"],
-            outputsByYear={
-                "2026": make_single_year_macro_output(
-                    tax_revenue_impact=10,
-                    state_tax_revenue_impact=3,
-                    benefit_spending_impact=5,
-                    budgetary_impact=15,
-                ),
-            },
+            annualImpacts=[
+                BudgetWindowAnnualImpact(
+                    year="2026",
+                    taxRevenueImpact=10,
+                    federalTaxRevenueImpact=7,
+                    stateTaxRevenueImpact=3,
+                    benefitSpendingImpact=5,
+                    budgetaryImpact=15,
+                )
+            ],
             totals=BudgetWindowTotals(
                 taxRevenueImpact=10,
                 federalTaxRevenueImpact=7,
@@ -224,11 +227,13 @@ def test_mark_child_completed_handles_missing_child_jobs_entry(caplog):
         mark_child_completed(
             state,
             year="2026",
-            single_year_output=make_single_year_macro_output(
-                tax_revenue_impact=1,
-                state_tax_revenue_impact=0,
-                benefit_spending_impact=1,
-                budgetary_impact=2,
+            annual_impact=BudgetWindowAnnualImpact(
+                year="2026",
+                taxRevenueImpact=1,
+                federalTaxRevenueImpact=1,
+                stateTaxRevenueImpact=0,
+                benefitSpendingImpact=1,
+                budgetaryImpact=2,
             ),
         )
 
