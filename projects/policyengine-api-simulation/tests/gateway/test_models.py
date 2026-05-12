@@ -313,7 +313,7 @@ class TestJobSubmitResponse:
                 "model_version": "1.459.0",
                 "policyengine_version": None,
                 "data_version": None,
-                "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
+                "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
             },
         }
 
@@ -332,7 +332,7 @@ class TestJobSubmitResponse:
         assert response.policyengine_bundle.model_version == "1.459.0"
         assert response.policyengine_bundle.policyengine_version is None
         assert response.policyengine_bundle.dataset == (
-            "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+            "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
         )
 
 
@@ -417,7 +417,7 @@ class TestJobStatusResponse:
                 "model_version": "1.459.0",
                 "policyengine_version": None,
                 "data_version": None,
-                "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
+                "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
             },
         )
 
@@ -426,7 +426,7 @@ class TestJobStatusResponse:
         )
         assert response.policyengine_bundle is not None
         assert response.policyengine_bundle.dataset == (
-            "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+            "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
         )
 
 
