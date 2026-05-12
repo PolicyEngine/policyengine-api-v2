@@ -2,3 +2,4 @@
   changes:
     changed:
       - Bumped policyengine-core minimum version to 3.23.5 for pandas 3.0 compatibility
+      - Budget-window batch results now return full single-year macro outputs by year plus fiscal totals

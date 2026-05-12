@@ -19,6 +19,7 @@ import src.modal.budget_window_scheduler as scheduler_module
 import src.modal.budget_window_state as state_module
 from fixtures.gateway.shared import create_gateway_app
 from src.modal.gateway import endpoints
+from tests.fixtures.budget_window_outputs import make_single_year_macro_output
 
 
 @dataclass
@@ -33,14 +34,12 @@ class SemiIntegrationRuntime:
 
     def child_result_for_year(self, simulation_year: str) -> dict:
         offset = int(simulation_year) - 2025
-        return {
-            "budget": {
-                "tax_revenue_impact": offset * 100,
-                "state_tax_revenue_impact": offset * 10,
-                "benefit_spending_impact": offset + 4,
-                "budgetary_impact": offset * 100 - (offset + 4),
-            }
-        }
+        return make_single_year_macro_output(
+            tax_revenue_impact=offset * 100,
+            state_tax_revenue_impact=offset * 10,
+            benefit_spending_impact=offset + 4,
+            budgetary_impact=offset * 100 - (offset + 4),
+        )
 
     def child_started(self, object_id: str) -> None:
         self.active_child_calls.add(object_id)
@@ -220,13 +219,14 @@ def test_budget_window_submit_and_poll_exercise_gateway_worker_seams(
     assert body["result"]["kind"] == "budgetWindow"
     assert body["result"]["startYear"] == "2026"
     assert body["result"]["endYear"] == "2028"
-    assert [row["year"] for row in body["result"]["annualImpacts"]] == [
-        "2026",
-        "2027",
-        "2028",
-    ]
+    assert body["result"]["years"] == ["2026", "2027", "2028"]
+    assert list(body["result"]["outputsByYear"]) == ["2026", "2027", "2028"]
+    assert "annualImpacts" not in body["result"]
+    assert (
+        body["result"]["outputsByYear"]["2026"]["budget"]["tax_revenue_impact"]
+        == 100.0
+    )
     assert body["result"]["totals"] == {
-        "year": "Total",
         "taxRevenueImpact": 600.0,
         "federalTaxRevenueImpact": 540.0,
         "stateTaxRevenueImpact": 60.0,

@@ -14,6 +14,7 @@ from src.modal.gateway.models import (
     BudgetWindowBatchRequest,
     PolicyEngineBundle,
 )
+from tests.fixtures.budget_window_outputs import make_single_year_macro_output
 
 
 class SequencedCall:
@@ -194,34 +195,28 @@ def test_run_budget_window_batch_impl_completes_and_respects_max_parallel(
         results_by_year={
             "2026": [
                 TimeoutError(),
-                {
-                    "budget": {
-                        "tax_revenue_impact": 10,
-                        "state_tax_revenue_impact": 3,
-                        "benefit_spending_impact": 5,
-                        "budgetary_impact": 15,
-                    }
-                },
+                make_single_year_macro_output(
+                    tax_revenue_impact=10,
+                    state_tax_revenue_impact=3,
+                    benefit_spending_impact=5,
+                    budgetary_impact=15,
+                ),
             ],
             "2027": [
-                {
-                    "budget": {
-                        "tax_revenue_impact": 11,
-                        "state_tax_revenue_impact": 3,
-                        "benefit_spending_impact": 6,
-                        "budgetary_impact": 17,
-                    }
-                }
+                make_single_year_macro_output(
+                    tax_revenue_impact=11,
+                    state_tax_revenue_impact=3,
+                    benefit_spending_impact=6,
+                    budgetary_impact=17,
+                )
             ],
             "2028": [
-                {
-                    "budget": {
-                        "tax_revenue_impact": 12,
-                        "state_tax_revenue_impact": 4,
-                        "benefit_spending_impact": 7,
-                        "budgetary_impact": 19,
-                    }
-                }
+                make_single_year_macro_output(
+                    tax_revenue_impact=12,
+                    state_tax_revenue_impact=4,
+                    benefit_spending_impact=7,
+                    budgetary_impact=19,
+                )
             ],
         },
         call_registry=mock_batch_modal["call_registry"],
@@ -238,7 +233,13 @@ def test_run_budget_window_batch_impl_completes_and_respects_max_parallel(
     assert result["status"] == "complete"
     assert result["progress"] == 100
     assert result["completed_years"] == ["2027", "2026", "2028"]
-    assert result["result"]["annualImpacts"][0]["year"] == "2026"
+    assert result["result"]["years"] == ["2026", "2027", "2028"]
+    assert list(result["result"]["outputsByYear"]) == ["2026", "2027", "2028"]
+    assert "annualImpacts" not in result["result"]
+    assert (
+        result["result"]["outputsByYear"]["2026"]["budget"]["tax_revenue_impact"]
+        == 10
+    )
     assert result["result"]["totals"]["budgetaryImpact"] == 51
     assert state is not None
     assert state.status == "complete"
@@ -256,14 +257,12 @@ def test_run_budget_window_batch_impl_marks_failure(mock_batch_modal):
         results_by_year={
             "2026": [RuntimeError("child failed")],
             "2027": [
-                {
-                    "budget": {
-                        "tax_revenue_impact": 11,
-                        "state_tax_revenue_impact": 3,
-                        "benefit_spending_impact": 6,
-                        "budgetary_impact": 17,
-                    }
-                }
+                make_single_year_macro_output(
+                    tax_revenue_impact=11,
+                    state_tax_revenue_impact=3,
+                    benefit_spending_impact=6,
+                    budgetary_impact=17,
+                )
             ],
         },
         call_registry=mock_batch_modal["call_registry"],
@@ -311,14 +310,12 @@ def test_scheduler_sleep_exponentially_backs_off_then_resets_on_progress(
                 TimeoutError(),
                 TimeoutError(),
                 TimeoutError(),
-                {
-                    "budget": {
-                        "tax_revenue_impact": 10,
-                        "state_tax_revenue_impact": 3,
-                        "benefit_spending_impact": 5,
-                        "budgetary_impact": 15,
-                    }
-                },
+                make_single_year_macro_output(
+                    tax_revenue_impact=10,
+                    state_tax_revenue_impact=3,
+                    benefit_spending_impact=5,
+                    budgetary_impact=15,
+                ),
             ],
         },
         call_registry=mock_batch_modal["call_registry"],

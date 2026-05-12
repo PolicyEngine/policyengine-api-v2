@@ -5,7 +5,6 @@ from pydantic import ValidationError
 
 from src.modal.gateway.models import (
     BatchChildJobStatus,
-    BudgetWindowAnnualImpact,
     BudgetWindowBatchRequest,
     BudgetWindowBatchStatusResponse,
     BudgetWindowBatchSubmitResponse,
@@ -17,6 +16,7 @@ from src.modal.gateway.models import (
     JobSubmitResponse,
     JobStatusResponse,
 )
+from tests.fixtures.budget_window_outputs import make_single_year_macro_output
 
 
 class TestPingRequest:
@@ -326,14 +326,20 @@ class TestJobStatusResponse:
         Then the model contains the result.
         """
         # Given
-        result = {"budget": {"total": 1000000}}
+        result = make_single_year_macro_output(
+            tax_revenue_impact=1000000,
+            state_tax_revenue_impact=0,
+            benefit_spending_impact=0,
+            budgetary_impact=1000000,
+        )
 
         # When
         response = JobStatusResponse(status="complete", result=result)
 
         # Then
         assert response.status == "complete"
-        assert response.result == {"budget": {"total": 1000000}}
+        assert response.result == result
+        assert response.result["budget"]["tax_revenue_impact"] == 1000000
         assert response.error is None
 
     def test_job_status_response_running_without_result(self):
@@ -370,7 +376,12 @@ class TestJobStatusResponse:
     def test_job_status_response_accepts_bundle_metadata(self):
         response = JobStatusResponse(
             status="complete",
-            result={"budget": {"total": 1000000}},
+            result=make_single_year_macro_output(
+                tax_revenue_impact=1000000,
+                state_tax_revenue_impact=0,
+                benefit_spending_impact=0,
+                budgetary_impact=1000000,
+            ),
             resolved_app_name="policyengine-simulation-us1-459-0-uk2-65-9",
             policyengine_bundle={
                 "model_version": "1.459.0",
@@ -534,6 +545,21 @@ class TestBudgetWindowBatchSubmitResponse:
 class TestBudgetWindowBatchStatusResponse:
     """Tests for budget-window batch status responses."""
 
+    def test_budget_window_result_requires_years_and_outputs_by_year(self):
+        with pytest.raises(ValidationError):
+            BudgetWindowResult(
+                startYear="2026",
+                endYear="2027",
+                windowSize=2,
+                totals=BudgetWindowTotals(
+                    taxRevenueImpact=30,
+                    federalTaxRevenueImpact=24,
+                    stateTaxRevenueImpact=6,
+                    benefitSpendingImpact=-9,
+                    budgetaryImpact=39,
+                ),
+            )
+
     def test_budget_window_batch_status_response_accepts_child_jobs_and_result(self):
         response = BudgetWindowBatchStatusResponse(
             status="complete",
@@ -550,22 +576,27 @@ class TestBudgetWindowBatchStatusResponse:
                 startYear="2026",
                 endYear="2027",
                 windowSize=2,
-                annualImpacts=[
-                    BudgetWindowAnnualImpact(
-                        year="2026",
-                        taxRevenueImpact=10,
-                        federalTaxRevenueImpact=8,
-                        stateTaxRevenueImpact=2,
-                        benefitSpendingImpact=-3,
-                        budgetaryImpact=13,
-                    )
-                ],
+                years=["2026", "2027"],
+                outputsByYear={
+                    "2026": make_single_year_macro_output(
+                        tax_revenue_impact=10,
+                        state_tax_revenue_impact=2,
+                        benefit_spending_impact=-3,
+                        budgetary_impact=13,
+                    ),
+                    "2027": make_single_year_macro_output(
+                        tax_revenue_impact=20,
+                        state_tax_revenue_impact=4,
+                        benefit_spending_impact=-6,
+                        budgetary_impact=26,
+                    ),
+                },
                 totals=BudgetWindowTotals(
-                    taxRevenueImpact=10,
-                    federalTaxRevenueImpact=8,
-                    stateTaxRevenueImpact=2,
-                    benefitSpendingImpact=-3,
-                    budgetaryImpact=13,
+                    taxRevenueImpact=30,
+                    federalTaxRevenueImpact=24,
+                    stateTaxRevenueImpact=6,
+                    benefitSpendingImpact=-9,
+                    budgetaryImpact=39,
                 ),
             ),
         )
@@ -580,3 +611,8 @@ class TestBudgetWindowBatchStatusResponse:
             "error": None,
         }
         assert dumped["result"]["kind"] == "budgetWindow"
+        assert dumped["result"]["years"] == ["2026", "2027"]
+        assert "annualImpacts" not in dumped["result"]
+        assert dumped["result"]["outputsByYear"]["2026"]["budget"][
+            "tax_revenue_impact"
+        ] == 10

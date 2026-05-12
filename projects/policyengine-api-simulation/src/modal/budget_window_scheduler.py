@@ -14,7 +14,7 @@ from src.modal.budget_window_context import (
 )
 from src.modal.budget_window_results import (
     build_budget_window_result,
-    extract_annual_impact,
+    validate_single_year_output,
 )
 from src.modal.budget_window_state import (
     build_batch_status_response,
@@ -167,7 +167,7 @@ class BudgetWindowBatchRunner:
                 return False
 
             try:
-                annual_impact = extract_annual_impact(
+                single_year_output = validate_single_year_output(
                     simulation_year=simulation_year,
                     child_result=child_result,
                 )
@@ -189,7 +189,7 @@ class BudgetWindowBatchRunner:
             mark_child_completed(
                 self.state,
                 year=simulation_year,
-                annual_impact=annual_impact,
+                single_year_output=single_year_output,
             )
             put_batch_job_state(self.state)
             progress_made = True
@@ -222,15 +222,15 @@ class BudgetWindowBatchRunner:
         put_batch_job_state(self.state)
 
     def complete_batch(self) -> dict[str, Any]:
-        annual_impacts = [
-            self.state.partial_annual_impacts[simulation_year]
+        outputs_by_year = {
+            simulation_year: self.state.partial_outputs_by_year[simulation_year]
             for simulation_year in self.state.years
-            if simulation_year in self.state.partial_annual_impacts
-        ]
+            if simulation_year in self.state.partial_outputs_by_year
+        }
         result = build_budget_window_result(
             start_year=self.state.start_year,
             window_size=self.state.window_size,
-            annual_impacts=annual_impacts,
+            outputs_by_year=outputs_by_year,
         )
         mark_batch_complete(self.state, result=result)
         put_batch_job_state(self.state)
