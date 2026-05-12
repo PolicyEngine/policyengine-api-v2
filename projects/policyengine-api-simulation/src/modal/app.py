@@ -15,7 +15,7 @@ from src.modal.logging_redaction import redact_params_for_logging
 
 # Get versions from environment or use defaults
 US_VERSION = os.environ.get("POLICYENGINE_US_VERSION", "1.690.7")
-UK_VERSION = os.environ.get("POLICYENGINE_UK_VERSION", "2.88.0")
+UK_VERSION = os.environ.get("POLICYENGINE_UK_VERSION", "2.88.14")
 
 
 def get_app_name(us_version: str, uk_version: str) -> str:
@@ -49,7 +49,7 @@ simulation_image = (
     .pip_install(
         f"policyengine-us=={US_VERSION}",
         f"policyengine-uk=={UK_VERSION}",
-        "policyengine==4.4.3",
+        "policyengine==0.13.0",
         "tables>=3.10.2",
         "logfire",
     )

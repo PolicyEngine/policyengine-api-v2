@@ -43,10 +43,10 @@ DATASET_URIS = {
     "us": {
         "enhanced_cps": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
         "enhanced_cps_2024": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
-        "cps": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.77.0",
-        "cps_2023": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.77.0",
-        "pooled_cps": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.77.0",
-        "pooled_3_year_cps_2023": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.77.0",
+        "cps": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.110.12",
+        "cps_2023": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.110.12",
+        "pooled_cps": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.110.12",
+        "pooled_3_year_cps_2023": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.110.12",
     },
     "uk": {
         "enhanced_frs": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3",
