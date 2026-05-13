@@ -15,17 +15,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 import src.modal.budget_window_batch as batch_module
-from src.modal.budget_window_context import BudgetWindowBatchContext
 import src.modal.budget_window_scheduler as scheduler_module
 import src.modal.budget_window_state as state_module
 from fixtures.gateway.shared import create_gateway_app
 from src.modal.gateway import endpoints
-from src.modal.gateway.models import (
-    BatchChildJobStatus,
-    BudgetWindowBatchRequest,
-    PolicyEngineBundle,
-)
-from tests.fixtures.budget_window_outputs import make_single_year_macro_output
 
 
 @dataclass
@@ -40,12 +33,14 @@ class SemiIntegrationRuntime:
 
     def child_result_for_year(self, simulation_year: str) -> dict:
         offset = int(simulation_year) - 2025
-        return make_single_year_macro_output(
-            tax_revenue_impact=offset * 100,
-            state_tax_revenue_impact=offset * 10,
-            benefit_spending_impact=offset + 4,
-            budgetary_impact=offset * 100 - (offset + 4),
-        )
+        return {
+            "budget": {
+                "tax_revenue_impact": offset * 100,
+                "state_tax_revenue_impact": offset * 10,
+                "benefit_spending_impact": offset + 4,
+                "budgetary_impact": offset * 100 - (offset + 4),
+            }
+        }
 
     def child_started(self, object_id: str) -> None:
         self.active_child_calls.add(object_id)
@@ -225,13 +220,13 @@ def test_budget_window_submit_and_poll_exercise_gateway_worker_seams(
     assert body["result"]["kind"] == "budgetWindow"
     assert body["result"]["startYear"] == "2026"
     assert body["result"]["endYear"] == "2028"
-    assert body["result"]["years"] == ["2026", "2027", "2028"]
-    assert list(body["result"]["outputsByYear"]) == ["2026", "2027", "2028"]
-    assert "annualImpacts" not in body["result"]
-    assert (
-        body["result"]["outputsByYear"]["2026"]["budget"]["tax_revenue_impact"] == 100.0
-    )
+    assert [row["year"] for row in body["result"]["annualImpacts"]] == [
+        "2026",
+        "2027",
+        "2028",
+    ]
     assert body["result"]["totals"] == {
+        "year": "Total",
         "taxRevenueImpact": 600.0,
         "federalTaxRevenueImpact": 540.0,
         "stateTaxRevenueImpact": 60.0,
@@ -251,96 +246,3 @@ def test_budget_window_submit_and_poll_exercise_gateway_worker_seams(
     assert all("window_size" not in payload for payload in runtime.child_payloads)
     assert all("max_parallel" not in payload for payload in runtime.child_payloads)
     assert all("_metadata" not in payload for payload in runtime.child_payloads)
-
-
-def test_budget_window_submit_and_poll_defaults_missing_state_tax_for_uk_like_outputs(
-    budget_window_semi_integration_client,
-):
-    client, runtime = budget_window_semi_integration_client
-    runtime.dicts["simulation-api-uk-versions"] = {
-        "latest": "2.66.0",
-        "2.66.0": "policyengine-simulation-uk2-66-0",
-    }
-
-    def child_result_without_state_tax(simulation_year: str) -> dict:
-        offset = int(simulation_year) - 2025
-        return make_single_year_macro_output(
-            tax_revenue_impact=offset * 100,
-            state_tax_revenue_impact=None,
-            benefit_spending_impact=offset + 4,
-            budgetary_impact=offset * 100 - (offset + 4),
-        )
-
-    runtime.child_result_for_year = child_result_without_state_tax
-    runtime.next_parent_call_id = "parent-uk-batch-123"
-
-    submit_response = client.post(
-        "/simulate/economy/budget-window",
-        json={
-            "country": "uk",
-            "region": "uk",
-            "scope": "macro",
-            "reform": {},
-            "start_year": "2026",
-            "window_size": 2,
-            "max_parallel": 2,
-        },
-    )
-
-    assert submit_response.status_code == 200
-
-    first_poll = client.get("/budget-window-jobs/parent-uk-batch-123")
-    assert first_poll.status_code == 202
-
-    second_poll = client.get("/budget-window-jobs/parent-uk-batch-123")
-    assert second_poll.status_code == 200
-    body = second_poll.json()
-
-    assert body["status"] == "complete"
-    assert body["result"]["years"] == ["2026", "2027"]
-    assert (
-        body["result"]["outputsByYear"]["2026"]["budget"]["state_tax_revenue_impact"]
-        == 0.0
-    )
-    assert body["result"]["totals"]["stateTaxRevenueImpact"] == 0.0
-    assert body["result"]["totals"]["federalTaxRevenueImpact"] == 300.0
-
-
-def test_budget_window_runner_resolves_persisted_child_handle_fallback(
-    budget_window_semi_integration_client,
-):
-    _, runtime = budget_window_semi_integration_client
-    child_call = object()
-    runtime.calls["child-2026"] = child_call
-
-    request = BudgetWindowBatchRequest.model_validate(
-        {
-            "country": "us",
-            "region": "us",
-            "scope": "macro",
-            "reform": {},
-            "start_year": "2026",
-            "window_size": 1,
-            "max_parallel": 1,
-        }
-    )
-    context = BudgetWindowBatchContext(
-        batch_job_id="parent-resume-123",
-        request=request,
-        resolved_version="1.500.0",
-        resolved_app_name="policyengine-simulation-us1-500-0-uk2-66-0",
-        bundle=PolicyEngineBundle(model_version="1.500.0"),
-        raw_params=request.model_dump(mode="json"),
-    )
-    runner = scheduler_module.BudgetWindowBatchRunner(context)
-    runner.state.child_jobs["2026"] = BatchChildJobStatus(
-        job_id="child-2026",
-        status="running",
-    )
-
-    handle = runner.resolve_child_handle("2026")
-
-    assert handle.simulation_year == "2026"
-    assert handle.job_id == "child-2026"
-    assert handle.call is child_call
-    assert runner.child_handles["2026"] is handle
