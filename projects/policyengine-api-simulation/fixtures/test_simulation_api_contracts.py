@@ -31,7 +31,7 @@ CURRENT_REQUIRED_BUDGET_KEYS = {
 
 CURRENT_SINGLE_YEAR_MACRO_RESULT = {
     "model_version": "1.691.3",
-    "data_version": "1.110.12",
+    "data_version": "1.115.3",
     "budget": {
         "budgetary_impact": 300.0,
         "tax_revenue_impact": 500.0,
@@ -56,17 +56,52 @@ CURRENT_SINGLE_YEAR_MACRO_RESULT = {
         "reform": {"gini": 0.29},
     },
     "poverty": {
-        "baseline": {"all": 0.1},
-        "reform": {"all": 0.09},
+        "poverty": {
+            "adult": {"baseline": 0.1, "reform": 0.09},
+            "all": {"baseline": 0.1, "reform": 0.09},
+            "child": {"baseline": 0.12, "reform": 0.1},
+            "senior": {"baseline": 0.08, "reform": 0.07},
+        },
+        "deep_poverty": {
+            "adult": {"baseline": 0.03, "reform": 0.02},
+            "all": {"baseline": 0.03, "reform": 0.02},
+            "child": {"baseline": 0.04, "reform": 0.03},
+            "senior": {"baseline": 0.02, "reform": 0.01},
+        },
     },
     "poverty_by_gender": {
-        "baseline": {"male": 0.1, "female": 0.11},
-        "reform": {"male": 0.09, "female": 0.1},
+        "poverty": {
+            "male": {"baseline": 0.1, "reform": 0.09},
+            "female": {"baseline": 0.11, "reform": 0.1},
+        },
+        "deep_poverty": {
+            "male": {"baseline": 0.03, "reform": 0.02},
+            "female": {"baseline": 0.04, "reform": 0.03},
+        },
     },
-    "poverty_by_race": None,
+    "poverty_by_race": {
+        "poverty": {
+            "black": {"baseline": 0.12, "reform": 0.11},
+            "hispanic": {"baseline": 0.13, "reform": 0.12},
+            "other": {"baseline": 0.1, "reform": 0.09},
+            "white": {"baseline": 0.08, "reform": 0.07},
+        },
+    },
     "intra_decile": {
-        "relative": {"1": {"1": 0.01}},
-        "average": {"1": {"1": 10.0}},
+        "all": {
+            "Gain less than 5%": 0.2,
+            "Gain more than 5%": 0.1,
+            "Lose less than 5%": 0.1,
+            "Lose more than 5%": 0.0,
+            "No change": 0.6,
+        },
+        "deciles": {
+            "Gain less than 5%": [0.2],
+            "Gain more than 5%": [0.1],
+            "Lose less than 5%": [0.1],
+            "Lose more than 5%": [0.0],
+            "No change": [0.6],
+        },
     },
     "wealth_decile": None,
     "intra_wealth_decile": None,
