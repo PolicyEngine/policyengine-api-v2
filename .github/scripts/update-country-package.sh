@@ -44,6 +44,34 @@ PYPROJECT="${PROJECT_PATH}/pyproject.toml"
 LOCKFILE="${PROJECT_PATH}/uv.lock"
 MODAL_APP="${PROJECT_PATH}/src/modal/app.py"
 
+create_pr_body_file() {
+  local changelog
+  local pr_body_file
+
+  changelog=$(python3 "${ROOT_DIR}/.github/scripts/check-country-package-updates.py" \
+    --package "$PACKAGE" \
+    --old-version "$CURRENT" \
+    --new-version "$LATEST" 2>/dev/null || true)
+
+  pr_body_file="$(mktemp)"
+  {
+    echo "## Summary"
+    echo
+    echo "Update ${DISPLAY_NAME} from ${CURRENT} to ${LATEST} in the simulation API runtime."
+    if [[ -n "$changelog" ]]; then
+      echo
+      echo "## What changed (${CURRENT} -> ${LATEST})"
+      echo
+      echo "$changelog"
+    fi
+    echo
+    echo "---"
+    echo "Generated automatically by GitHub Actions."
+  } > "$pr_body_file"
+
+  echo "$pr_body_file"
+}
+
 if [[ ! -f "$PYPROJECT" || ! -f "$LOCKFILE" || ! -f "$MODAL_APP" ]]; then
   echo "ERROR: Expected simulation project files were not found under ${PROJECT_DIR}." >&2
   exit 1
@@ -89,16 +117,37 @@ fi
 BRANCH="auto/update-${PACKAGE}-${LATEST}"
 echo "Update available: ${CURRENT} -> ${LATEST}"
 
-if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-  echo "Branch '${BRANCH}' already exists on remote. Skipping."
-  exit 0
-fi
-
 if [[ "$DRY_RUN" == "1" ]]; then
+  if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+    echo "Dry run: remote branch '${BRANCH}' already exists; would ensure a PR exists for it."
+    exit 0
+  fi
   echo "Dry run: would create ${BRANCH} and update:"
   echo "  ${PROJECT_DIR}/pyproject.toml"
   echo "  ${PROJECT_DIR}/uv.lock"
   echo "  ${PROJECT_DIR}/src/modal/app.py"
+  exit 0
+fi
+
+EXISTING_PR=$(gh pr list \
+  --head "$BRANCH" \
+  --state open \
+  --json number \
+  --jq '.[0].number' 2>/dev/null || true)
+if [[ -n "$EXISTING_PR" ]]; then
+  echo "PR #${EXISTING_PR} already exists for ${BRANCH}. Skipping."
+  exit 0
+fi
+
+if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+  echo "Remote branch '${BRANCH}' already exists without an open PR. Creating PR."
+  PR_BODY_FILE="$(create_pr_body_file)"
+  gh pr create \
+    --base main \
+    --head "$BRANCH" \
+    --title "chore(deps): update ${PACKAGE} to ${LATEST}" \
+    --body-file "$PR_BODY_FILE"
+  echo "PR created for existing branch ${BRANCH}"
   exit 0
 fi
 
@@ -141,26 +190,7 @@ if git diff --quiet -- "$PYPROJECT" "$LOCKFILE" "$MODAL_APP"; then
   exit 0
 fi
 
-CHANGELOG=$(python3 "${ROOT_DIR}/.github/scripts/check-country-package-updates.py" \
-  --package "$PACKAGE" \
-  --old-version "$CURRENT" \
-  --new-version "$LATEST" 2>/dev/null || true)
-
-PR_BODY_FILE="$(mktemp)"
-{
-  echo "## Summary"
-  echo
-  echo "Update ${DISPLAY_NAME} from ${CURRENT} to ${LATEST} in the simulation API runtime."
-  if [[ -n "$CHANGELOG" ]]; then
-    echo
-    echo "## What changed (${CURRENT} -> ${LATEST})"
-    echo
-    echo "$CHANGELOG"
-  fi
-  echo
-  echo "---"
-  echo "Generated automatically by GitHub Actions."
-} > "$PR_BODY_FILE"
+PR_BODY_FILE="$(create_pr_body_file)"
 
 git add "$PYPROJECT" "$LOCKFILE" "$MODAL_APP"
 git commit -m "chore(deps): update ${PACKAGE} to ${LATEST}"
