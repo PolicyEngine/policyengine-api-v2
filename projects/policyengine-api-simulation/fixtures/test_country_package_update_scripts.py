@@ -15,6 +15,24 @@ from fixtures.test_modal_scripts import REPO_ROOT, SCRIPTS_DIR
 
 SCRIPT = SCRIPTS_DIR / "update-country-package.sh"
 CHANGELOG_SCRIPT = SCRIPTS_DIR / "check-country-package-updates.py"
+SAMPLE_CHANGELOG = """
+# Changelog
+
+## 1.2.2
+### Added
+- New variable
+
+### Fixed
+- Important bug fix
+
+## [1.2.1]
+### Changed
+- Existing calculation changed
+
+## 1.2.0
+### Added
+- Old change
+"""
 
 
 @pytest.fixture

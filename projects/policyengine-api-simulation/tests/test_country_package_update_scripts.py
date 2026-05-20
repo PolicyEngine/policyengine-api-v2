@@ -9,6 +9,7 @@ from types import ModuleType
 import pytest
 
 from fixtures.test_country_package_update_scripts import (
+    SAMPLE_CHANGELOG,
     SCRIPT,
     install_fake_gh,
     install_fake_git,
@@ -178,26 +179,7 @@ def test_update_country_package_updates_files_and_opens_pr(
 def test_parse_changelog_collects_versioned_category_items(
     changelog_module: ModuleType,
 ) -> None:
-    text = """
-# Changelog
-
-## 1.2.2
-### Added
-- New variable
-
-### Fixed
-- Important bug fix
-
-## [1.2.1]
-### Changed
-- Existing calculation changed
-
-## 1.2.0
-### Added
-- Old change
-"""
-
-    parsed = changelog_module.parse_changelog(text)
+    parsed = changelog_module.parse_changelog(SAMPLE_CHANGELOG)
     changes = changelog_module.get_changes_between(parsed, "1.2.0", "1.2.2")
     formatted = changelog_module.format_changes(changes)
 
