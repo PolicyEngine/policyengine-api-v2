@@ -18,15 +18,20 @@ from fixtures.test_simulation_output_adapter import (
     REFORM_POVERTY_BY_RACE,
     fake_analysis,
 )
-from src.modal.simulation import _budget_result, _normalise_policy
+from src.modal.simulation import (
+    _budget_result,
+    _normalise_policy,
+    _uk_constituency_impact,
+    _uk_local_authority_impact,
+)
 from src.modal.simulation_output_adapter import adapt_analysis_to_legacy_macro_output
 
 
 def test_adapter_returns_existing_single_year_macro_shape():
     output = adapt_analysis_to_legacy_macro_output(
         country="us",
-        model_version="1.691.12",
-        data_version="1.115.3",
+        model_version="1.702.0",
+        data_version="1.115.5",
         budget=BUDGET,
         analysis=fake_analysis(),
         baseline_poverty_by_age=BASELINE_POVERTY_BY_AGE,
@@ -40,8 +45,8 @@ def test_adapter_returns_existing_single_year_macro_shape():
     )
 
     assert set(output) == CURRENT_SINGLE_YEAR_MACRO_KEYS
-    assert output["model_version"] == "1.691.12"
-    assert output["data_version"] == "1.115.3"
+    assert output["model_version"] == "1.702.0"
+    assert output["data_version"] == "1.115.5"
     assert output["budget"] == BUDGET
     assert output["detailed_budget"] == {
         "income_tax": {"baseline": 100.0, "reform": 125.0, "difference": 25.0}
@@ -76,11 +81,13 @@ def test_adapter_returns_existing_single_year_macro_shape():
 def test_adapter_maps_uk_wealth_outputs_and_omits_us_only_race():
     output = adapt_analysis_to_legacy_macro_output(
         country="uk",
-        model_version="2.88.14",
-        data_version="1.55.5",
+        model_version="2.88.20",
+        data_version="1.55.10",
         budget={**BUDGET, "state_tax_revenue_impact": 0.0},
         analysis=fake_analysis(),
         intra_decile=INTRA_DECILE_COLLECTION,
+        constituency_impact=[{"constituency_code": "E14000530"}],
+        local_authority_impact=[{"local_authority_code": "E06000001"}],
     )
 
     assert output["poverty_by_race"] is None
@@ -89,6 +96,8 @@ def test_adapter_maps_uk_wealth_outputs_and_omits_us_only_race():
         "relative": {"1": 0.03},
     }
     assert output["intra_wealth_decile"]["deciles"]["Lose more than 5%"] == [0.1]
+    assert output["constituency_impact"] == [{"constituency_code": "E14000530"}]
+    assert output["local_authority_impact"] == [{"local_authority_code": "E06000001"}]
 
 
 def test_normalise_policy_converts_legacy_period_range_keys():
@@ -146,3 +155,51 @@ def test_budget_result_uses_materialized_household_columns_and_uk_state_tax_zero
         "baseline_net_income": 300.0,
     }
     assert uk_budget["state_tax_revenue_impact"] == 0.0
+
+
+def test_uk_constituency_impact_uses_policyengine_output_function(monkeypatch):
+    baseline = object()
+    reform = object()
+    expected = [{"constituency_code": "E14000530"}]
+
+    def fake_output_module_function(module_name, name):
+        assert module_name == "constituency_impact"
+        assert name == "compute_uk_constituency_impacts"
+
+        def compute(baseline_simulation, reform_simulation):
+            assert baseline_simulation is baseline
+            assert reform_simulation is reform
+            return SimpleNamespace(constituency_results=expected)
+
+        return compute
+
+    monkeypatch.setattr(
+        "src.modal.simulation._output_module_function", fake_output_module_function
+    )
+
+    assert _uk_constituency_impact("uk", baseline, reform) == expected
+    assert _uk_constituency_impact("us", baseline, reform) is None
+
+
+def test_uk_local_authority_impact_uses_policyengine_output_function(monkeypatch):
+    baseline = object()
+    reform = object()
+    expected = [{"local_authority_code": "E06000001"}]
+
+    def fake_output_module_function(module_name, name):
+        assert module_name == "local_authority_impact"
+        assert name == "compute_uk_local_authority_impacts"
+
+        def compute(baseline_simulation, reform_simulation):
+            assert baseline_simulation is baseline
+            assert reform_simulation is reform
+            return SimpleNamespace(local_authority_results=expected)
+
+        return compute
+
+    monkeypatch.setattr(
+        "src.modal.simulation._output_module_function", fake_output_module_function
+    )
+
+    assert _uk_local_authority_impact("uk", baseline, reform) == expected
+    assert _uk_local_authority_impact("us", baseline, reform) is None

@@ -41,18 +41,18 @@ router = APIRouter()
 JOB_METADATA_DICT_NAME = "simulation-api-job-metadata"
 DATASET_URIS = {
     "us": {
-        "enhanced_cps": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.3",
-        "enhanced_cps_2024": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.3",
-        "cps": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.115.3",
-        "cps_2023": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.115.3",
-        "pooled_cps": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.115.3",
-        "pooled_3_year_cps_2023": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.115.3",
+        "enhanced_cps": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
+        "enhanced_cps_2024": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
+        "cps": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.115.5",
+        "cps_2023": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.115.5",
+        "pooled_cps": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.115.5",
+        "pooled_3_year_cps_2023": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.115.5",
     },
     "uk": {
-        "enhanced_frs": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.55.5",
-        "enhanced_frs_2023_24": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.55.5",
-        "frs": "hf://policyengine/policyengine-uk-data-private/frs_2023_24.h5@1.55.5",
-        "frs_2023_24": "hf://policyengine/policyengine-uk-data-private/frs_2023_24.h5@1.55.5",
+        "enhanced_frs": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.55.10",
+        "enhanced_frs_2023_24": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.55.10",
+        "frs": "hf://policyengine/policyengine-uk-data-private/frs_2023_24.h5@1.55.10",
+        "frs_2023_24": "hf://policyengine/policyengine-uk-data-private/frs_2023_24.h5@1.55.10",
     },
 }
 

@@ -446,7 +446,7 @@ class TestModalRunIntegTests:
         fake_bin.mkdir()
         fake_uv = fake_bin / "uv"
         fake_uv.write_text(
-            '#!/bin/bash\n'
+            "#!/bin/bash\n"
             'printf "%s|base=%s|us=%s|uk=%s\\n" "$*" '
             '"${simulation_integ_test_base_url:-}" '
             '"${simulation_integ_test_us_model_version:-}" '
@@ -473,7 +473,7 @@ class TestModalRunIntegTests:
                 "prod",
                 "https://example.com",
                 "1.690.7",
-                "2.88.14",
+                "2.88.20",
             ],
             capture_output=True,
             text=True,
@@ -486,7 +486,7 @@ class TestModalRunIntegTests:
         assert "run pytest tests/simulation/ -v -m not beta_only" in log
         assert "base=https://example.com" in log
         assert "us=1.690.7" in log
-        assert "uk=2.88.14" in log
+        assert "uk=2.88.20" in log
 
 
 class TestAllScriptsHaveShebang:
@@ -513,6 +513,6 @@ class TestAllScriptsHaveShebang:
                 capture_output=True,
                 text=True,
             )
-            assert result.returncode == 0, (
-                f"{script.name} has syntax errors: {result.stderr}"
-            )
+            assert (
+                result.returncode == 0
+            ), f"{script.name} has syntax errors: {result.stderr}"

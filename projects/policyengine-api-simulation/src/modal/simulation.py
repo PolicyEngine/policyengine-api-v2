@@ -373,9 +373,13 @@ def _budget_result(country: str, baseline, reform) -> dict[str, float]:
     }
 
 
-def _poverty_module_function(name: str):
-    module = import_module("policyengine.outputs.poverty")
+def _output_module_function(module_name: str, name: str):
+    module = import_module(f"policyengine.outputs.{module_name}")
     return getattr(module, name)
+
+
+def _poverty_module_function(name: str):
+    return _output_module_function("poverty", name)
 
 
 def _try_compute_output(label: str, fn, *args, **kwargs):
@@ -456,6 +460,40 @@ def _congressional_district_impact(country: str, baseline, reform):
     return getattr(impact, "district_results", None) if impact is not None else None
 
 
+def _uk_constituency_impact(country: str, baseline, reform):
+    if country != "uk":
+        return None
+
+    impact = _try_compute_output(
+        "constituency impacts",
+        _output_module_function(
+            "constituency_impact", "compute_uk_constituency_impacts"
+        ),
+        baseline,
+        reform,
+    )
+    if impact is None:
+        return None
+    return getattr(impact, "constituency_results", None)
+
+
+def _uk_local_authority_impact(country: str, baseline, reform):
+    if country != "uk":
+        return None
+
+    impact = _try_compute_output(
+        "local authority impacts",
+        _output_module_function(
+            "local_authority_impact", "compute_uk_local_authority_impacts"
+        ),
+        baseline,
+        reform,
+    )
+    if impact is None:
+        return None
+    return getattr(impact, "local_authority_results", None)
+
+
 def _model_version(country_module) -> str:
     return str(getattr(country_module.model, "version", ""))
 
@@ -509,6 +547,8 @@ def _run_simulation_impl_core(params: dict) -> dict:
     congressional_district_impact = _congressional_district_impact(
         country, baseline, reform
     )
+    constituency_impact = _uk_constituency_impact(country, baseline, reform)
+    local_authority_impact = _uk_local_authority_impact(country, baseline, reform)
     logger.info("Comparison complete")
 
     return adapt_analysis_to_legacy_macro_output(
@@ -519,5 +559,7 @@ def _run_simulation_impl_core(params: dict) -> dict:
         analysis=analysis,
         intra_decile=intra_decile,
         congressional_district_impact=congressional_district_impact,
+        constituency_impact=constituency_impact,
+        local_authority_impact=local_authority_impact,
         **poverty_outputs,
     )
