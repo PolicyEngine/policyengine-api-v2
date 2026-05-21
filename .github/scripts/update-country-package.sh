@@ -43,6 +43,7 @@ PROJECT_PATH="${ROOT_DIR}/${PROJECT_DIR}"
 PYPROJECT="${PROJECT_PATH}/pyproject.toml"
 LOCKFILE="${PROJECT_PATH}/uv.lock"
 MODAL_APP="${PROJECT_PATH}/src/modal/app.py"
+CHANGELOG_DIR="${PROJECT_PATH}/changelog.d"
 
 create_pr_body_file() {
   local changelog
@@ -115,6 +116,7 @@ if [[ "$CURRENT" == "$LATEST" ]]; then
 fi
 
 BRANCH="auto/update-${PACKAGE}-${LATEST}"
+CHANGELOG_FRAGMENT="${CHANGELOG_DIR}/update-${PACKAGE}-${LATEST}.changed.md"
 echo "Update available: ${CURRENT} -> ${LATEST}"
 
 if [[ "$DRY_RUN" == "1" ]]; then
@@ -126,6 +128,7 @@ if [[ "$DRY_RUN" == "1" ]]; then
   echo "  ${PROJECT_DIR}/pyproject.toml"
   echo "  ${PROJECT_DIR}/uv.lock"
   echo "  ${PROJECT_DIR}/src/modal/app.py"
+  echo "  ${PROJECT_DIR}/changelog.d/$(basename "$CHANGELOG_FRAGMENT")"
   exit 0
 fi
 
@@ -185,14 +188,17 @@ PY
   uv lock --upgrade-package "$PACKAGE"
 )
 
-if git diff --quiet -- "$PYPROJECT" "$LOCKFILE" "$MODAL_APP"; then
+mkdir -p "$CHANGELOG_DIR"
+echo "Update ${DISPLAY_NAME} to ${LATEST}." > "$CHANGELOG_FRAGMENT"
+
+if git diff --quiet -- "$PYPROJECT" "$LOCKFILE" "$MODAL_APP" "$CHANGELOG_FRAGMENT"; then
   echo "No changes after update. Nothing to do."
   exit 0
 fi
 
 PR_BODY_FILE="$(create_pr_body_file)"
 
-git add "$PYPROJECT" "$LOCKFILE" "$MODAL_APP"
+git add "$PYPROJECT" "$LOCKFILE" "$MODAL_APP" "$CHANGELOG_FRAGMENT"
 git commit -m "chore(deps): update ${PACKAGE} to ${LATEST}"
 git push -u origin "$BRANCH"
 

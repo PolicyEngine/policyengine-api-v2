@@ -66,6 +66,9 @@ def test_update_country_package_dry_run_reports_planned_changes_without_editing(
     assert "simulation/pyproject.toml" in result.stdout
     assert "simulation/uv.lock" in result.stdout
     assert "simulation/src/modal/app.py" in result.stdout
+    assert "simulation/changelog.d/update-policyengine-us-1.1.0.changed.md" in (
+        result.stdout
+    )
     assert pyproject.read_text(encoding="utf-8") == original_pyproject
 
 
@@ -170,10 +173,43 @@ def test_update_country_package_updates_files_and_opens_pr(
     assert "lock --upgrade-package policyengine-us" in uv_log.read_text(
         encoding="utf-8"
     )
+    assert (
+        fake_repo
+        / "simulation"
+        / "changelog.d"
+        / "update-policyengine-us-1.1.0.changed.md"
+    ).read_text(encoding="utf-8") == "Update PolicyEngine US to 1.1.0.\n"
     assert "checkout -b auto/update-policyengine-us-1.1.0" in git_log.read_text(
         encoding="utf-8"
     )
     assert "pr create" in gh_log.read_text(encoding="utf-8")
+
+
+def test_update_country_package_creates_uk_changelog_fragment(
+    fake_bin: Path, fake_repo: Path, tmp_path: Path
+) -> None:
+    git_log = tmp_path / "git.log"
+    gh_log = tmp_path / "gh.log"
+    uv_log = tmp_path / "uv.log"
+    install_fake_git(fake_bin, root=fake_repo, log=git_log, diff_has_changes=True)
+    install_fake_gh(fake_bin, log=gh_log)
+    install_fake_uv(fake_bin, log=uv_log)
+
+    result = run_updater(
+        "policyengine-uk",
+        env=updater_env(fake_bin, fake_repo, LATEST_OVERRIDE="2.1.0"),
+    )
+
+    assert result.returncode == 0, result.stderr
+    fragment = (
+        fake_repo
+        / "simulation"
+        / "changelog.d"
+        / "update-policyengine-uk-2.1.0.changed.md"
+    )
+    assert fragment.read_text(encoding="utf-8") == (
+        "Update PolicyEngine UK to 2.1.0.\n"
+    )
 
 
 def test_parse_changelog_collects_versioned_category_items(
