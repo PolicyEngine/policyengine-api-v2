@@ -7,6 +7,7 @@ from src.modal.gateway.models import (
     BudgetWindowTotals,
     JobStatusResponse,
 )
+from src.modal.simulation_macro_output import SingleYearMacroOutput
 
 from fixtures.test_simulation_api_contracts import (
     CURRENT_REQUIRED_BUDGET_KEYS,
@@ -27,6 +28,10 @@ def test_job_status_result_preserves_current_single_year_macro_dict_contract():
     assert (
         response.model_dump(mode="json")["result"] == CURRENT_SINGLE_YEAR_MACRO_RESULT
     )
+
+
+def test_internal_single_year_macro_schema_matches_current_public_keys():
+    assert set(SingleYearMacroOutput.model_fields) == CURRENT_SINGLE_YEAR_MACRO_KEYS
 
 
 def test_openapi_keeps_job_status_result_as_unstructured_dict():

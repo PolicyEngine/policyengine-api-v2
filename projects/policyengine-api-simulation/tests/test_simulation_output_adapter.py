@@ -24,11 +24,21 @@ from src.modal.simulation import (
     _uk_constituency_impact,
     _uk_local_authority_impact,
 )
-from src.modal.simulation_output_adapter import adapt_analysis_to_legacy_macro_output
+from src.modal.simulation_macro_output import (
+    BudgetaryOutput,
+    DecileOutput,
+    IntraDecileOutput,
+    PovertyOutput,
+    SingleYearMacroOutput,
+)
+from src.modal.simulation_output_adapter import (
+    adapt_analysis_to_legacy_macro_output,
+    build_single_year_macro_output,
+)
 
 
-def test_adapter_returns_existing_single_year_macro_shape():
-    output = adapt_analysis_to_legacy_macro_output(
+def _build_schema_output() -> SingleYearMacroOutput:
+    return build_single_year_macro_output(
         country="us",
         model_version="1.702.0",
         data_version="1.115.5",
@@ -43,6 +53,39 @@ def test_adapter_returns_existing_single_year_macro_shape():
         intra_decile=INTRA_DECILE_COLLECTION,
         congressional_district_impact=[{"district_geoid": 101}],
     )
+
+
+def test_builder_returns_schema_modules_before_legacy_dict_dump():
+    output = _build_schema_output()
+
+    assert isinstance(output, SingleYearMacroOutput)
+    assert isinstance(output.budget, BudgetaryOutput)
+    assert isinstance(output.decile, DecileOutput)
+    assert isinstance(output.intra_decile, IntraDecileOutput)
+    assert isinstance(output.poverty, PovertyOutput)
+    assert output.wealth_decile is None
+    assert output.congressional_district_impact == [{"district_geoid": 101}]
+
+    legacy_output = adapt_analysis_to_legacy_macro_output(
+        country="us",
+        model_version="1.702.0",
+        data_version="1.115.5",
+        budget=BUDGET,
+        analysis=fake_analysis(),
+        baseline_poverty_by_age=BASELINE_POVERTY_BY_AGE,
+        reform_poverty_by_age=REFORM_POVERTY_BY_AGE,
+        baseline_poverty_by_gender=BASELINE_POVERTY_BY_GENDER,
+        reform_poverty_by_gender=REFORM_POVERTY_BY_GENDER,
+        baseline_poverty_by_race=BASELINE_POVERTY_BY_RACE,
+        reform_poverty_by_race=REFORM_POVERTY_BY_RACE,
+        intra_decile=INTRA_DECILE_COLLECTION,
+        congressional_district_impact=[{"district_geoid": 101}],
+    )
+    assert output.model_dump(mode="json") == legacy_output
+
+
+def test_adapter_returns_existing_single_year_macro_shape():
+    output = _build_schema_output().model_dump(mode="json")
 
     assert set(output) == CURRENT_SINGLE_YEAR_MACRO_KEYS
     assert output["model_version"] == "1.702.0"
