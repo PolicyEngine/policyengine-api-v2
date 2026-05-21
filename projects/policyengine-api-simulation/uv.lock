@@ -1803,7 +1803,7 @@ requires-dist = [
     { name = "policyengine-core", specifier = ">=3.23.5" },
     { name = "policyengine-fastapi", editable = "../../libs/policyengine-fastapi" },
     { name = "policyengine-uk", specifier = "==2.88.14" },
-    { name = "policyengine-us", specifier = "==1.700.0" },
+    { name = "policyengine-us", specifier = "==1.701.0" },
     { name = "pydantic-settings", specifier = ">=2.7.1,<3.0.0" },
     { name = "pyright", marker = "extra == 'build'", specifier = ">=1.1.401" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.3.4" },
@@ -1830,7 +1830,7 @@ wheels = [
 
 [[package]]
 name = "policyengine-us"
-version = "1.700.0"
+version = "1.701.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "microdf-python" },
@@ -1840,9 +1840,9 @@ dependencies = [
     { name = "tables" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0a/70/767fddeeb827e96e0f9a499c25f76c642767a129be259162eaf5b5954eb1/policyengine_us-1.700.0.tar.gz", hash = "sha256:63a7b1a2b8a0c903b6d704e8095f6880024e8fa93ea405912820a42589e90add", size = 9862854, upload-time = "2026-05-20T00:07:27.748Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/fe/a0ee2a624b66d00a1a8017d5e0df422b929ad54b72990a69e286e83c9772/policyengine_us-1.701.0.tar.gz", hash = "sha256:ff41b6046105137b3e420757cf062cd7a9f3faf2c9fc4a9999c30f2bcb140581", size = 9869747, upload-time = "2026-05-21T12:17:09.594Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/e9/2837a0d98e99efaf4d82aade276eee6eeff419df614863f08e3512961d2d/policyengine_us-1.700.0-py3-none-any.whl", hash = "sha256:7633d8aefcaf02d7628f841bc56750606f1d7fe409ff3ae7b0ef7e364a88e945", size = 10614505, upload-time = "2026-05-20T00:07:23.699Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/30/c8503be2daf1fd8706f1a535466f5c8474b6b1637a54c65e9bb711e77714/policyengine_us-1.701.0-py3-none-any.whl", hash = "sha256:49e485fa1e5a7a48f588b99522bdbae57e16212fec6960f65e7c58c62a24d29d", size = 10626860, upload-time = "2026-05-21T12:17:06.54Z" },
 ]
 
 [[package]]
