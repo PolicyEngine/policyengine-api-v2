@@ -170,7 +170,10 @@ Configure GitHub environments with these variables:
 ## Contributing
 
 1. Create a feature branch
-2. Make changes and test locally
-3. Ensure `make test-complete` passes
-4. Open a PR with a clear description
-5. Wait for CI checks to pass
+2. Open a GitHub issue for non-trivial work
+3. Make changes and test locally
+4. Ensure `make test-complete` passes when feasible
+5. Open a same-repository draft PR with `Fixes #ISSUE_NUMBER` as the first line
+   of the description
+6. Include a clear summary and testing notes
+7. Wait for CI checks to pass
