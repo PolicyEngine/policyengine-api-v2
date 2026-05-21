@@ -1,35 +1,54 @@
-# PolicyEngine API v2 Agent Guide
+# Agent Instructions
 
-This repository is the PolicyEngine API v2 monorepo. It contains service
-projects under `projects/`, shared libraries under `libs/`, deployment
-configuration under `deployment/`, and GitHub Actions under `.github/`.
+These instructions apply repository-wide.
+
+## Skills System
+
+Canonical AI-facing engineering skills live under `docs/engineering/skills/`.
+Use those files as the source of truth across Codex, Claude, Copilot, and other
+AI tools.
+
+Before opening, replacing, or sharing any pull request, read
+`docs/engineering/skills/github-prs.md`.
+
+When adding, moving, or reviewing tests, read
+`docs/engineering/skills/testing.md`.
 
 ## Development
 
 - Use Python 3.13 and `uv`.
-- Prefer repo Makefile targets when they match the task:
-  - `make format` formats Python source with Ruff.
-  - `make check` runs Ruff and Pyright over source directories.
-  - `make test` runs service unit tests in Docker.
-  - `make test-complete` runs unit and local integration tests.
+- Prefer Makefile targets when they match the task.
 - For service-scoped work, run focused `uv run pytest ...` commands from the
   relevant project directory when that is faster and sufficient.
 - Regenerate generated clients with `./scripts/generate-clients.sh` when API
   schemas change.
 
-## Pull Requests
+## GitHub PRs
 
-- Do not commit directly to `main`.
-- For non-trivial work, open a GitHub issue before opening a PR.
-- Open same-repository draft PRs by default.
-- The first line of every draft PR description must be
-  `Fixes #ISSUE_NUMBER`.
-- Include concise `Summary` and `Testing` sections after the `Fixes #...`
-  line.
-- Before opening a PR, run formatting and the most relevant tests for the
-  changed surface. If you cannot run expected checks, say so in the PR body.
-- Use `gh` for GitHub operations when possible so repository Actions and
-  permissions behave consistently.
+Never open `policyengine-api-v2` PRs from forks. CI and deployment checks are
+designed for same-repository branches.
+
+Before creating or sharing any PR, all developers and agents must:
+
+1. Confirm the canonical repository is reachable:
+   `gh repo view PolicyEngine/policyengine-api-v2 --json nameWithOwner`.
+2. Open a GitHub issue for the work, or verify that an appropriate issue
+   already exists.
+3. Put `Fixes #ISSUE_NUMBER` as the first line of the PR description, using the
+   issue number from the issue created or found in the previous step.
+4. Push the branch to the canonical repository, for example:
+   `make push-pr-branch`.
+5. Create the PR as a draft from that same repository, for example:
+   `gh pr create --draft --repo PolicyEngine/policyengine-api-v2 --head "$(git branch --show-current)" --base main`.
+6. Verify the PR is draft and the head repository is canonical before reporting
+   it:
+   `gh pr view <PR> --repo PolicyEngine/policyengine-api-v2 --json isDraft,headRepositoryOwner,headRepository`.
+
+The PR is valid only if `isDraft` is `true` and the head repository is
+`PolicyEngine/policyengine-api-v2`. If you cannot push to the canonical
+repository, stop and ask for access. Do not create a fork PR as a fallback. If
+you accidentally create one, immediately close it and replace it with a
+same-repository draft PR.
 
 ## Repository Notes
 

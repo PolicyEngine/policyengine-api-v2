@@ -169,6 +169,10 @@ Configure GitHub environments with these variables:
 
 ## Contributing
 
+See [AGENTS.md](AGENTS.md) and
+[docs/engineering/skills/github-prs.md](docs/engineering/skills/github-prs.md)
+for the canonical same-repository draft PR workflow.
+
 1. Create a feature branch
 2. Open a GitHub issue for non-trivial work
 3. Make changes and test locally

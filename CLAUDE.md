@@ -1,37 +1,27 @@
-# PolicyEngine API v2
+# Claude Instructions
 
-FastAPI and Modal-based API infrastructure for PolicyEngine services.
+These instructions apply repository-wide.
 
-Claude and other AI coding agents should follow the repository guidance in
-`AGENTS.md`. In particular:
+## Canonical Guidance
 
-- open an issue before non-trivial PRs,
-- open same-repository draft PRs by default,
-- start each draft PR description with `Fixes #ISSUE_NUMBER`,
-- run formatting and relevant tests before opening the PR.
+Repository-wide AI-facing engineering guidance lives in `AGENTS.md`.
+Canonical skills live under `docs/engineering/skills/`.
 
-## Common Commands
+Use those files as the source of truth. This file is a Claude adapter and should
+stay thin; do not duplicate detailed testing, CI, formatting, or architecture
+rules here.
 
-```bash
-make format
-make check
-make test
-make test-complete
-./scripts/generate-clients.sh
-```
+## Required Skill Lookup
 
-For simulation-service-only work:
+Before opening, replacing, or sharing a PR, read
+`docs/engineering/skills/github-prs.md`.
 
-```bash
-cd projects/policyengine-api-simulation
-uv sync --extra test
-uv run pytest tests/ -v
-```
+When adding, moving, or reviewing tests, read
+`docs/engineering/skills/testing.md`.
 
-## Key Paths
+## Safety Boundaries
 
-- `projects/policyengine-api-simulation/` — simulation gateway and Modal worker
-- `projects/policyengine-apis-integ/` — generated-client integration tests
-- `libs/policyengine-fastapi/` — shared FastAPI utilities
-- `.github/workflows/pr.yml` — PR checks
-- `.github/workflows/modal-deploy.yml` — main-branch Modal deployment
+Do not commit directly to `main`.
+
+Do not make production deployment changes or publish clients unless the user
+explicitly asks for that operation.
