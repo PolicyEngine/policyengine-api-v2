@@ -65,7 +65,6 @@ def test_update_country_package_dry_run_reports_planned_changes_without_editing(
     assert "Dry run: would create auto/update-policyengine-us-1.1.0" in result.stdout
     assert "simulation/pyproject.toml" in result.stdout
     assert "simulation/uv.lock" in result.stdout
-    assert "simulation/src/modal/app.py" in result.stdout
     assert pyproject.read_text(encoding="utf-8") == original_pyproject
 
 
@@ -160,13 +159,7 @@ def test_update_country_package_updates_files_and_opens_pr(
     pyproject_text = (fake_repo / "simulation" / "pyproject.toml").read_text(
         encoding="utf-8"
     )
-    modal_text = (fake_repo / "simulation" / "src" / "modal" / "app.py").read_text(
-        encoding="utf-8"
-    )
     assert "policyengine-us==1.1.0" in pyproject_text
-    assert (
-        'US_VERSION = os.environ.get("POLICYENGINE_US_VERSION", "1.1.0")' in modal_text
-    )
     assert "lock --upgrade-package policyengine-us" in uv_log.read_text(
         encoding="utf-8"
     )

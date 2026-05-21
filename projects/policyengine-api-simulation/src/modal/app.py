@@ -12,10 +12,15 @@ import os
 
 from src.modal._image_setup import snapshot_models
 from src.modal.logging_redaction import redact_params_for_logging
+from src.modal.release_bundle import get_bundled_country_model_version
 
-# Get versions from environment or use defaults
-US_VERSION = os.environ.get("POLICYENGINE_US_VERSION", "1.702.0")
-UK_VERSION = os.environ.get("POLICYENGINE_UK_VERSION", "2.88.20")
+# Get versions from environment or the bundled policyengine.py release manifest.
+US_VERSION = os.environ.get(
+    "POLICYENGINE_US_VERSION"
+) or get_bundled_country_model_version("us")
+UK_VERSION = os.environ.get(
+    "POLICYENGINE_UK_VERSION"
+) or get_bundled_country_model_version("uk")
 
 
 def get_app_name(us_version: str, uk_version: str) -> str:

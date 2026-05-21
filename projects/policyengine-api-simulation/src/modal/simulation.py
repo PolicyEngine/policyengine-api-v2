@@ -14,6 +14,10 @@ import tempfile
 from importlib import import_module
 from typing import Any, Iterator
 
+from src.modal.release_bundle import (
+    get_country_release_bundle,
+    resolve_bundle_dataset_name,
+)
 from src.modal.simulation_output_adapter import adapt_analysis_to_legacy_macro_output
 from src.modal.telemetry import split_internal_payload
 
@@ -22,24 +26,6 @@ logger = logging.getLogger(__name__)
 os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
 
 DEFAULT_YEAR = 2026
-DATASET_ALIASES = {
-    "us": {
-        "enhanced_cps": "enhanced_cps_2024",
-        "enhanced_cps_2024": "enhanced_cps_2024",
-        "gs://policyengine-us-data/enhanced_cps_2024.h5": "enhanced_cps_2024",
-        "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5": "enhanced_cps_2024",
-        "cps_small": "cps_small_2024",
-        "cps_small_2024": "cps_small_2024",
-    },
-    "uk": {
-        "enhanced_frs": "enhanced_frs_2023_24",
-        "enhanced_frs_2023_24": "enhanced_frs_2023_24",
-        "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5": "enhanced_frs_2023_24",
-        "frs": "frs_2023_24",
-        "frs_2023_24": "frs_2023_24",
-        "hf://policyengine/policyengine-uk-data-private/frs_2023_24.h5": "frs_2023_24",
-    },
-}
 
 
 def _normalize_credentials_blob(creds_json: str) -> str:
@@ -168,13 +154,7 @@ def _normalise_policy(policy: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 def _resolve_dataset_name(country: str, requested_data: str | None) -> str:
-    if requested_data is None:
-        return "enhanced_cps_2024" if country == "us" else "enhanced_frs_2023_24"
-
-    requested_without_revision = requested_data.split("@", maxsplit=1)[0]
-    return DATASET_ALIASES.get(country, {}).get(
-        requested_without_revision, requested_data
-    )
+    return resolve_bundle_dataset_name(country, requested_data)
 
 
 def _microframe_like(frame, weights: str):
@@ -501,6 +481,11 @@ def _model_version(country_module) -> str:
 def _data_version(params: dict[str, Any], dataset) -> str:
     if params.get("data_version"):
         return str(params["data_version"])
+    country = params.get("country", "us").lower()
+    try:
+        return get_country_release_bundle(country).data_version
+    except ValueError:
+        pass
     metadata = getattr(dataset, "metadata", {}) or {}
     for key in ("data_version", "version"):
         value = metadata.get(key)

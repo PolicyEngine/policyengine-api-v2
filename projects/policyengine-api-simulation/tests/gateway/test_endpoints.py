@@ -8,6 +8,27 @@ simulation requests.
 import pytest
 from fastapi.testclient import TestClient
 
+from src.modal.release_bundle import (
+    get_country_release_bundle,
+    resolve_bundle_dataset_uri,
+)
+
+
+def expected_bundle(
+    country: str,
+    model_version: str,
+    *,
+    dataset: str | None = None,
+    data_version: str | None = None,
+) -> dict[str, str]:
+    bundle = get_country_release_bundle(country)
+    return {
+        "model_version": model_version,
+        "policyengine_version": bundle.policyengine_version,
+        "data_version": data_version or bundle.data_version,
+        "dataset": resolve_bundle_dataset_uri(country, dataset),
+    }
+
 
 class TestGetAppName:
     """Tests for the get_app_name helper function."""
@@ -260,12 +281,13 @@ class TestSubmitSimulationEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["resolved_app_name"] == "policyengine-simulation-us1-500-0-uk2-66-0"
-        assert data["policyengine_bundle"] == {
-            "model_version": "1.500.0",
-            "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
-        }
+        assert data["policyengine_bundle"] == expected_bundle(
+            "us",
+            "1.500.0",
+            dataset="hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
+        )
 
-    def test__given_submission_with_alias_data__then_bundle_dataset_stays_unresolved(
+    def test__given_submission_with_alias_data__then_bundle_dataset_uses_manifest_uri(
         self, mock_modal, client: TestClient
     ):
         mock_modal["dicts"]["simulation-api-us-versions"] = {
@@ -284,9 +306,8 @@ class TestSubmitSimulationEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-        assert (
-            data["policyengine_bundle"]["dataset"]
-            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5"
+        assert data["policyengine_bundle"]["dataset"] == resolve_bundle_dataset_uri(
+            "us", "enhanced_cps_2024"
         )
 
     def test__given_submission_with_uk_alias_data__then_bundle_dataset_is_versioned_uri(
@@ -308,9 +329,8 @@ class TestSubmitSimulationEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-        assert (
-            data["policyengine_bundle"]["dataset"]
-            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.55.10"
+        assert data["policyengine_bundle"]["dataset"] == resolve_bundle_dataset_uri(
+            "uk", "enhanced_frs"
         )
 
     def test__given_submission_with_runtime_bundle__then_accepts_internal_provenance(
@@ -338,11 +358,12 @@ class TestSubmitSimulationEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["policyengine_bundle"] == {
-            "model_version": "1.500.0",
-            "data_version": "1.78.2",
-            "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
-        }
+        assert data["policyengine_bundle"] == expected_bundle(
+            "us",
+            "1.500.0",
+            dataset="enhanced_cps_2024",
+            data_version="1.78.2",
+        )
         assert mock_modal["func"].last_payload["data_version"] == "1.78.2"
         assert "_runtime_bundle" not in mock_modal["func"].last_payload
         assert "_metadata" not in mock_modal["func"].last_payload
@@ -401,10 +422,11 @@ class TestSubmitSimulationEndpoint:
         assert data["status"] == "complete"
         assert "run_id" not in data
         assert data["resolved_app_name"] == "policyengine-simulation-us1-500-0-uk2-66-0"
-        assert data["policyengine_bundle"] == {
-            "model_version": "1.500.0",
-            "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
-        }
+        assert data["policyengine_bundle"] == expected_bundle(
+            "us",
+            "1.500.0",
+            dataset="hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
+        )
 
     def test__given_submitted_job_with_telemetry__then_polling_echoes_run_id(
         self, mock_modal, client: TestClient
@@ -607,9 +629,7 @@ class TestBudgetWindowBatchEndpoints:
             "country": "us",
             "version": "1.500.0",
             "resolved_app_name": "policyengine-simulation-us1-500-0-uk2-66-0",
-            "policyengine_bundle": {
-                "model_version": "1.500.0",
-            },
+            "policyengine_bundle": expected_bundle("us", "1.500.0"),
         }
 
     def test__given_budget_window_submission__then_initial_poll_returns_seed_state(
@@ -654,9 +674,7 @@ class TestBudgetWindowBatchEndpoints:
             "result": None,
             "error": None,
             "resolved_app_name": "policyengine-simulation-us1-500-0-uk2-66-0",
-            "policyengine_bundle": {
-                "model_version": "1.500.0",
-            },
+            "policyengine_bundle": expected_bundle("us", "1.500.0"),
             "run_id": "batch-run-123",
         }
 

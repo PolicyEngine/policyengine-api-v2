@@ -40,7 +40,7 @@ from src.modal.simulation_output_adapter import (
 def _build_schema_output() -> SingleYearMacroOutput:
     return build_single_year_macro_output(
         country="us",
-        model_version="1.702.0",
+        model_version="1.700.0",
         data_version="1.115.5",
         budget=BUDGET,
         analysis=fake_analysis(),
@@ -68,7 +68,7 @@ def test_builder_returns_schema_modules_before_legacy_dict_dump():
 
     legacy_output = adapt_analysis_to_legacy_macro_output(
         country="us",
-        model_version="1.702.0",
+        model_version="1.700.0",
         data_version="1.115.5",
         budget=BUDGET,
         analysis=fake_analysis(),
@@ -88,7 +88,7 @@ def test_adapter_returns_existing_single_year_macro_shape():
     output = _build_schema_output().model_dump(mode="json")
 
     assert set(output) == CURRENT_SINGLE_YEAR_MACRO_KEYS
-    assert output["model_version"] == "1.702.0"
+    assert output["model_version"] == "1.700.0"
     assert output["data_version"] == "1.115.5"
     assert output["budget"] == BUDGET
     assert output["detailed_budget"] == {

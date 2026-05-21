@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Check PyPI for a newer country package, update the simulation project pins,
-# and open a version-specific PR.
+# Sync a country package pin to the version bundled by policyengine.py and
+# open a version-specific PR when the local pin is off-bundle.
 #
 # Usage:
 #   .github/scripts/update-country-package.sh policyengine-us [--dry-run]
@@ -9,7 +9,7 @@
 #
 # Optional environment:
 #   PROJECT_DIR      Project containing pyproject.toml and uv.lock.
-#   LATEST_OVERRIDE  Version to use instead of querying PyPI, for local checks.
+#   LATEST_OVERRIDE  Version to use instead of querying the bundle, for local checks.
 #   DRY_RUN=1        Report planned changes without editing files or opening a PR.
 
 set -euo pipefail
@@ -23,13 +23,9 @@ fi
 case "$PACKAGE" in
   policyengine-us)
     DISPLAY_NAME="PolicyEngine US"
-    CONSTANT_NAME="US_VERSION"
-    ENV_NAME="POLICYENGINE_US_VERSION"
     ;;
   policyengine-uk)
     DISPLAY_NAME="PolicyEngine UK"
-    CONSTANT_NAME="UK_VERSION"
-    ENV_NAME="POLICYENGINE_UK_VERSION"
     ;;
   *)
     echo "ERROR: Unsupported package '${PACKAGE}'." >&2
@@ -42,7 +38,6 @@ PROJECT_DIR="${PROJECT_DIR:-projects/policyengine-api-simulation}"
 PROJECT_PATH="${ROOT_DIR}/${PROJECT_DIR}"
 PYPROJECT="${PROJECT_PATH}/pyproject.toml"
 LOCKFILE="${PROJECT_PATH}/uv.lock"
-MODAL_APP="${PROJECT_PATH}/src/modal/app.py"
 
 create_pr_body_file() {
   local changelog
@@ -72,7 +67,7 @@ create_pr_body_file() {
   echo "$pr_body_file"
 }
 
-if [[ ! -f "$PYPROJECT" || ! -f "$LOCKFILE" || ! -f "$MODAL_APP" ]]; then
+if [[ ! -f "$PYPROJECT" || ! -f "$LOCKFILE" ]]; then
   echo "ERROR: Expected simulation project files were not found under ${PROJECT_DIR}." >&2
   exit 1
 fi
@@ -94,9 +89,23 @@ PY
 if [[ -n "${LATEST_OVERRIDE:-}" ]]; then
   LATEST="$LATEST_OVERRIDE"
 else
-  LATEST=$(curl -fsSL "https://pypi.org/pypi/${PACKAGE}/json" | python3 -c 'import json, sys; print(json.load(sys.stdin)["info"]["version"])')
+  LATEST=$(
+    cd "$PROJECT_PATH"
+    uv run python - "$PACKAGE" <<'PY'
+import sys
+
+from src.modal.release_bundle import get_country_release_bundle
+
+package = sys.argv[1]
+country_by_package = {
+    "policyengine-us": "us",
+    "policyengine-uk": "uk",
+}
+print(get_country_release_bundle(country_by_package[package]).model_version)
+PY
+  )
   if [[ -z "$LATEST" ]]; then
-    echo "ERROR: Could not fetch latest version for ${PACKAGE} from PyPI." >&2
+    echo "ERROR: Could not resolve bundled version for ${PACKAGE}." >&2
     exit 1
   fi
 fi
@@ -107,7 +116,7 @@ if [[ -z "$LATEST" ]]; then
 fi
 
 echo "Current locked version: ${PACKAGE}==${CURRENT}"
-echo "Latest PyPI version:   ${PACKAGE}==${LATEST}"
+echo "Bundled .py version:   ${PACKAGE}==${LATEST}"
 
 if [[ "$CURRENT" == "$LATEST" ]]; then
   echo "Already up to date. Nothing to do."
@@ -125,7 +134,6 @@ if [[ "$DRY_RUN" == "1" ]]; then
   echo "Dry run: would create ${BRANCH} and update:"
   echo "  ${PROJECT_DIR}/pyproject.toml"
   echo "  ${PROJECT_DIR}/uv.lock"
-  echo "  ${PROJECT_DIR}/src/modal/app.py"
   exit 0
 fi
 
@@ -155,12 +163,11 @@ git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
 git checkout -b "$BRANCH"
 
-python3 - "$PYPROJECT" "$MODAL_APP" "$PACKAGE" "$CURRENT" "$LATEST" "$CONSTANT_NAME" "$ENV_NAME" <<'PY'
-import re
+python3 - "$PYPROJECT" "$PACKAGE" "$CURRENT" "$LATEST" <<'PY'
 import sys
 from pathlib import Path
 
-pyproject_path, modal_app_path, package, current, latest, constant, env_name = sys.argv[1:]
+pyproject_path, package, current, latest = sys.argv[1:]
 
 pyproject = Path(pyproject_path)
 pyproject_text = pyproject.read_text(encoding="utf-8")
@@ -169,15 +176,6 @@ new_pin = f'"{package}=={latest}"'
 if old_pin not in pyproject_text:
     raise SystemExit(f"Could not find {old_pin} in {pyproject}")
 pyproject.write_text(pyproject_text.replace(old_pin, new_pin), encoding="utf-8")
-
-modal_app = Path(modal_app_path)
-modal_text = modal_app.read_text(encoding="utf-8")
-pattern = rf'{constant} = os\.environ\.get\("{env_name}", "[^"]+"\)'
-replacement = f'{constant} = os.environ.get("{env_name}", "{latest}")'
-updated, count = re.subn(pattern, replacement, modal_text, count=1)
-if count != 1:
-    raise SystemExit(f"Could not update {constant} in {modal_app}")
-modal_app.write_text(updated, encoding="utf-8")
 PY
 
 (
@@ -185,14 +183,14 @@ PY
   uv lock --upgrade-package "$PACKAGE"
 )
 
-if git diff --quiet -- "$PYPROJECT" "$LOCKFILE" "$MODAL_APP"; then
+if git diff --quiet -- "$PYPROJECT" "$LOCKFILE"; then
   echo "No changes after update. Nothing to do."
   exit 0
 fi
 
 PR_BODY_FILE="$(create_pr_body_file)"
 
-git add "$PYPROJECT" "$LOCKFILE" "$MODAL_APP"
+git add "$PYPROJECT" "$LOCKFILE"
 git commit -m "chore(deps): update ${PACKAGE} to ${LATEST}"
 git push -u origin "$BRANCH"
 

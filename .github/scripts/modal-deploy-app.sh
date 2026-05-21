@@ -2,6 +2,7 @@
 # Deploy simulation API to Modal
 # Usage: ./modal-deploy-app.sh <modal-environment>
 # Required env vars: POLICYENGINE_US_VERSION, POLICYENGINE_UK_VERSION
+# These should come from the bundled policyengine.py release manifest.
 #
 # Deploys two apps:
 # 1. policyengine-simulation-gateway - Stable gateway with fixed URL

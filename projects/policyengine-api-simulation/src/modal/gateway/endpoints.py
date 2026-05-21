@@ -34,27 +34,15 @@ from src.modal.gateway.responses import (
     failed_job_response,
     running_job_response,
 )
+from src.modal.release_bundle import (
+    get_country_release_bundle,
+    resolve_bundle_dataset_uri,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 JOB_METADATA_DICT_NAME = "simulation-api-job-metadata"
-DATASET_URIS = {
-    "us": {
-        "enhanced_cps": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
-        "enhanced_cps_2024": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
-        "cps": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.115.5",
-        "cps_2023": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.115.5",
-        "pooled_cps": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.115.5",
-        "pooled_3_year_cps_2023": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.115.5",
-    },
-    "uk": {
-        "enhanced_frs": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.55.10",
-        "enhanced_frs_2023_24": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.55.10",
-        "frs": "hf://policyengine/policyengine-uk-data-private/frs_2023_24.h5@1.55.10",
-        "frs_2023_24": "hf://policyengine/policyengine-uk-data-private/frs_2023_24.h5@1.55.10",
-    },
-}
 
 
 def _job_metadata_store():
@@ -82,16 +70,17 @@ def _is_modal_job_not_found(exc: BaseException) -> bool:
 def _build_policyengine_bundle(
     country: str, resolved_version: str, payload: dict
 ) -> PolicyEngineBundle:
+    bundle = get_country_release_bundle(country)
     dataset = payload.get("data")
-    if isinstance(dataset, str) and "://" in dataset:
-        resolved_dataset = dataset
-    elif isinstance(dataset, str):
-        resolved_dataset = DATASET_URIS.get(country.lower(), {}).get(dataset, dataset)
-    else:
-        resolved_dataset = None
+    resolved_dataset = (
+        resolve_bundle_dataset_uri(country, dataset)
+        if dataset is None or isinstance(dataset, str)
+        else None
+    )
     return PolicyEngineBundle(
         model_version=resolved_version,
-        data_version=payload.get("data_version"),
+        policyengine_version=bundle.policyengine_version,
+        data_version=payload.get("data_version") or bundle.data_version,
         dataset=resolved_dataset,
     )
 

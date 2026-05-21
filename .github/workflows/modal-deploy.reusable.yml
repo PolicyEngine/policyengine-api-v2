@@ -18,9 +18,15 @@ on:
       us_version:
         description: 'The deployed policyengine-us package version'
         value: ${{ jobs.deploy.outputs.us_version }}
+      us_data_version:
+        description: 'The bundled policyengine-us-data version'
+        value: ${{ jobs.deploy.outputs.us_data_version }}
       uk_version:
         description: 'The deployed policyengine-uk package version'
         value: ${{ jobs.deploy.outputs.uk_version }}
+      uk_data_version:
+        description: 'The bundled policyengine-uk-data version'
+        value: ${{ jobs.deploy.outputs.uk_data_version }}
 
 jobs:
   deploy:
@@ -30,7 +36,9 @@ jobs:
     outputs:
       simulation_api_url: ${{ steps.get-url.outputs.simulation_api_url }}
       us_version: ${{ steps.versions.outputs.us_version }}
+      us_data_version: ${{ steps.versions.outputs.us_data_version }}
       uk_version: ${{ steps.versions.outputs.uk_version }}
+      uk_data_version: ${{ steps.versions.outputs.uk_data_version }}
 
     steps:
     - name: Checkout repo

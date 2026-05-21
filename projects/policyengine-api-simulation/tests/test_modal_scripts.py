@@ -32,8 +32,8 @@ class TestModalExtractVersions:
         )
         assert result.returncode == 0, f"Syntax error in script: {result.stderr}"
 
-    def test_extracts_versions_from_uv_lock(self, temp_github_output):
-        """Should extract policyengine-us and policyengine-uk versions from uv.lock."""
+    def test_extracts_versions_from_policyengine_bundle(self, temp_github_output):
+        """Should extract model and data versions from policyengine.py's bundle."""
         project_dir = REPO_ROOT / "projects" / "policyengine-api-simulation"
 
         if not (project_dir / "uv.lock").exists():
@@ -54,8 +54,11 @@ class TestModalExtractVersions:
         with open(temp_github_output) as f:
             output = f.read()
 
-        assert "us_version=" in output, "us_version not found in output"
-        assert "uk_version=" in output, "uk_version not found in output"
+        assert "policyengine_version=" in output
+        assert "us_version=" in output
+        assert "us_data_version=" in output
+        assert "uk_version=" in output
+        assert "uk_data_version=" in output
 
 
 class TestModalHealthCheck:
