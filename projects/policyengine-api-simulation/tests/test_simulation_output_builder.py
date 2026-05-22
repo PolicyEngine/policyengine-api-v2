@@ -1,4 +1,4 @@
-"""Tests for translating PolicyEngine v4 outputs into API-v2 macro results."""
+"""Tests for building PolicyEngine v4 outputs into API-v2 macro results."""
 
 from __future__ import annotations
 
@@ -7,11 +7,10 @@ from types import SimpleNamespace
 import pandas as pd
 
 from fixtures.test_simulation_api_contracts import CURRENT_SINGLE_YEAR_MACRO_KEYS
-from fixtures.test_simulation_output_adapter import (
+from fixtures.test_simulation_output_builder import (
     BASELINE_POVERTY_BY_AGE,
     BASELINE_POVERTY_BY_GENDER,
     BASELINE_POVERTY_BY_RACE,
-    BUDGET,
     INTRA_DECILE_COLLECTION,
     REFORM_POVERTY_BY_AGE,
     REFORM_POVERTY_BY_GENDER,
@@ -19,7 +18,6 @@ from fixtures.test_simulation_output_adapter import (
     fake_analysis,
 )
 from src.modal.simulation import _normalise_policy
-from src.modal.simulation_macro_output_builder import SimulationMacroOutputBuilder
 from src.modal.simulation_macro_output import (
     BudgetaryImpact,
     BudgetaryOutput,
@@ -30,32 +28,147 @@ from src.modal.simulation_macro_output import (
     PovertyOutput,
     SingleYearMacroOutput,
 )
-from src.modal.simulation_output_adapter import (
-    SingleYearMacroOutputBuilder,
-    adapt_analysis_to_legacy_macro_output,
-)
+from src.modal.simulation_output_builder import SimulationOutputBuilder
 
 
-def _build_schema_output() -> SingleYearMacroOutput:
-    return SingleYearMacroOutputBuilder(
-        country="us",
-        model_version="1.700.0",
-        data_version="1.115.5",
-        budget=BUDGET,
-        analysis=fake_analysis(),
-        baseline_poverty_by_age=BASELINE_POVERTY_BY_AGE,
-        reform_poverty_by_age=REFORM_POVERTY_BY_AGE,
-        baseline_poverty_by_gender=BASELINE_POVERTY_BY_GENDER,
-        reform_poverty_by_gender=REFORM_POVERTY_BY_GENDER,
-        baseline_poverty_by_race=BASELINE_POVERTY_BY_RACE,
-        reform_poverty_by_race=REFORM_POVERTY_BY_RACE,
-        intra_decile=INTRA_DECILE_COLLECTION,
-        congressional_district_impact=[{"district_geoid": 101}],
-    ).build()
+class _FakeOutputDataset:
+    def __init__(self, household):
+        self.data = SimpleNamespace(household=household)
 
 
-def test_builder_returns_schema_modules_before_legacy_dict_dump():
-    output = _build_schema_output()
+class _FakeSimulation:
+    def __init__(self, household):
+        self.output_dataset = _FakeOutputDataset(household)
+
+    def ensure(self):
+        raise AssertionError("test data is already materialized")
+
+
+def _macro_baseline_reform():
+    baseline = _FakeSimulation(
+        pd.DataFrame(
+            {
+                "household_weight": [1.0, 1.0],
+                "household_net_income": [400.0, 600.0],
+                "household_tax": [50.0, 50.0],
+                "household_benefits": [20.0, 30.0],
+                "household_state_income_tax": [5.0, 5.0],
+            }
+        )
+    )
+    reform = _FakeSimulation(
+        pd.DataFrame(
+            {
+                "household_weight": [1.0, 1.0],
+                "household_net_income": [410.0, 620.0],
+                "household_tax": [100.0, 100.0],
+                "household_benefits": [35.0, 45.0],
+                "household_state_income_tax": [15.0, 15.0],
+            }
+        )
+    )
+    return baseline, reform
+
+
+def _simulation_output_builder(
+    country: str,
+    baseline,
+    reform,
+    analysis=None,
+) -> SimulationOutputBuilder:
+    analysis = analysis or fake_analysis()
+    country_module = SimpleNamespace(
+        model=SimpleNamespace(version="1.700.0" if country == "us" else "2.88.20"),
+        economic_impact_analysis=lambda baseline_simulation, reform_simulation: analysis,
+    )
+    return SimulationOutputBuilder(
+        country=country,
+        simulation_params={
+            "country": country,
+            "data_version": "1.115.5" if country == "us" else "1.55.10",
+        },
+        country_module=country_module,
+        dataset=SimpleNamespace(metadata={}),
+        baseline=baseline,
+        reform=reform,
+    )
+
+
+def _stub_policyengine_output_calls(monkeypatch, baseline, reform) -> None:
+    def fake_poverty_module_function(name):
+        def compute(simulation):
+            if "by_age" in name:
+                return (
+                    BASELINE_POVERTY_BY_AGE
+                    if simulation is baseline
+                    else REFORM_POVERTY_BY_AGE
+                )
+            if "by_gender" in name:
+                return (
+                    BASELINE_POVERTY_BY_GENDER
+                    if simulation is baseline
+                    else REFORM_POVERTY_BY_GENDER
+                )
+            if "by_race" in name:
+                return (
+                    BASELINE_POVERTY_BY_RACE
+                    if simulation is baseline
+                    else REFORM_POVERTY_BY_RACE
+                )
+            raise AssertionError(f"Unexpected poverty output: {name}")
+
+        return compute
+
+    monkeypatch.setattr(
+        "src.modal.simulation_output_builder._poverty_module_function",
+        fake_poverty_module_function,
+    )
+    monkeypatch.setattr(
+        SimulationOutputBuilder,
+        "_build_intra_decile_output",
+        lambda self: self._build_intra_decile_output_from_collection(
+            INTRA_DECILE_COLLECTION
+        ),
+    )
+    monkeypatch.setattr(
+        SimulationOutputBuilder,
+        "_build_congressional_district_impact",
+        lambda self: (
+            self._build_geographic_impact_output([{"district_geoid": 101}])
+            if self.country == "us"
+            else None
+        ),
+    )
+    monkeypatch.setattr(
+        SimulationOutputBuilder,
+        "_build_uk_constituency_impact",
+        lambda self: (
+            self._build_geographic_impact_output([{"constituency_code": "E14000530"}])
+            if self.country == "uk"
+            else None
+        ),
+    )
+    monkeypatch.setattr(
+        SimulationOutputBuilder,
+        "_build_uk_local_authority_impact",
+        lambda self: (
+            self._build_geographic_impact_output(
+                [{"local_authority_code": "E06000001"}]
+            )
+            if self.country == "uk"
+            else None
+        ),
+    )
+
+
+def _build_schema_output(monkeypatch, *, country: str = "us") -> SingleYearMacroOutput:
+    baseline, reform = _macro_baseline_reform()
+    _stub_policyengine_output_calls(monkeypatch, baseline, reform)
+    return _simulation_output_builder(country, baseline, reform).build()
+
+
+def test_builder_returns_schema_modules_before_legacy_dict_dump(monkeypatch):
+    output = _build_schema_output(monkeypatch)
 
     assert isinstance(output, SingleYearMacroOutput)
     assert isinstance(output.budget, BudgetaryOutput)
@@ -68,31 +181,21 @@ def test_builder_returns_schema_modules_before_legacy_dict_dump():
     assert output.wealth_decile is None
     assert output.congressional_district_impact.root == [{"district_geoid": 101}]
 
-    legacy_output = adapt_analysis_to_legacy_macro_output(
-        country="us",
-        model_version="1.700.0",
-        data_version="1.115.5",
-        budget=BUDGET,
-        analysis=fake_analysis(),
-        baseline_poverty_by_age=BASELINE_POVERTY_BY_AGE,
-        reform_poverty_by_age=REFORM_POVERTY_BY_AGE,
-        baseline_poverty_by_gender=BASELINE_POVERTY_BY_GENDER,
-        reform_poverty_by_gender=REFORM_POVERTY_BY_GENDER,
-        baseline_poverty_by_race=BASELINE_POVERTY_BY_RACE,
-        reform_poverty_by_race=REFORM_POVERTY_BY_RACE,
-        intra_decile=INTRA_DECILE_COLLECTION,
-        congressional_district_impact=[{"district_geoid": 101}],
-    )
-    assert output.model_dump(mode="json") == legacy_output
 
-
-def test_adapter_returns_existing_single_year_macro_shape():
-    output = _build_schema_output().model_dump(mode="json")
+def test_builder_returns_existing_single_year_macro_shape(monkeypatch):
+    output = _build_schema_output(monkeypatch).model_dump(mode="json")
 
     assert set(output) == CURRENT_SINGLE_YEAR_MACRO_KEYS
     assert output["model_version"] == "1.700.0"
     assert output["data_version"] == "1.115.5"
-    assert output["budget"] == BUDGET
+    assert output["budget"] == {
+        "tax_revenue_impact": 100.0,
+        "state_tax_revenue_impact": 20.0,
+        "benefit_spending_impact": 30.0,
+        "budgetary_impact": 70.0,
+        "households": 2.0,
+        "baseline_net_income": 1000.0,
+    }
     assert output["detailed_budget"] == {
         "income_tax": {"baseline": 100.0, "reform": 125.0, "difference": 25.0}
     }
@@ -123,17 +226,8 @@ def test_adapter_returns_existing_single_year_macro_shape():
     assert output["congressional_district_impact"] == [{"district_geoid": 101}]
 
 
-def test_adapter_maps_uk_wealth_outputs_and_omits_us_only_race():
-    output = adapt_analysis_to_legacy_macro_output(
-        country="uk",
-        model_version="2.88.20",
-        data_version="1.55.10",
-        budget={**BUDGET, "state_tax_revenue_impact": 0.0},
-        analysis=fake_analysis(),
-        intra_decile=INTRA_DECILE_COLLECTION,
-        constituency_impact=[{"constituency_code": "E14000530"}],
-        local_authority_impact=[{"local_authority_code": "E06000001"}],
-    )
+def test_builder_maps_uk_wealth_outputs_and_omits_us_only_race(monkeypatch):
+    output = _build_schema_output(monkeypatch, country="uk").model_dump(mode="json")
 
     assert output["poverty_by_race"] is None
     assert output["wealth_decile"] == {
@@ -145,40 +239,34 @@ def test_adapter_maps_uk_wealth_outputs_and_omits_us_only_race():
     assert output["local_authority_impact"] == [{"local_authority_code": "E06000001"}]
 
 
+def test_builder_calls_policyengine_economic_impact_analysis():
+    baseline, reform = _macro_baseline_reform()
+    analysis = fake_analysis()
+    calls = []
+    country_module = SimpleNamespace(
+        model=SimpleNamespace(version="1.700.0"),
+        economic_impact_analysis=lambda baseline_simulation, reform_simulation: (
+            calls.append((baseline_simulation, reform_simulation)) or analysis
+        ),
+    )
+    builder = SimulationOutputBuilder(
+        country="us",
+        simulation_params={"country": "us", "data_version": "1.115.5"},
+        country_module=country_module,
+        dataset=SimpleNamespace(metadata={}),
+        baseline=baseline,
+        reform=reform,
+    )
+
+    assert builder.analysis is analysis
+    assert builder.analysis is analysis
+    assert calls == [(baseline, reform)]
+
+
 def test_normalise_policy_converts_legacy_period_range_keys():
     assert _normalise_policy({"gov.test.parameter": {"2026-01-01.2100-12-31": 1}}) == {
         "gov.test.parameter": {"2026-01-01": 1}
     }
-
-
-def _simulation_output_builder(
-    country: str,
-    baseline,
-    reform,
-    analysis=None,
-) -> SimulationMacroOutputBuilder:
-    return SimulationMacroOutputBuilder(
-        country=country,
-        simulation_params={"country": country},
-        country_module=SimpleNamespace(model=SimpleNamespace(version="test")),
-        dataset=SimpleNamespace(metadata={}),
-        baseline=baseline,
-        reform=reform,
-        analysis=analysis or fake_analysis(),
-    )
-
-
-class _FakeOutputDataset:
-    def __init__(self, household):
-        self.data = SimpleNamespace(household=household)
-
-
-class _FakeSimulation:
-    def __init__(self, household):
-        self.output_dataset = _FakeOutputDataset(household)
-
-    def ensure(self):
-        raise AssertionError("test data is already materialized")
 
 
 def test_builder_budgetary_impact_uses_materialized_columns_and_uk_state_tax_zero():
@@ -241,7 +329,7 @@ def test_uk_constituency_impact_uses_policyengine_output_function(monkeypatch):
         return compute
 
     monkeypatch.setattr(
-        "src.modal.simulation_macro_output_builder._output_module_function",
+        "src.modal.simulation_output_builder._output_module_function",
         fake_output_module_function,
     )
 
@@ -276,7 +364,7 @@ def test_uk_local_authority_impact_uses_policyengine_output_function(monkeypatch
         return compute
 
     monkeypatch.setattr(
-        "src.modal.simulation_macro_output_builder._output_module_function",
+        "src.modal.simulation_output_builder._output_module_function",
         fake_output_module_function,
     )
 

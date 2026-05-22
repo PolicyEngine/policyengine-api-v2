@@ -15,7 +15,7 @@ from importlib import import_module
 from typing import Any, Iterator
 
 from src.modal.release_bundle import resolve_bundle_dataset_name
-from src.modal.simulation_macro_output_builder import SimulationMacroOutputBuilder
+from src.modal.simulation_output_builder import SimulationOutputBuilder
 from src.modal.telemetry import split_internal_payload
 
 logger = logging.getLogger(__name__)
@@ -291,15 +291,13 @@ def _run_simulation_impl_core(params: dict) -> dict:
     )
 
     logger.info("Calculating economic impact")
-    analysis = country_module.economic_impact_analysis(baseline, reform)
-    output = SimulationMacroOutputBuilder(
+    output = SimulationOutputBuilder(
         country=country,
         simulation_params=simulation_params,
         country_module=country_module,
         dataset=dataset,
         baseline=baseline,
         reform=reform,
-        analysis=analysis,
     ).serialize()
     logger.info("Comparison complete")
     return output
