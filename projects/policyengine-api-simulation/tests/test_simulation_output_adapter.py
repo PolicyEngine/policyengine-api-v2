@@ -18,10 +18,8 @@ from fixtures.test_simulation_output_adapter import (
     REFORM_POVERTY_BY_RACE,
     fake_analysis,
 )
-from src.modal.simulation import (
-    SimulationMacroOutputBuilder,
-    _normalise_policy,
-)
+from src.modal.simulation import _normalise_policy
+from src.modal.simulation_macro_output_builder import SimulationMacroOutputBuilder
 from src.modal.simulation_macro_output import (
     BudgetaryImpact,
     BudgetaryOutput,
@@ -243,7 +241,8 @@ def test_uk_constituency_impact_uses_policyengine_output_function(monkeypatch):
         return compute
 
     monkeypatch.setattr(
-        "src.modal.simulation._output_module_function", fake_output_module_function
+        "src.modal.simulation_macro_output_builder._output_module_function",
+        fake_output_module_function,
     )
 
     assert (
@@ -277,7 +276,8 @@ def test_uk_local_authority_impact_uses_policyengine_output_function(monkeypatch
         return compute
 
     monkeypatch.setattr(
-        "src.modal.simulation._output_module_function", fake_output_module_function
+        "src.modal.simulation_macro_output_builder._output_module_function",
+        fake_output_module_function,
     )
 
     assert (
