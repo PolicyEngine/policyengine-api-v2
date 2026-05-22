@@ -19,10 +19,8 @@ from fixtures.test_simulation_output_adapter import (
     fake_analysis,
 )
 from src.modal.simulation import (
-    _budget_result,
+    SimulationMacroOutputBuilder,
     _normalise_policy,
-    _uk_constituency_impact,
-    _uk_local_authority_impact,
 )
 from src.modal.simulation_macro_output import (
     BudgetaryImpact,
@@ -35,13 +33,13 @@ from src.modal.simulation_macro_output import (
     SingleYearMacroOutput,
 )
 from src.modal.simulation_output_adapter import (
+    SingleYearMacroOutputBuilder,
     adapt_analysis_to_legacy_macro_output,
-    build_single_year_macro_output,
 )
 
 
 def _build_schema_output() -> SingleYearMacroOutput:
-    return build_single_year_macro_output(
+    return SingleYearMacroOutputBuilder(
         country="us",
         model_version="1.700.0",
         data_version="1.115.5",
@@ -55,7 +53,7 @@ def _build_schema_output() -> SingleYearMacroOutput:
         reform_poverty_by_race=REFORM_POVERTY_BY_RACE,
         intra_decile=INTRA_DECILE_COLLECTION,
         congressional_district_impact=[{"district_geoid": 101}],
-    )
+    ).build()
 
 
 def test_builder_returns_schema_modules_before_legacy_dict_dump():
@@ -155,6 +153,23 @@ def test_normalise_policy_converts_legacy_period_range_keys():
     }
 
 
+def _simulation_output_builder(
+    country: str,
+    baseline,
+    reform,
+    analysis=None,
+) -> SimulationMacroOutputBuilder:
+    return SimulationMacroOutputBuilder(
+        country=country,
+        simulation_params={"country": country},
+        country_module=SimpleNamespace(model=SimpleNamespace(version="test")),
+        dataset=SimpleNamespace(metadata={}),
+        baseline=baseline,
+        reform=reform,
+        analysis=analysis or fake_analysis(),
+    )
+
+
 class _FakeOutputDataset:
     def __init__(self, household):
         self.data = SimpleNamespace(household=household)
@@ -168,7 +183,7 @@ class _FakeSimulation:
         raise AssertionError("test data is already materialized")
 
 
-def test_budget_result_uses_materialized_household_columns_and_uk_state_tax_zero():
+def test_builder_budgetary_impact_uses_materialized_columns_and_uk_state_tax_zero():
     baseline = _FakeSimulation(
         pd.DataFrame(
             {
@@ -192,8 +207,12 @@ def test_budget_result_uses_materialized_household_columns_and_uk_state_tax_zero
         )
     )
 
-    us_budget = _budget_result("us", baseline, reform)
-    uk_budget = _budget_result("uk", baseline, reform)
+    us_budget = _simulation_output_builder(
+        "us", baseline, reform
+    )._build_budgetary_impact()
+    uk_budget = _simulation_output_builder(
+        "uk", baseline, reform
+    )._build_budgetary_impact()
 
     assert isinstance(us_budget, BudgetaryImpact)
     assert us_budget.model_dump(mode="json") == {
@@ -227,8 +246,18 @@ def test_uk_constituency_impact_uses_policyengine_output_function(monkeypatch):
         "src.modal.simulation._output_module_function", fake_output_module_function
     )
 
-    assert _uk_constituency_impact("uk", baseline, reform).root == expected
-    assert _uk_constituency_impact("us", baseline, reform) is None
+    assert (
+        _simulation_output_builder("uk", baseline, reform)
+        ._build_uk_constituency_impact()
+        .root
+        == expected
+    )
+    assert (
+        _simulation_output_builder(
+            "us", baseline, reform
+        )._build_uk_constituency_impact()
+        is None
+    )
 
 
 def test_uk_local_authority_impact_uses_policyengine_output_function(monkeypatch):
@@ -251,5 +280,15 @@ def test_uk_local_authority_impact_uses_policyengine_output_function(monkeypatch
         "src.modal.simulation._output_module_function", fake_output_module_function
     )
 
-    assert _uk_local_authority_impact("uk", baseline, reform).root == expected
-    assert _uk_local_authority_impact("us", baseline, reform) is None
+    assert (
+        _simulation_output_builder("uk", baseline, reform)
+        ._build_uk_local_authority_impact()
+        .root
+        == expected
+    )
+    assert (
+        _simulation_output_builder(
+            "us", baseline, reform
+        )._build_uk_local_authority_impact()
+        is None
+    )

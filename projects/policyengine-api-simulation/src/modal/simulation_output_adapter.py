@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from src.modal.simulation_macro_output import (
@@ -351,6 +352,122 @@ def build_labor_supply_response_output(
     return LaborSupplyResponseOutput(output) if isinstance(output, dict) else None
 
 
+@dataclass
+class SingleYearMacroOutputBuilder:
+    country: str
+    model_version: str
+    data_version: str
+    budget: Mapping[str, Any] | BudgetaryImpact
+    analysis: Any
+    baseline_poverty_by_age: Any = None
+    reform_poverty_by_age: Any = None
+    baseline_poverty_by_gender: Any = None
+    reform_poverty_by_gender: Any = None
+    baseline_poverty_by_race: Any = None
+    reform_poverty_by_race: Any = None
+    intra_decile: Any = None
+    congressional_district_impact: Any = None
+    constituency_impact: Any = None
+    local_authority_impact: Any = None
+
+    def __post_init__(self) -> None:
+        self.country = self.country.lower()
+
+    def build(self) -> SingleYearMacroOutput:
+        return SingleYearMacroOutput(
+            model_version=self.model_version,
+            data_version=self.data_version,
+            budget=self._build_budgetary_impact(),
+            detailed_budget=self._build_detailed_budget(),
+            decile=self._build_decile(),
+            inequality=self._build_inequality(),
+            poverty=self._build_poverty(),
+            poverty_by_gender=self._build_poverty_by_gender(),
+            poverty_by_race=self._build_poverty_by_race(),
+            intra_decile=self._build_intra_decile(),
+            wealth_decile=self._build_wealth_decile(),
+            intra_wealth_decile=self._build_intra_wealth_decile(),
+            labor_supply_response=self._build_labor_supply_response(),
+            constituency_impact=self._build_constituency_impact(),
+            local_authority_impact=self._build_local_authority_impact(),
+            congressional_district_impact=self._build_congressional_district_impact(),
+            cliff_impact=None,
+        )
+
+    def serialize(self) -> dict[str, Any]:
+        return self.build().model_dump(mode="json")
+
+    def _build_budgetary_impact(self) -> BudgetaryImpact:
+        return build_budgetary_output(self.budget)
+
+    def _build_detailed_budget(self) -> DetailedBudgetOutput:
+        return build_detailed_budget_output(
+            getattr(self.analysis, "program_statistics", None)
+        )
+
+    def _build_decile(self) -> DecileOutput:
+        return build_decile_output(getattr(self.analysis, "decile_impacts", None))
+
+    def _build_inequality(self) -> InequalityOutput:
+        return build_inequality_output(
+            getattr(self.analysis, "baseline_inequality", None),
+            getattr(self.analysis, "reform_inequality", None),
+        )
+
+    def _build_poverty(self) -> PovertyOutput:
+        return build_poverty_output(
+            self.country,
+            baseline=getattr(self.analysis, "baseline_poverty", None),
+            reform=getattr(self.analysis, "reform_poverty", None),
+            baseline_by_age=self.baseline_poverty_by_age,
+            reform_by_age=self.reform_poverty_by_age,
+        )
+
+    def _build_poverty_by_gender(self) -> PovertyByGenderOutput:
+        return build_poverty_by_gender_output(
+            self.country,
+            baseline_by_gender=self.baseline_poverty_by_gender,
+            reform_by_gender=self.reform_poverty_by_gender,
+        )
+
+    def _build_poverty_by_race(self) -> PovertyByRaceOutput | None:
+        if self.country != "us":
+            return None
+        return build_poverty_by_race_output(
+            baseline_by_race=self.baseline_poverty_by_race,
+            reform_by_race=self.reform_poverty_by_race,
+        )
+
+    def _build_intra_decile(self) -> IntraDecileOutput:
+        return build_intra_decile_output(self.intra_decile)
+
+    def _build_wealth_decile(self) -> DecileOutput | None:
+        if self.country != "uk":
+            return None
+        return build_decile_output(
+            getattr(self.analysis, "wealth_decile_impacts", None)
+        )
+
+    def _build_intra_wealth_decile(self) -> IntraDecileOutput | None:
+        if self.country != "uk":
+            return None
+        return build_intra_decile_output(
+            getattr(self.analysis, "intra_wealth_decile_impacts", None)
+        )
+
+    def _build_labor_supply_response(self) -> LaborSupplyResponseOutput | None:
+        return build_labor_supply_response_output(self.analysis)
+
+    def _build_constituency_impact(self) -> GeographicImpactOutput | None:
+        return build_geographic_impact_output(self.constituency_impact)
+
+    def _build_local_authority_impact(self) -> GeographicImpactOutput | None:
+        return build_geographic_impact_output(self.local_authority_impact)
+
+    def _build_congressional_district_impact(self) -> GeographicImpactOutput | None:
+        return build_geographic_impact_output(self.congressional_district_impact)
+
+
 def build_single_year_macro_output(
     *,
     country: str,
@@ -370,55 +487,23 @@ def build_single_year_macro_output(
     local_authority_impact: Any = None,
 ) -> SingleYearMacroOutput:
     """Build the schema-first single-year macro output."""
-    country = country.lower()
-    wealth_decile = getattr(analysis, "wealth_decile_impacts", None)
-    intra_wealth_decile = getattr(analysis, "intra_wealth_decile_impacts", None)
-
-    return SingleYearMacroOutput(
+    return SingleYearMacroOutputBuilder(
+        country=country,
         model_version=model_version,
         data_version=data_version,
-        budget=build_budgetary_output(budget),
-        detailed_budget=build_detailed_budget_output(
-            getattr(analysis, "program_statistics", None)
-        ),
-        decile=build_decile_output(getattr(analysis, "decile_impacts", None)),
-        inequality=build_inequality_output(
-            getattr(analysis, "baseline_inequality", None),
-            getattr(analysis, "reform_inequality", None),
-        ),
-        poverty=build_poverty_output(
-            country,
-            baseline=getattr(analysis, "baseline_poverty", None),
-            reform=getattr(analysis, "reform_poverty", None),
-            baseline_by_age=baseline_poverty_by_age,
-            reform_by_age=reform_poverty_by_age,
-        ),
-        poverty_by_gender=build_poverty_by_gender_output(
-            country,
-            baseline_by_gender=baseline_poverty_by_gender,
-            reform_by_gender=reform_poverty_by_gender,
-        ),
-        poverty_by_race=(
-            build_poverty_by_race_output(
-                baseline_by_race=baseline_poverty_by_race,
-                reform_by_race=reform_poverty_by_race,
-            )
-            if country == "us"
-            else None
-        ),
-        intra_decile=build_intra_decile_output(intra_decile),
-        wealth_decile=build_decile_output(wealth_decile) if country == "uk" else None,
-        intra_wealth_decile=(
-            build_intra_decile_output(intra_wealth_decile) if country == "uk" else None
-        ),
-        labor_supply_response=build_labor_supply_response_output(analysis),
-        constituency_impact=build_geographic_impact_output(constituency_impact),
-        local_authority_impact=build_geographic_impact_output(local_authority_impact),
-        congressional_district_impact=build_geographic_impact_output(
-            congressional_district_impact
-        ),
-        cliff_impact=None,
-    )
+        budget=budget,
+        analysis=analysis,
+        baseline_poverty_by_age=baseline_poverty_by_age,
+        reform_poverty_by_age=reform_poverty_by_age,
+        baseline_poverty_by_gender=baseline_poverty_by_gender,
+        reform_poverty_by_gender=reform_poverty_by_gender,
+        baseline_poverty_by_race=baseline_poverty_by_race,
+        reform_poverty_by_race=reform_poverty_by_race,
+        intra_decile=intra_decile,
+        congressional_district_impact=congressional_district_impact,
+        constituency_impact=constituency_impact,
+        local_authority_impact=local_authority_impact,
+    ).build()
 
 
 def adapt_analysis_to_legacy_macro_output(
@@ -440,7 +525,7 @@ def adapt_analysis_to_legacy_macro_output(
     local_authority_impact: Any = None,
 ) -> dict[str, Any]:
     """Return the legacy single-year macro result expected by API callers."""
-    return build_single_year_macro_output(
+    return SingleYearMacroOutputBuilder(
         country=country,
         model_version=model_version,
         data_version=data_version,
@@ -456,4 +541,4 @@ def adapt_analysis_to_legacy_macro_output(
         congressional_district_impact=congressional_district_impact,
         constituency_impact=constituency_impact,
         local_authority_impact=local_authority_impact,
-    ).model_dump(mode="json")
+    ).serialize()
