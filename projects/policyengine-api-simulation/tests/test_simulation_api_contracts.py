@@ -34,6 +34,12 @@ def test_internal_single_year_macro_schema_matches_current_public_keys():
     assert set(SingleYearMacroOutput.model_fields) == CURRENT_SINGLE_YEAR_MACRO_KEYS
 
 
+def test_internal_single_year_macro_schema_serializes_current_public_contract():
+    output = SingleYearMacroOutput.model_validate(CURRENT_SINGLE_YEAR_MACRO_RESULT)
+
+    assert output.model_dump(mode="json") == CURRENT_SINGLE_YEAR_MACRO_RESULT
+
+
 def test_openapi_keeps_job_status_result_as_unstructured_dict():
     spec = create_openapi_app().openapi()
     schemas = spec["components"]["schemas"]

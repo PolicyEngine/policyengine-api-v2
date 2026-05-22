@@ -34,10 +34,7 @@ from src.modal.gateway.responses import (
     failed_job_response,
     running_job_response,
 )
-from src.modal.release_bundle import (
-    get_country_release_bundle,
-    resolve_bundle_dataset_uri,
-)
+from src.modal.release_bundle import resolve_bundle_dataset_uri
 
 logger = logging.getLogger(__name__)
 
@@ -70,17 +67,15 @@ def _is_modal_job_not_found(exc: BaseException) -> bool:
 def _build_policyengine_bundle(
     country: str, resolved_version: str, payload: dict
 ) -> PolicyEngineBundle:
-    bundle = get_country_release_bundle(country)
     dataset = payload.get("data")
     resolved_dataset = (
         resolve_bundle_dataset_uri(country, dataset)
-        if dataset is None or isinstance(dataset, str)
+        if isinstance(dataset, str)
         else None
     )
     return PolicyEngineBundle(
         model_version=resolved_version,
-        policyengine_version=bundle.policyengine_version,
-        data_version=payload.get("data_version") or bundle.data_version,
+        data_version=payload.get("data_version"),
         dataset=resolved_dataset,
     )
 

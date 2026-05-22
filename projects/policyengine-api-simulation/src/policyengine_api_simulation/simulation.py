@@ -3,6 +3,10 @@ import logging
 from fastapi import APIRouter
 
 from src.modal.simulation import run_simulation_impl
+from policyengine_api_simulation.compat_models import (
+    EconomyComparison,
+    SimulationOptions,
+)
 
 logger = logging.getLogger(__file__)
 
@@ -10,11 +14,13 @@ logger = logging.getLogger(__file__)
 def create_router():
     router = APIRouter()
 
-    @router.post("/simulate/economy/comparison", response_model=dict)
-    async def simulate(parameters: dict) -> dict:
+    @router.post("/simulate/economy/comparison", response_model=EconomyComparison)
+    async def simulate(parameters: SimulationOptions) -> EconomyComparison:
         logger.info("Calculating comparison")
-        result = run_simulation_impl(parameters)
+        result = run_simulation_impl(
+            parameters.model_dump(mode="json", exclude_none=True)
+        )
         logger.info("Comparison complete")
-        return result
+        return EconomyComparison.model_validate(result)
 
     return router

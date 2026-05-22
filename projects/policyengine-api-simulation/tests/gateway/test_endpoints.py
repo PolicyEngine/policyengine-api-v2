@@ -8,10 +8,7 @@ simulation requests.
 import pytest
 from fastapi.testclient import TestClient
 
-from src.modal.release_bundle import (
-    get_country_release_bundle,
-    resolve_bundle_dataset_uri,
-)
+from src.modal.release_bundle import resolve_bundle_dataset_uri
 
 
 def expected_bundle(
@@ -20,14 +17,16 @@ def expected_bundle(
     *,
     dataset: str | None = None,
     data_version: str | None = None,
-) -> dict[str, str]:
-    bundle = get_country_release_bundle(country)
-    return {
+) -> dict[str, str | None]:
+    bundle: dict[str, str | None] = {
         "model_version": model_version,
-        "policyengine_version": bundle.policyengine_version,
-        "data_version": data_version or bundle.data_version,
-        "dataset": resolve_bundle_dataset_uri(country, dataset),
+        "dataset": resolve_bundle_dataset_uri(country, dataset)
+        if dataset is not None
+        else None,
     }
+    if data_version is not None:
+        bundle["data_version"] = data_version
+    return {key: value for key, value in bundle.items() if value is not None}
 
 
 class TestGetAppName:

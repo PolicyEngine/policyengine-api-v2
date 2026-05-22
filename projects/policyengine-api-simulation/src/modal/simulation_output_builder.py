@@ -327,14 +327,14 @@ class SimulationOutputBuilder:
         )
 
     def _build_budgetary_impact(self) -> BudgetaryImpact:
-        tax_revenue_impact = _try_change_output_variable(
+        tax_revenue_impact = _change_output_variable(
             self.baseline, self.reform, "household_tax", entity="household"
         )
-        benefit_spending_impact = _try_change_output_variable(
+        benefit_spending_impact = _change_output_variable(
             self.baseline, self.reform, "household_benefits", entity="household"
         )
         state_tax_revenue_impact = (
-            _try_change_output_variable(
+            _change_output_variable(
                 self.baseline,
                 self.reform,
                 "household_state_income_tax",
@@ -349,10 +349,10 @@ class SimulationOutputBuilder:
             state_tax_revenue_impact=state_tax_revenue_impact,
             benefit_spending_impact=benefit_spending_impact,
             budgetary_impact=tax_revenue_impact - benefit_spending_impact,
-            households=_try_sum_output_variable(
+            households=_sum_output_variable(
                 self.baseline, "household_weight", entity="household"
             ),
-            baseline_net_income=_try_sum_output_variable(
+            baseline_net_income=_sum_output_variable(
                 self.baseline, "household_net_income", entity="household"
             ),
         )

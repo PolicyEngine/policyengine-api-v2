@@ -5,8 +5,12 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
-from fixtures.test_simulation_api_contracts import CURRENT_SINGLE_YEAR_MACRO_KEYS
+from fixtures.test_simulation_api_contracts import (
+    CURRENT_SINGLE_YEAR_MACRO_KEYS,
+    CURRENT_SINGLE_YEAR_MACRO_RESULT,
+)
 from fixtures.test_simulation_output_builder import (
     BASELINE_POVERTY_BY_AGE,
     BASELINE_POVERTY_BY_GENDER,
@@ -18,6 +22,7 @@ from fixtures.test_simulation_output_builder import (
     fake_analysis,
 )
 from src.modal.simulation import _normalise_policy
+from src.modal.simulation import _run_simulation_impl_core
 from src.modal.simulation_macro_output import (
     BudgetaryImpact,
     BudgetaryOutput,
@@ -79,7 +84,9 @@ def _simulation_output_builder(
     analysis = analysis or fake_analysis()
     country_module = SimpleNamespace(
         model=SimpleNamespace(version="1.700.0" if country == "us" else "2.88.20"),
-        economic_impact_analysis=lambda baseline_simulation, reform_simulation: analysis,
+        economic_impact_analysis=lambda baseline_simulation, reform_simulation: (
+            analysis
+        ),
     )
     return SimulationOutputBuilder(
         country=country,
@@ -186,44 +193,7 @@ def test_builder_returns_existing_single_year_macro_shape(monkeypatch):
     output = _build_schema_output(monkeypatch).model_dump(mode="json")
 
     assert set(output) == CURRENT_SINGLE_YEAR_MACRO_KEYS
-    assert output["model_version"] == "1.700.0"
-    assert output["data_version"] == "1.115.5"
-    assert output["budget"] == {
-        "tax_revenue_impact": 100.0,
-        "state_tax_revenue_impact": 20.0,
-        "benefit_spending_impact": 30.0,
-        "budgetary_impact": 70.0,
-        "households": 2.0,
-        "baseline_net_income": 1000.0,
-    }
-    assert output["detailed_budget"] == {
-        "income_tax": {"baseline": 100.0, "reform": 125.0, "difference": 25.0}
-    }
-    assert output["decile"] == {
-        "average": {"1": 10.0, "2": 20.0},
-        "relative": {"1": 0.01, "2": 0.02},
-    }
-    assert output["intra_decile"]["deciles"]["Gain more than 5%"] == [0.5, 0.1]
-    assert output["intra_decile"]["all"]["Gain more than 5%"] == 0.3
-    assert output["poverty"]["poverty"]["all"] == {
-        "baseline": 0.10,
-        "reform": 0.09,
-    }
-    assert output["poverty"]["poverty"]["child"] == {
-        "baseline": 0.12,
-        "reform": 0.11,
-    }
-    assert output["poverty_by_gender"]["poverty"]["male"] == {
-        "baseline": 0.08,
-        "reform": 0.07,
-    }
-    assert output["poverty_by_race"]["poverty"]["white"] == {
-        "baseline": 0.06,
-        "reform": 0.05,
-    }
-    assert output["wealth_decile"] is None
-    assert output["intra_wealth_decile"] is None
-    assert output["congressional_district_impact"] == [{"district_geoid": 101}]
+    assert output == CURRENT_SINGLE_YEAR_MACRO_RESULT
 
 
 def test_builder_maps_uk_wealth_outputs_and_omits_us_only_race(monkeypatch):
@@ -269,6 +239,64 @@ def test_normalise_policy_converts_legacy_period_range_keys():
     }
 
 
+def test_run_simulation_impl_core_builds_and_serializes_macro_output(monkeypatch):
+    dataset = object()
+    country_module = SimpleNamespace(model=SimpleNamespace(version="1.700.0"))
+    baseline_simulation = object()
+    reform_simulation = object()
+    build_calls = []
+    builder_calls = []
+
+    def fake_country_module(country):
+        assert country == "us"
+        return country_module
+
+    def fake_build_simulation(params, *, dataset, policy):
+        build_calls.append((params, dataset, policy))
+        return baseline_simulation if len(build_calls) == 1 else reform_simulation
+
+    class FakeSimulationOutputBuilder:
+        def __init__(self, **kwargs):
+            builder_calls.append(kwargs)
+
+        def serialize(self):
+            return CURRENT_SINGLE_YEAR_MACRO_RESULT
+
+    monkeypatch.setattr("src.modal.simulation._country_module", fake_country_module)
+    monkeypatch.setattr("src.modal.simulation._load_dataset", lambda params: dataset)
+    monkeypatch.setattr("src.modal.simulation._build_simulation", fake_build_simulation)
+    monkeypatch.setattr(
+        "src.modal.simulation.SimulationOutputBuilder",
+        FakeSimulationOutputBuilder,
+    )
+
+    result = _run_simulation_impl_core(
+        {
+            "country": "us",
+            "baseline": {"gov.test.parameter": {"2026-01-01.2100-12-31": 1}},
+            "reform": {"gov.test.parameter": {"2026-01-01.2100-12-31": 2}},
+        }
+    )
+
+    assert result == CURRENT_SINGLE_YEAR_MACRO_RESULT
+    assert build_calls[0][2] == {"gov.test.parameter": {"2026-01-01": 1}}
+    assert build_calls[1][2] == {"gov.test.parameter": {"2026-01-01": 2}}
+    assert builder_calls == [
+        {
+            "country": "us",
+            "simulation_params": {
+                "country": "us",
+                "baseline": {"gov.test.parameter": {"2026-01-01.2100-12-31": 1}},
+                "reform": {"gov.test.parameter": {"2026-01-01.2100-12-31": 2}},
+            },
+            "country_module": country_module,
+            "dataset": dataset,
+            "baseline": baseline_simulation,
+            "reform": reform_simulation,
+        }
+    ]
+
+
 def test_builder_budgetary_impact_uses_materialized_columns_and_uk_state_tax_zero():
     baseline = _FakeSimulation(
         pd.DataFrame(
@@ -310,6 +338,21 @@ def test_builder_budgetary_impact_uses_materialized_columns_and_uk_state_tax_zer
         "baseline_net_income": 300.0,
     }
     assert uk_budget.state_tax_revenue_impact == 0.0
+
+
+def test_builder_budgetary_impact_propagates_required_calculation_errors(monkeypatch):
+    baseline, reform = _macro_baseline_reform()
+
+    def fail_change_output_variable(*args, **kwargs):
+        raise RuntimeError("household_tax missing")
+
+    monkeypatch.setattr(
+        "src.modal.simulation_output_builder._change_output_variable",
+        fail_change_output_variable,
+    )
+
+    with pytest.raises(RuntimeError, match="household_tax missing"):
+        _simulation_output_builder("us", baseline, reform)._build_budgetary_impact()
 
 
 def test_uk_constituency_impact_uses_policyengine_output_function(monkeypatch):

@@ -11,8 +11,16 @@ import modal
 import os
 
 from src.modal._image_setup import snapshot_models
+from src.modal.dependency_pins import project_dependency_pin
 from src.modal.logging_redaction import redact_params_for_logging
 from src.modal.release_bundle import get_bundled_country_model_version
+
+POLICYENGINE_VERSION = os.environ.get("POLICYENGINE_VERSION") or project_dependency_pin(
+    "policyengine"
+)
+POLICYENGINE_CORE_VERSION = os.environ.get(
+    "POLICYENGINE_CORE_VERSION"
+) or project_dependency_pin("policyengine-core")
 
 # Get versions from environment or the bundled policyengine.py release manifest.
 US_VERSION = os.environ.get(
@@ -54,8 +62,8 @@ simulation_image = (
     .pip_install(
         f"policyengine-us=={US_VERSION}",
         f"policyengine-uk=={UK_VERSION}",
-        "policyengine==4.10.0",
-        "policyengine-core==3.26.1",
+        f"policyengine=={POLICYENGINE_VERSION}",
+        f"policyengine-core=={POLICYENGINE_CORE_VERSION}",
         "tables>=3.10.2",
         "logfire",
     )

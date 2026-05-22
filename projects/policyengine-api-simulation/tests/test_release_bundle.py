@@ -43,6 +43,36 @@ def test_resolve_bundle_dataset_uri_maps_known_aliases_to_manifest_uris():
     )
 
 
+def test_resolve_bundle_dataset_uri_preserves_explicit_dataset_uri_and_revision():
+    uri = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
+
+    assert resolve_bundle_dataset_name("us", uri) == uri
+    assert resolve_bundle_dataset_uri("us", uri) == uri
+
+
+def test_resolve_bundle_dataset_uri_preserves_explicit_logical_revision():
+    dataset = "enhanced_cps_2024@1.110.12"
+
+    assert resolve_bundle_dataset_name("us", dataset) == dataset
+    assert resolve_bundle_dataset_uri("us", dataset) == dataset
+
+
+def test_resolve_bundle_dataset_uri_preserves_explicit_gcs_uri():
+    uri = "gs://policyengine-us-data/enhanced_cps_2024.h5"
+
+    assert resolve_bundle_dataset_name("us", uri) == uri
+    assert resolve_bundle_dataset_uri("us", uri) == uri
+
+
+def test_resolve_bundle_dataset_uri_supports_legacy_us_aliases():
+    assert resolve_bundle_dataset_uri("us", "cps") == (
+        "hf://policyengine/policyengine-us-data/cps_2023.h5@1.110.12"
+    )
+    assert resolve_bundle_dataset_uri("us", "pooled_cps") == (
+        "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.110.12"
+    )
+
+
 def test_resolve_bundle_dataset_uri_preserves_unmanaged_unknown_values():
     assert resolve_bundle_dataset_uri("us", "custom_dataset_label") == (
         "custom_dataset_label"

@@ -20,18 +20,18 @@ DATASET_ALIASES: dict[str, dict[str, str]] = {
     "us": {
         "enhanced_cps": "enhanced_cps_2024",
         "enhanced_cps_2024": "enhanced_cps_2024",
-        "gs://policyengine-us-data/enhanced_cps_2024.h5": "enhanced_cps_2024",
-        "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5": "enhanced_cps_2024",
         "cps_small": "cps_small_2024",
         "cps_small_2024": "cps_small_2024",
+        "cps": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.110.12",
+        "cps_2023": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.110.12",
+        "pooled_cps": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.110.12",
+        "pooled_3_year_cps_2023": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.110.12",
     },
     "uk": {
         "enhanced_frs": "enhanced_frs_2023_24",
         "enhanced_frs_2023_24": "enhanced_frs_2023_24",
-        "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5": "enhanced_frs_2023_24",
         "frs": "frs_2023_24",
         "frs_2023_24": "frs_2023_24",
-        "hf://policyengine/policyengine-uk-data-private/frs_2023_24.h5": "frs_2023_24",
     },
 }
 
@@ -98,6 +98,9 @@ def resolve_bundle_dataset_name(country: str, requested_data: str | None) -> str
     bundle = get_country_release_bundle(country)
     if requested_data is None:
         return bundle.default_dataset
+
+    if "://" in requested_data or "@" in requested_data:
+        return requested_data
 
     requested_without_revision = requested_data.split("@", maxsplit=1)[0]
     aliased = DATASET_ALIASES.get(bundle.country, {}).get(
