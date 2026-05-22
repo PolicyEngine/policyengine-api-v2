@@ -9,12 +9,16 @@ from typing import Any
 from src.modal.simulation_macro_output import (
     AgePovertyOutput,
     BaselineReformValue,
+    BudgetaryImpact,
     BudgetaryOutput,
     DecileOutput,
+    DetailedBudgetOutput,
     DetailedBudgetProgramOutput,
+    GeographicImpactOutput,
     GenderPovertyOutput,
     InequalityOutput,
     IntraDecileOutput,
+    LaborSupplyResponseOutput,
     PovertyByGenderOutput,
     PovertyByRaceOutput,
     PovertyOutput,
@@ -74,17 +78,27 @@ def _output_model_dump(value: Any) -> Any:
     return None
 
 
-def _records_or_none(value: Any) -> list[dict[str, Any]] | None:
+def build_geographic_impact_output(value: Any) -> GeographicImpactOutput | None:
+    if isinstance(value, GeographicImpactOutput):
+        return value
     records = _output_model_dump(value)
     if isinstance(records, list):
-        return [dict(item) for item in records if isinstance(item, Mapping)]
+        return GeographicImpactOutput(
+            [dict(item) for item in records if isinstance(item, Mapping)]
+        )
     if isinstance(value, list):
-        return [dict(item) for item in value if isinstance(item, Mapping)]
+        return GeographicImpactOutput(
+            [dict(item) for item in value if isinstance(item, Mapping)]
+        )
     return None
 
 
-def build_budgetary_output(budget: Mapping[str, Any]) -> BudgetaryOutput:
-    return BudgetaryOutput(
+def build_budgetary_output(
+    budget: Mapping[str, Any] | BudgetaryImpact,
+) -> BudgetaryOutput:
+    if isinstance(budget, BudgetaryImpact):
+        return budget
+    return BudgetaryImpact(
         tax_revenue_impact=_number(budget.get("tax_revenue_impact")),
         state_tax_revenue_impact=_number(budget.get("state_tax_revenue_impact")),
         benefit_spending_impact=_number(budget.get("benefit_spending_impact")),
@@ -96,7 +110,9 @@ def build_budgetary_output(budget: Mapping[str, Any]) -> BudgetaryOutput:
 
 def build_detailed_budget_output(
     collection: Any,
-) -> dict[str, DetailedBudgetProgramOutput]:
+) -> DetailedBudgetOutput:
+    if isinstance(collection, DetailedBudgetOutput):
+        return collection
     detailed_budget: dict[str, DetailedBudgetProgramOutput] = {}
     for row in _collection_records(collection):
         program_name = row.get("program_name")
@@ -109,10 +125,12 @@ def build_detailed_budget_output(
             reform=reform,
             difference=_number(row.get("change"), reform - baseline),
         )
-    return detailed_budget
+    return DetailedBudgetOutput(detailed_budget)
 
 
 def build_decile_output(collection: Any) -> DecileOutput:
+    if isinstance(collection, DecileOutput):
+        return collection
     average: dict[str, float] = {}
     relative: dict[str, float] = {}
     for row in sorted(
@@ -129,6 +147,8 @@ def build_decile_output(collection: Any) -> DecileOutput:
 
 
 def build_intra_decile_output(collection: Any) -> IntraDecileOutput:
+    if isinstance(collection, IntraDecileOutput):
+        return collection
     deciles: dict[str, list[float]] = {label: [] for label in INTRA_DECILE_COLUMNS}
     all_values: dict[str, float] = {label: 0.0 for label in INTRA_DECILE_COLUMNS}
     rows = [
@@ -230,6 +250,8 @@ def build_poverty_output(
     baseline_by_age: Any,
     reform_by_age: Any,
 ) -> PovertyOutput:
+    if isinstance(baseline, PovertyOutput):
+        return baseline
     result = {"poverty": _empty_age_poverty(), "deep_poverty": _empty_age_poverty()}
     _fill_poverty_block(
         country=country,
@@ -257,6 +279,8 @@ def build_poverty_by_gender_output(
     baseline_by_gender: Any,
     reform_by_gender: Any,
 ) -> PovertyByGenderOutput:
+    if isinstance(baseline_by_gender, PovertyByGenderOutput):
+        return baseline_by_gender
     result = {
         "poverty": _empty_gender_poverty(),
         "deep_poverty": _empty_gender_poverty(),
@@ -279,6 +303,8 @@ def build_poverty_by_race_output(
     baseline_by_race: Any,
     reform_by_race: Any,
 ) -> PovertyByRaceOutput:
+    if isinstance(baseline_by_race, PovertyByRaceOutput):
+        return baseline_by_race
     result = {
         "poverty": {
             "white": _empty_baseline_reform_value(),
@@ -298,6 +324,8 @@ def build_poverty_by_race_output(
 
 
 def build_inequality_output(baseline: Any, reform: Any) -> InequalityOutput:
+    if isinstance(baseline, InequalityOutput):
+        return baseline
     return InequalityOutput(
         gini=BaselineReformValue(
             baseline=_number(getattr(baseline, "gini", None)),
@@ -314,9 +342,13 @@ def build_inequality_output(baseline: Any, reform: Any) -> InequalityOutput:
     )
 
 
-def build_labor_supply_response_output(analysis: Any) -> dict[str, Any] | None:
+def build_labor_supply_response_output(
+    analysis: Any,
+) -> LaborSupplyResponseOutput | None:
+    if isinstance(analysis, LaborSupplyResponseOutput):
+        return analysis
     output = _output_model_dump(getattr(analysis, "labor_supply_response", None))
-    return output if isinstance(output, dict) else None
+    return LaborSupplyResponseOutput(output) if isinstance(output, dict) else None
 
 
 def build_single_year_macro_output(
@@ -324,7 +356,7 @@ def build_single_year_macro_output(
     country: str,
     model_version: str,
     data_version: str,
-    budget: Mapping[str, Any],
+    budget: Mapping[str, Any] | BudgetaryImpact,
     analysis: Any,
     baseline_poverty_by_age: Any = None,
     reform_poverty_by_age: Any = None,
@@ -380,9 +412,11 @@ def build_single_year_macro_output(
             build_intra_decile_output(intra_wealth_decile) if country == "uk" else None
         ),
         labor_supply_response=build_labor_supply_response_output(analysis),
-        constituency_impact=_records_or_none(constituency_impact),
-        local_authority_impact=_records_or_none(local_authority_impact),
-        congressional_district_impact=_records_or_none(congressional_district_impact),
+        constituency_impact=build_geographic_impact_output(constituency_impact),
+        local_authority_impact=build_geographic_impact_output(local_authority_impact),
+        congressional_district_impact=build_geographic_impact_output(
+            congressional_district_impact
+        ),
         cliff_impact=None,
     )
 
@@ -392,7 +426,7 @@ def adapt_analysis_to_legacy_macro_output(
     country: str,
     model_version: str,
     data_version: str,
-    budget: dict[str, float],
+    budget: Mapping[str, Any] | BudgetaryImpact,
     analysis: Any,
     baseline_poverty_by_age: Any = None,
     reform_poverty_by_age: Any = None,

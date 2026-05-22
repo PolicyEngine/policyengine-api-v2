@@ -18,7 +18,24 @@ from src.modal.release_bundle import (
     get_country_release_bundle,
     resolve_bundle_dataset_name,
 )
-from src.modal.simulation_output_adapter import adapt_analysis_to_legacy_macro_output
+from src.modal.simulation_macro_output import (
+    BudgetaryImpact,
+    GeographicImpactOutput,
+    IntraDecileOutput,
+    PovertyModuleOutputs,
+    SingleYearMacroOutput,
+)
+from src.modal.simulation_output_adapter import (
+    build_decile_output,
+    build_detailed_budget_output,
+    build_geographic_impact_output,
+    build_inequality_output,
+    build_intra_decile_output,
+    build_labor_supply_response_output,
+    build_poverty_by_gender_output,
+    build_poverty_by_race_output,
+    build_poverty_output,
+)
 from src.modal.telemetry import split_internal_payload
 
 logger = logging.getLogger(__name__)
@@ -321,7 +338,7 @@ def _try_change_output_variable(baseline, reform, variable: str, entity: str) ->
         return 0.0
 
 
-def _budget_result(country: str, baseline, reform) -> dict[str, float]:
+def _budget_result(country: str, baseline, reform) -> BudgetaryImpact:
     tax_revenue_impact = _try_change_output_variable(
         baseline, reform, "household_tax", entity="household"
     )
@@ -339,18 +356,18 @@ def _budget_result(country: str, baseline, reform) -> dict[str, float]:
         else 0.0
     )
 
-    return {
-        "tax_revenue_impact": tax_revenue_impact,
-        "state_tax_revenue_impact": state_tax_revenue_impact,
-        "benefit_spending_impact": benefit_spending_impact,
-        "budgetary_impact": tax_revenue_impact - benefit_spending_impact,
-        "households": _try_sum_output_variable(
+    return BudgetaryImpact(
+        tax_revenue_impact=tax_revenue_impact,
+        state_tax_revenue_impact=state_tax_revenue_impact,
+        benefit_spending_impact=benefit_spending_impact,
+        budgetary_impact=tax_revenue_impact - benefit_spending_impact,
+        households=_try_sum_output_variable(
             baseline, "household_weight", entity="household"
         ),
-        "baseline_net_income": _try_sum_output_variable(
+        baseline_net_income=_try_sum_output_variable(
             baseline, "household_net_income", entity="household"
         ),
-    }
+    )
 
 
 def _output_module_function(module_name: str, name: str):
@@ -370,50 +387,69 @@ def _try_compute_output(label: str, fn, *args, **kwargs):
         return None
 
 
-def _additional_poverty_outputs(country: str, baseline, reform) -> dict[str, Any]:
+def _poverty_outputs(country: str, baseline, reform, analysis) -> PovertyModuleOutputs:
     prefix = "us" if country == "us" else "uk"
-    output = {
-        "baseline_poverty_by_age": _try_compute_output(
-            "baseline poverty by age",
-            _poverty_module_function(f"calculate_{prefix}_poverty_by_age"),
-            baseline,
-        ),
-        "reform_poverty_by_age": _try_compute_output(
-            "reform poverty by age",
-            _poverty_module_function(f"calculate_{prefix}_poverty_by_age"),
-            reform,
-        ),
-        "baseline_poverty_by_gender": _try_compute_output(
-            "baseline poverty by gender",
-            _poverty_module_function(f"calculate_{prefix}_poverty_by_gender"),
-            baseline,
-        ),
-        "reform_poverty_by_gender": _try_compute_output(
-            "reform poverty by gender",
-            _poverty_module_function(f"calculate_{prefix}_poverty_by_gender"),
-            reform,
-        ),
-        "baseline_poverty_by_race": None,
-        "reform_poverty_by_race": None,
-    }
+    baseline_poverty_by_age = _try_compute_output(
+        "baseline poverty by age",
+        _poverty_module_function(f"calculate_{prefix}_poverty_by_age"),
+        baseline,
+    )
+    reform_poverty_by_age = _try_compute_output(
+        "reform poverty by age",
+        _poverty_module_function(f"calculate_{prefix}_poverty_by_age"),
+        reform,
+    )
+    baseline_poverty_by_gender = _try_compute_output(
+        "baseline poverty by gender",
+        _poverty_module_function(f"calculate_{prefix}_poverty_by_gender"),
+        baseline,
+    )
+    reform_poverty_by_gender = _try_compute_output(
+        "reform poverty by gender",
+        _poverty_module_function(f"calculate_{prefix}_poverty_by_gender"),
+        reform,
+    )
+    baseline_poverty_by_race = None
+    reform_poverty_by_race = None
     if country == "us":
-        output["baseline_poverty_by_race"] = _try_compute_output(
+        baseline_poverty_by_race = _try_compute_output(
             "baseline poverty by race",
             _poverty_module_function("calculate_us_poverty_by_race"),
             baseline,
         )
-        output["reform_poverty_by_race"] = _try_compute_output(
+        reform_poverty_by_race = _try_compute_output(
             "reform poverty by race",
             _poverty_module_function("calculate_us_poverty_by_race"),
             reform,
         )
-    return output
+    return PovertyModuleOutputs(
+        poverty=build_poverty_output(
+            country,
+            baseline=getattr(analysis, "baseline_poverty", None),
+            reform=getattr(analysis, "reform_poverty", None),
+            baseline_by_age=baseline_poverty_by_age,
+            reform_by_age=reform_poverty_by_age,
+        ),
+        poverty_by_gender=build_poverty_by_gender_output(
+            country,
+            baseline_by_gender=baseline_poverty_by_gender,
+            reform_by_gender=reform_poverty_by_gender,
+        ),
+        poverty_by_race=(
+            build_poverty_by_race_output(
+                baseline_by_race=baseline_poverty_by_race,
+                reform_by_race=reform_poverty_by_race,
+            )
+            if country == "us"
+            else None
+        ),
+    )
 
 
-def _intra_decile_output(baseline, reform):
+def _intra_decile_output(baseline, reform) -> IntraDecileOutput:
     from policyengine.outputs.intra_decile_impact import compute_intra_decile_impacts
 
-    return _try_compute_output(
+    collection = _try_compute_output(
         "intra-decile impacts",
         compute_intra_decile_impacts,
         baseline,
@@ -421,9 +457,12 @@ def _intra_decile_output(baseline, reform):
         income_variable="household_net_income",
         entity="household",
     )
+    return build_intra_decile_output(collection)
 
 
-def _congressional_district_impact(country: str, baseline, reform):
+def _congressional_district_impact(
+    country: str, baseline, reform
+) -> GeographicImpactOutput | None:
     if country != "us":
         return None
 
@@ -437,10 +476,14 @@ def _congressional_district_impact(country: str, baseline, reform):
         baseline,
         reform,
     )
-    return getattr(impact, "district_results", None) if impact is not None else None
+    return build_geographic_impact_output(
+        getattr(impact, "district_results", None) if impact is not None else None
+    )
 
 
-def _uk_constituency_impact(country: str, baseline, reform):
+def _uk_constituency_impact(
+    country: str, baseline, reform
+) -> GeographicImpactOutput | None:
     if country != "uk":
         return None
 
@@ -454,10 +497,12 @@ def _uk_constituency_impact(country: str, baseline, reform):
     )
     if impact is None:
         return None
-    return getattr(impact, "constituency_results", None)
+    return build_geographic_impact_output(getattr(impact, "constituency_results", None))
 
 
-def _uk_local_authority_impact(country: str, baseline, reform):
+def _uk_local_authority_impact(
+    country: str, baseline, reform
+) -> GeographicImpactOutput | None:
     if country != "uk":
         return None
 
@@ -471,7 +516,9 @@ def _uk_local_authority_impact(country: str, baseline, reform):
     )
     if impact is None:
         return None
-    return getattr(impact, "local_authority_results", None)
+    return build_geographic_impact_output(
+        getattr(impact, "local_authority_results", None)
+    )
 
 
 def _model_version(country_module) -> str:
@@ -527,7 +574,7 @@ def _run_simulation_impl_core(params: dict) -> dict:
     logger.info("Calculating economic impact")
     analysis = country_module.economic_impact_analysis(baseline, reform)
     budget = _budget_result(country, baseline, reform)
-    poverty_outputs = _additional_poverty_outputs(country, baseline, reform)
+    poverty_outputs = _poverty_outputs(country, baseline, reform, analysis)
     intra_decile = _intra_decile_output(baseline, reform)
     congressional_district_impact = _congressional_district_impact(
         country, baseline, reform
@@ -536,15 +583,32 @@ def _run_simulation_impl_core(params: dict) -> dict:
     local_authority_impact = _uk_local_authority_impact(country, baseline, reform)
     logger.info("Comparison complete")
 
-    return adapt_analysis_to_legacy_macro_output(
-        country=country,
+    wealth_decile = getattr(analysis, "wealth_decile_impacts", None)
+    intra_wealth_decile = getattr(analysis, "intra_wealth_decile_impacts", None)
+    output = SingleYearMacroOutput(
         model_version=_model_version(country_module),
         data_version=_data_version(simulation_params, dataset),
         budget=budget,
-        analysis=analysis,
+        detailed_budget=build_detailed_budget_output(
+            getattr(analysis, "program_statistics", None)
+        ),
+        decile=build_decile_output(getattr(analysis, "decile_impacts", None)),
+        inequality=build_inequality_output(
+            getattr(analysis, "baseline_inequality", None),
+            getattr(analysis, "reform_inequality", None),
+        ),
+        poverty=poverty_outputs.poverty,
+        poverty_by_gender=poverty_outputs.poverty_by_gender,
+        poverty_by_race=poverty_outputs.poverty_by_race,
         intra_decile=intra_decile,
+        wealth_decile=build_decile_output(wealth_decile) if country == "uk" else None,
+        intra_wealth_decile=(
+            build_intra_decile_output(intra_wealth_decile) if country == "uk" else None
+        ),
+        labor_supply_response=build_labor_supply_response_output(analysis),
         congressional_district_impact=congressional_district_impact,
         constituency_impact=constituency_impact,
         local_authority_impact=local_authority_impact,
-        **poverty_outputs,
+        cliff_impact=None,
     )
+    return output.model_dump(mode="json")

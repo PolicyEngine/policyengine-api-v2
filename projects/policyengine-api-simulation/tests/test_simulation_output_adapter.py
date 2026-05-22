@@ -25,8 +25,11 @@ from src.modal.simulation import (
     _uk_local_authority_impact,
 )
 from src.modal.simulation_macro_output import (
+    BudgetaryImpact,
     BudgetaryOutput,
     DecileOutput,
+    DetailedBudgetOutput,
+    GeographicImpactOutput,
     IntraDecileOutput,
     PovertyOutput,
     SingleYearMacroOutput,
@@ -60,11 +63,14 @@ def test_builder_returns_schema_modules_before_legacy_dict_dump():
 
     assert isinstance(output, SingleYearMacroOutput)
     assert isinstance(output.budget, BudgetaryOutput)
+    assert isinstance(output.budget, BudgetaryImpact)
+    assert isinstance(output.detailed_budget, DetailedBudgetOutput)
     assert isinstance(output.decile, DecileOutput)
     assert isinstance(output.intra_decile, IntraDecileOutput)
     assert isinstance(output.poverty, PovertyOutput)
+    assert isinstance(output.congressional_district_impact, GeographicImpactOutput)
     assert output.wealth_decile is None
-    assert output.congressional_district_impact == [{"district_geoid": 101}]
+    assert output.congressional_district_impact.root == [{"district_geoid": 101}]
 
     legacy_output = adapt_analysis_to_legacy_macro_output(
         country="us",
@@ -189,7 +195,8 @@ def test_budget_result_uses_materialized_household_columns_and_uk_state_tax_zero
     us_budget = _budget_result("us", baseline, reform)
     uk_budget = _budget_result("uk", baseline, reform)
 
-    assert us_budget == {
+    assert isinstance(us_budget, BudgetaryImpact)
+    assert us_budget.model_dump(mode="json") == {
         "tax_revenue_impact": 15.0,
         "state_tax_revenue_impact": 5.0,
         "benefit_spending_impact": -3.0,
@@ -197,7 +204,7 @@ def test_budget_result_uses_materialized_household_columns_and_uk_state_tax_zero
         "households": 3.0,
         "baseline_net_income": 300.0,
     }
-    assert uk_budget["state_tax_revenue_impact"] == 0.0
+    assert uk_budget.state_tax_revenue_impact == 0.0
 
 
 def test_uk_constituency_impact_uses_policyengine_output_function(monkeypatch):
@@ -220,7 +227,7 @@ def test_uk_constituency_impact_uses_policyengine_output_function(monkeypatch):
         "src.modal.simulation._output_module_function", fake_output_module_function
     )
 
-    assert _uk_constituency_impact("uk", baseline, reform) == expected
+    assert _uk_constituency_impact("uk", baseline, reform).root == expected
     assert _uk_constituency_impact("us", baseline, reform) is None
 
 
@@ -244,5 +251,5 @@ def test_uk_local_authority_impact_uses_policyengine_output_function(monkeypatch
         "src.modal.simulation._output_module_function", fake_output_module_function
     )
 
-    assert _uk_local_authority_impact("uk", baseline, reform) == expected
+    assert _uk_local_authority_impact("uk", baseline, reform).root == expected
     assert _uk_local_authority_impact("us", baseline, reform) is None

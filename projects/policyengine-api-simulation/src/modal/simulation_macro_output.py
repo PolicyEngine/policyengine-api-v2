@@ -7,9 +7,11 @@ still treats job results as unstructured dictionaries for older callers.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, RootModel
+
+T = TypeVar("T")
 
 
 class MacroOutputModel(BaseModel):
@@ -18,7 +20,11 @@ class MacroOutputModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class BudgetaryOutput(MacroOutputModel):
+class MacroRootModel(RootModel[T], Generic[T]):
+    """Base model for internal root schemas that dump to dict/list values."""
+
+
+class BudgetaryImpact(MacroOutputModel):
     tax_revenue_impact: float
     state_tax_revenue_impact: float
     benefit_spending_impact: float
@@ -27,10 +33,17 @@ class BudgetaryOutput(MacroOutputModel):
     baseline_net_income: float
 
 
+BudgetaryOutput = BudgetaryImpact
+
+
 class DetailedBudgetProgramOutput(MacroOutputModel):
     baseline: float
     reform: float
     difference: float
+
+
+class DetailedBudgetOutput(MacroRootModel[dict[str, DetailedBudgetProgramOutput]]):
+    pass
 
 
 class DecileOutput(MacroOutputModel):
@@ -81,17 +94,31 @@ class PovertyByRaceOutput(MacroOutputModel):
     poverty: RacePovertyOutput
 
 
+class PovertyModuleOutputs(MacroOutputModel):
+    poverty: PovertyOutput
+    poverty_by_gender: PovertyByGenderOutput
+    poverty_by_race: PovertyByRaceOutput | None
+
+
 class InequalityOutput(MacroOutputModel):
     gini: BaselineReformValue
     top_10_pct_share: BaselineReformValue
     top_1_pct_share: BaselineReformValue
 
 
+class LaborSupplyResponseOutput(MacroRootModel[dict[str, Any]]):
+    pass
+
+
+class GeographicImpactOutput(MacroRootModel[list[dict[str, Any]]]):
+    pass
+
+
 class SingleYearMacroOutput(MacroOutputModel):
     model_version: str
     data_version: str
-    budget: BudgetaryOutput
-    detailed_budget: dict[str, DetailedBudgetProgramOutput]
+    budget: BudgetaryImpact
+    detailed_budget: DetailedBudgetOutput
     decile: DecileOutput
     inequality: InequalityOutput
     poverty: PovertyOutput
@@ -100,8 +127,8 @@ class SingleYearMacroOutput(MacroOutputModel):
     intra_decile: IntraDecileOutput
     wealth_decile: DecileOutput | None
     intra_wealth_decile: IntraDecileOutput | None
-    labor_supply_response: dict[str, Any] | None
-    constituency_impact: list[dict[str, Any]] | None
-    local_authority_impact: list[dict[str, Any]] | None
-    congressional_district_impact: list[dict[str, Any]] | None
+    labor_supply_response: LaborSupplyResponseOutput | None
+    constituency_impact: GeographicImpactOutput | None
+    local_authority_impact: GeographicImpactOutput | None
+    congressional_district_impact: GeographicImpactOutput | None
     cliff_impact: None = None
