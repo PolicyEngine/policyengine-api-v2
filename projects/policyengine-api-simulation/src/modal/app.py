@@ -14,7 +14,7 @@ from src.modal._image_setup import snapshot_models
 from src.modal.logging_redaction import redact_params_for_logging
 
 # Get versions from environment or use defaults
-US_VERSION = os.environ.get("POLICYENGINE_US_VERSION", "1.702.0")
+US_VERSION = os.environ.get("POLICYENGINE_US_VERSION", "1.705.16")
 UK_VERSION = os.environ.get("POLICYENGINE_UK_VERSION", "2.88.20")
 
 
