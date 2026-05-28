@@ -15,12 +15,21 @@ on:
       simulation_api_url:
         description: 'The deployed simulation API URL'
         value: ${{ jobs.deploy.outputs.simulation_api_url }}
+      policyengine_version:
+        description: 'The deployed policyengine.py package version'
+        value: ${{ jobs.deploy.outputs.policyengine_version }}
       us_version:
         description: 'The deployed policyengine-us package version'
         value: ${{ jobs.deploy.outputs.us_version }}
+      us_data_version:
+        description: 'The bundled policyengine-us-data version'
+        value: ${{ jobs.deploy.outputs.us_data_version }}
       uk_version:
         description: 'The deployed policyengine-uk package version'
         value: ${{ jobs.deploy.outputs.uk_version }}
+      uk_data_version:
+        description: 'The bundled policyengine-uk-data version'
+        value: ${{ jobs.deploy.outputs.uk_data_version }}
 
 jobs:
   deploy:
@@ -29,8 +38,11 @@ jobs:
     environment: ${{ inputs.environment }}
     outputs:
       simulation_api_url: ${{ steps.get-url.outputs.simulation_api_url }}
+      policyengine_version: ${{ steps.versions.outputs.policyengine_version }}
       us_version: ${{ steps.versions.outputs.us_version }}
+      us_data_version: ${{ steps.versions.outputs.us_data_version }}
       uk_version: ${{ steps.versions.outputs.uk_version }}
+      uk_data_version: ${{ steps.versions.outputs.uk_data_version }}
 
     steps:
     - name: Checkout repo
@@ -74,9 +86,10 @@ jobs:
       env:
         MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
         MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        POLICYENGINE_VERSION: ${{ steps.versions.outputs.policyengine_version }}
         POLICYENGINE_US_VERSION: ${{ steps.versions.outputs.us_version }}
         POLICYENGINE_UK_VERSION: ${{ steps.versions.outputs.uk_version }}
-      run: ../../.github/scripts/modal-deploy-app.sh "${{ inputs.modal_environment }}" src/modal/app.py
+      run: ../../.github/scripts/modal-deploy-app.sh "${{ inputs.modal_environment }}"
 
     - name: Get deployed URL
       id: get-url

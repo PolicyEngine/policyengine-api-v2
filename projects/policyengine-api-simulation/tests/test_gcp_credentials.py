@@ -1,4 +1,4 @@
-"""Tests for GCP credentials setup in ``src.modal.simulation``."""
+"""Tests for GCP credentials setup in ``policyengine_api_simulation.simulation_runtime``."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import os
 
 import pytest
 
-from src.modal.simulation import (
+from policyengine_api_simulation.simulation_runtime import (
     _normalize_credentials_blob,
     setup_gcp_credentials,
 )

@@ -1,5 +1,4 @@
 from contextlib import asynccontextmanager
-from typing import Any
 from fastapi import FastAPI
 from .settings import get_settings, Environment
 from policyengine_fastapi.opentelemetry import (
