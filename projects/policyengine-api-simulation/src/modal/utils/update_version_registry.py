@@ -24,11 +24,31 @@ Usage:
 import argparse
 import modal
 from packaging.version import InvalidVersion, Version
+from typing import TypedDict
 
 POLICYENGINE_VERSION_DICT_NAME = "simulation-api-policyengine-versions"
 US_VERSION_DICT_NAME = "simulation-api-us-versions"
 UK_VERSION_DICT_NAME = "simulation-api-uk-versions"
 APP_RELEASE_BUNDLES_DICT_NAME = "simulation-api-app-release-bundles"
+
+
+class CountryBundleMetadata(TypedDict):
+    country: str
+    model_package_name: str
+    model_version: str
+    data_package_name: str
+    data_version: str
+    default_dataset: str
+    default_dataset_uri: str
+    dataset_uris: dict[str, str]
+    dataset_aliases: dict[str, str]
+
+
+class AppReleaseBundleMetadata(TypedDict):
+    app_name: str
+    policyengine_version: str
+    us: CountryBundleMetadata
+    uk: CountryBundleMetadata
 
 
 def _is_newer_version(candidate: str, current: str | None) -> bool:
@@ -116,7 +136,7 @@ def update_version_dict(
         )
 
 
-def _country_bundle_metadata(country: str) -> dict:
+def _country_bundle_metadata(country: str) -> CountryBundleMetadata:
     from policyengine_api_simulation.release_bundle import (
         DATASET_ALIASES,
         get_country_release_bundle,
@@ -140,7 +160,7 @@ def build_app_release_bundle_metadata(
     *,
     app_name: str,
     policyengine_version: str,
-) -> dict:
+) -> AppReleaseBundleMetadata:
     return {
         "app_name": app_name,
         "policyengine_version": policyengine_version,

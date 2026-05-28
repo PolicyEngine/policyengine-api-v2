@@ -140,11 +140,23 @@ def test_put_app_release_bundle_metadata_records_app_and_py_version_aliases(
     patched_modal,
     monkeypatch,
 ):
-    def fake_country_bundle_metadata(country: str) -> dict:
+    def fake_country_bundle_metadata(
+        country: str,
+    ) -> registry.CountryBundleMetadata:
         return {
             "country": country,
+            "model_package_name": (
+                "policyengine-us" if country == "us" else "policyengine-uk"
+            ),
             "model_version": "1.0.0" if country == "us" else "2.0.0",
+            "data_package_name": (
+                "policyengine-us-data"
+                if country == "us"
+                else "policyengine-uk-data"
+            ),
             "data_version": "3.0.0" if country == "us" else "4.0.0",
+            "default_dataset": "default",
+            "default_dataset_uri": f"hf://datasets/policyengine/{country}/default",
             "dataset_uris": {"default": f"hf://datasets/policyengine/{country}"},
             "dataset_aliases": {"alias": "default"},
         }
