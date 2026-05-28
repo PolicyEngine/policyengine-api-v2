@@ -145,7 +145,7 @@ def _stub_policyengine_output_calls(monkeypatch, baseline, reform) -> None:
         return compute
 
     monkeypatch.setattr(
-        "policyengine_api_simulation.simulation_output_builder._poverty_module_function",
+        "policyengine_api_simulation.simulation_output_poverty._poverty_module_function",
         fake_poverty_module_function,
     )
     monkeypatch.setattr(
@@ -606,7 +606,7 @@ def test_builder_budgetary_impact_propagates_required_calculation_errors(monkeyp
         raise RuntimeError("household_tax missing")
 
     monkeypatch.setattr(
-        "policyengine_api_simulation.simulation_output_builder._change_output_variable",
+        "policyengine_api_simulation.simulation_output_budget._change_output_variable",
         fail_change_output_variable,
     )
 
@@ -631,7 +631,7 @@ def test_uk_constituency_impact_uses_policyengine_output_function(monkeypatch):
         return compute
 
     monkeypatch.setattr(
-        "policyengine_api_simulation.simulation_output_builder._output_module_function",
+        "policyengine_api_simulation.simulation_output_geographic._output_module_function",
         fake_output_module_function,
     )
 
@@ -666,7 +666,7 @@ def test_uk_local_authority_impact_uses_policyengine_output_function(monkeypatch
         return compute
 
     monkeypatch.setattr(
-        "policyengine_api_simulation.simulation_output_builder._output_module_function",
+        "policyengine_api_simulation.simulation_output_geographic._output_module_function",
         fake_output_module_function,
     )
 
