@@ -9,7 +9,7 @@ readme = "README.md"
 authors = [
     {name = "PolicyEngine", email = "hello@policyengine.org"},
 ]
-license = "AGPL-3.0-only"
+license = {file = "../../LICENSE"}
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "opentelemetry-instrumentation-sqlalchemy (>=0.51b0,<0.52)",
