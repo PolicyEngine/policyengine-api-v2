@@ -1,10 +1,24 @@
 """Tests for policyengine.py release bundle helpers."""
 
-from src.modal.release_bundle import (
+import pytest
+
+from policyengine_api_simulation.release_bundle import (
     get_country_release_bundle,
     resolve_bundle_dataset_name,
     resolve_bundle_dataset_uri,
 )
+
+
+@pytest.fixture(autouse=True)
+def stub_hf_revision_validation(monkeypatch):
+    monkeypatch.setattr(
+        "policyengine_api_simulation.release_bundle.with_hf_revision",
+        lambda dataset_uri, revision: (
+            f"{dataset_uri.rsplit('@', maxsplit=1)[0]}@{revision}"
+            if dataset_uri.startswith("hf://")
+            else dataset_uri
+        ),
+    )
 
 
 def test_country_release_bundle_exposes_model_and_data_versions():
@@ -50,11 +64,15 @@ def test_resolve_bundle_dataset_uri_preserves_explicit_dataset_uri_and_revision(
     assert resolve_bundle_dataset_uri("us", uri) == uri
 
 
-def test_resolve_bundle_dataset_uri_preserves_explicit_logical_revision():
+def test_resolve_bundle_dataset_uri_maps_explicit_logical_revision_to_hf_uri():
     dataset = "enhanced_cps_2024@1.110.12"
 
-    assert resolve_bundle_dataset_name("us", dataset) == dataset
-    assert resolve_bundle_dataset_uri("us", dataset) == dataset
+    assert resolve_bundle_dataset_name("us", dataset).startswith(
+        "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
+    )
+    assert resolve_bundle_dataset_uri("us", dataset).startswith(
+        "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
+    )
 
 
 def test_resolve_bundle_dataset_uri_preserves_explicit_gcs_uri():
@@ -77,3 +95,8 @@ def test_resolve_bundle_dataset_uri_preserves_unmanaged_unknown_values():
     assert resolve_bundle_dataset_uri("us", "custom_dataset_label") == (
         "custom_dataset_label"
     )
+
+
+def test_resolve_bundle_dataset_uri_rejects_unknown_logical_revision():
+    with pytest.raises(ValueError, match="Unknown dataset revision reference"):
+        resolve_bundle_dataset_uri("us", "custom_dataset_label@1.0.0")

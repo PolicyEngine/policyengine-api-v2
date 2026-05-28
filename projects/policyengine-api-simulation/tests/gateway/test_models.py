@@ -265,7 +265,7 @@ class TestJobSubmitResponse:
             "poll_url": "/jobs/fc-abc123",
             "country": "us",
             "version": "1.459.0",
-            "resolved_app_name": "policyengine-simulation-us1-459-0-uk2-65-9",
+            "resolved_app_name": "policyengine-simulation-py3-9-0",
             "policyengine_bundle": {
                 "model_version": "1.459.0",
                 "policyengine_version": None,
@@ -284,7 +284,7 @@ class TestJobSubmitResponse:
         assert response.country == "us"
         assert response.version == "1.459.0"
         assert (
-            response.resolved_app_name == "policyengine-simulation-us1-459-0-uk2-65-9"
+            response.resolved_app_name == "policyengine-simulation-py3-9-0"
         )
         assert response.policyengine_bundle.model_version == "1.459.0"
         assert response.policyengine_bundle.policyengine_version is None
@@ -348,7 +348,7 @@ class TestJobStatusResponse:
         response = JobStatusResponse(
             status="complete",
             result={"budget": {"total": 1000000}},
-            resolved_app_name="policyengine-simulation-us1-459-0-uk2-65-9",
+            resolved_app_name="policyengine-simulation-py3-9-0",
             policyengine_bundle={
                 "model_version": "1.459.0",
                 "policyengine_version": None,
@@ -358,7 +358,7 @@ class TestJobStatusResponse:
         )
 
         assert (
-            response.resolved_app_name == "policyengine-simulation-us1-459-0-uk2-65-9"
+            response.resolved_app_name == "policyengine-simulation-py3-9-0"
         )
         assert response.policyengine_bundle is not None
         assert response.policyengine_bundle.dataset == (
@@ -483,7 +483,7 @@ class TestBudgetWindowBatchSubmitResponse:
             poll_url="/budget-window-jobs/bw-123",
             country="us",
             version="1.500.0",
-            resolved_app_name="policyengine-simulation-us1-500-0-uk2-66-0",
+            resolved_app_name="policyengine-simulation-py4-10-0",
             policyengine_bundle={
                 "model_version": "1.500.0",
                 "dataset": "default",
@@ -497,7 +497,7 @@ class TestBudgetWindowBatchSubmitResponse:
             "poll_url": "/budget-window-jobs/bw-123",
             "country": "us",
             "version": "1.500.0",
-            "resolved_app_name": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "resolved_app_name": "policyengine-simulation-py4-10-0",
             "policyengine_bundle": {
                 "model_version": "1.500.0",
                 "policyengine_version": None,

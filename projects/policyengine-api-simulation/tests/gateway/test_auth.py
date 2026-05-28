@@ -219,7 +219,7 @@ def test__given_dependency_override__then_gated_endpoint_returns_200(
 
     mock_modal["dicts"]["simulation-api-us-versions"] = {
         "latest": "1.500.0",
-        "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+        "1.500.0": "policyengine-simulation-py4-10-0",
     }
 
     response = client.post(

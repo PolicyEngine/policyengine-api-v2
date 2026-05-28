@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict
 
-from src.modal.simulation_macro_output import SingleYearMacroOutput
+from policyengine_api_simulation.simulation_macro_output import SingleYearMacroOutput
 
 
 class SimulationOptions(BaseModel):

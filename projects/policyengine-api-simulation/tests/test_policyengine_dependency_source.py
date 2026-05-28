@@ -72,8 +72,16 @@ def test_modal_app_reads_policyengine_pins_from_pyproject():
     assert '"policyengine-core"' in modal_source
 
 
+def test_modal_app_name_is_keyed_to_policyengine_py_version():
+    modal_source = MODAL_APP_PATH.read_text(encoding="utf-8")
+
+    assert "def get_app_name(policyengine_version: str)" in modal_source
+    assert "policyengine-simulation-py" in modal_source
+    assert "policyengine-simulation-us" not in modal_source
+
+
 def test_country_package_pins_match_policyengine_bundle():
-    from src.modal.release_bundle import get_country_release_bundle
+    from policyengine_api_simulation.release_bundle import get_country_release_bundle
 
     pyproject = _load_toml(PYPROJECT_PATH)
 

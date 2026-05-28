@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 
-from src.modal.release_bundle import get_country_release_bundle
+from policyengine_api_simulation.release_bundle import get_country_release_bundle
 
 
 def _bundle_outputs() -> dict[str, str]:

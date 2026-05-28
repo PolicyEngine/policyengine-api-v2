@@ -21,9 +21,12 @@ from fixtures.test_simulation_output_builder import (
     REFORM_POVERTY_BY_RACE,
     fake_analysis,
 )
-from src.modal.simulation import _normalise_policy
-from src.modal.simulation import _run_simulation_impl_core
-from src.modal.simulation_macro_output import (
+from policyengine_api_simulation.simulation_runtime import RegionResolution
+from policyengine_api_simulation.simulation_runtime import _normalise_policy
+from policyengine_api_simulation.simulation_runtime import _resolve_dataset_reference
+from policyengine_api_simulation.simulation_runtime import _resolve_region
+from policyengine_api_simulation.simulation_runtime import _run_simulation_impl_core
+from policyengine_api_simulation.simulation_macro_output import (
     BudgetaryImpact,
     BudgetaryOutput,
     DecileOutput,
@@ -33,7 +36,9 @@ from src.modal.simulation_macro_output import (
     PovertyOutput,
     SingleYearMacroOutput,
 )
-from src.modal.simulation_output_builder import SimulationOutputBuilder
+from policyengine_api_simulation.simulation_output_builder import (
+    SimulationOutputBuilder,
+)
 
 
 class _FakeOutputDataset:
@@ -127,7 +132,7 @@ def _stub_policyengine_output_calls(monkeypatch, baseline, reform) -> None:
         return compute
 
     monkeypatch.setattr(
-        "src.modal.simulation_output_builder._poverty_module_function",
+        "policyengine_api_simulation.simulation_output_builder._poverty_module_function",
         fake_poverty_module_function,
     )
     monkeypatch.setattr(
@@ -251,8 +256,8 @@ def test_run_simulation_impl_core_builds_and_serializes_macro_output(monkeypatch
         assert country == "us"
         return country_module
 
-    def fake_build_simulation(params, *, dataset, policy):
-        build_calls.append((params, dataset, policy))
+    def fake_build_simulation(params, *, dataset, policy, scoping_strategy=None):
+        build_calls.append((params, dataset, policy, scoping_strategy))
         return baseline_simulation if len(build_calls) == 1 else reform_simulation
 
     class FakeSimulationOutputBuilder:
@@ -262,11 +267,24 @@ def test_run_simulation_impl_core_builds_and_serializes_macro_output(monkeypatch
         def serialize(self):
             return CURRENT_SINGLE_YEAR_MACRO_RESULT
 
-    monkeypatch.setattr("src.modal.simulation._country_module", fake_country_module)
-    monkeypatch.setattr("src.modal.simulation._load_dataset", lambda params: dataset)
-    monkeypatch.setattr("src.modal.simulation._build_simulation", fake_build_simulation)
     monkeypatch.setattr(
-        "src.modal.simulation.SimulationOutputBuilder",
+        "policyengine_api_simulation.simulation_runtime._country_module",
+        fake_country_module,
+    )
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime._resolve_region",
+        lambda **kwargs: RegionResolution(code="us", dataset_reference="dataset"),
+    )
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime._load_dataset",
+        lambda params, country_module, region_resolution: dataset,
+    )
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime._build_simulation",
+        fake_build_simulation,
+    )
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime.SimulationOutputBuilder",
         FakeSimulationOutputBuilder,
     )
 
@@ -281,6 +299,8 @@ def test_run_simulation_impl_core_builds_and_serializes_macro_output(monkeypatch
     assert result == CURRENT_SINGLE_YEAR_MACRO_RESULT
     assert build_calls[0][2] == {"gov.test.parameter": {"2026-01-01": 1}}
     assert build_calls[1][2] == {"gov.test.parameter": {"2026-01-01": 2}}
+    assert build_calls[0][3] is None
+    assert build_calls[1][3] is None
     assert builder_calls == [
         {
             "country": "us",
@@ -293,8 +313,158 @@ def test_run_simulation_impl_core_builds_and_serializes_macro_output(monkeypatch
             "dataset": dataset,
             "baseline": baseline_simulation,
             "reform": reform_simulation,
+            "resolved_data_version": None,
         }
     ]
+
+
+def test_resolve_region_uses_dedicated_region_dataset_with_requested_version(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime.with_hf_revision",
+        lambda dataset_uri, revision: (
+            f"{dataset_uri.rsplit('@', maxsplit=1)[0]}@{revision}"
+        ),
+    )
+    state = SimpleNamespace(
+        dataset_path="hf://policyengine/policyengine-us-data/states/CA.h5@1.110.12",
+        scoping_strategy=None,
+        parent_code="us",
+    )
+    country_module = SimpleNamespace(
+        model=SimpleNamespace(
+            get_region=lambda code: state if code == "state/ca" else None
+        )
+    )
+
+    resolution = _resolve_region(
+        country_module=country_module,
+        country="us",
+        params={"region": "state/ca", "data_version": "1.77.0"},
+    )
+
+    assert resolution.code == "state/ca"
+    assert resolution.dataset_reference == (
+        "hf://policyengine/policyengine-us-data/states/CA.h5@1.77.0"
+    )
+    assert resolution.scoping_strategy is None
+
+
+def test_resolve_dataset_reference_applies_data_version_to_logical_dataset(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime.resolve_bundle_dataset_uri",
+        lambda country, requested_data: (
+            "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
+        ),
+    )
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime.with_hf_revision",
+        lambda dataset_uri, revision: (
+            f"{dataset_uri.rsplit('@', maxsplit=1)[0]}@{revision}"
+        ),
+    )
+
+    assert (
+        _resolve_dataset_reference(
+            "us",
+            {"data": "enhanced_cps_2024", "data_version": "1.77.0"},
+        )
+        == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+    )
+
+
+def test_resolve_region_scopes_us_place_from_parent_state_dataset(monkeypatch):
+    scoping_strategy = object()
+    place = SimpleNamespace(
+        dataset_path=None,
+        scoping_strategy=scoping_strategy,
+        parent_code="state/ca",
+    )
+    state = SimpleNamespace(
+        dataset_path="hf://policyengine/policyengine-us-data/states/CA.h5@1.110.12",
+        scoping_strategy=None,
+        parent_code="us",
+    )
+    regions = {"place/CA-57000": place, "state/ca": state}
+    country_module = SimpleNamespace(
+        model=SimpleNamespace(get_region=lambda code: regions.get(code))
+    )
+
+    resolution = _resolve_region(
+        country_module=country_module,
+        country="us",
+        params={"region": "place/ca-57000"},
+    )
+
+    assert resolution.code == "place/CA-57000"
+    assert resolution.dataset_reference == (
+        "hf://policyengine/policyengine-us-data/states/CA.h5@1.110.12"
+    )
+    assert resolution.scoping_strategy is scoping_strategy
+
+
+def test_resolve_region_scopes_uk_country_from_national_dataset():
+    scoping_strategy = object()
+    england = SimpleNamespace(
+        dataset_path=None,
+        scoping_strategy=scoping_strategy,
+        parent_code="uk",
+    )
+    uk = SimpleNamespace(
+        dataset_path="hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3",
+        scoping_strategy=None,
+        parent_code=None,
+    )
+    regions = {"country/england": england, "uk": uk}
+    country_module = SimpleNamespace(
+        model=SimpleNamespace(get_region=lambda code: regions.get(code))
+    )
+
+    resolution = _resolve_region(
+        country_module=country_module,
+        country="uk",
+        params={"region": "England"},
+    )
+
+    assert resolution.code == "country/england"
+    assert resolution.dataset_reference == (
+        "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3"
+    )
+    assert resolution.scoping_strategy is scoping_strategy
+
+
+def test_builder_data_version_prefers_resolved_revision_then_dataset_metadata():
+    baseline, reform = _macro_baseline_reform()
+    country_module = SimpleNamespace(
+        model=SimpleNamespace(version="1.700.0"),
+        economic_impact_analysis=lambda baseline_simulation, reform_simulation: (
+            fake_analysis()
+        ),
+    )
+
+    resolved_builder = SimulationOutputBuilder(
+        country="us",
+        simulation_params={"country": "us"},
+        country_module=country_module,
+        dataset=SimpleNamespace(metadata={"version": "metadata-version"}),
+        baseline=baseline,
+        reform=reform,
+        resolved_data_version="1.77.0",
+    )
+    metadata_builder = SimulationOutputBuilder(
+        country="us",
+        simulation_params={"country": "us"},
+        country_module=country_module,
+        dataset=SimpleNamespace(metadata={"version": "metadata-version"}),
+        baseline=baseline,
+        reform=reform,
+    )
+
+    assert resolved_builder._data_version() == "1.77.0"
+    assert metadata_builder._data_version() == "metadata-version"
 
 
 def test_builder_budgetary_impact_uses_materialized_columns_and_uk_state_tax_zero():
@@ -347,7 +517,7 @@ def test_builder_budgetary_impact_propagates_required_calculation_errors(monkeyp
         raise RuntimeError("household_tax missing")
 
     monkeypatch.setattr(
-        "src.modal.simulation_output_builder._change_output_variable",
+        "policyengine_api_simulation.simulation_output_builder._change_output_variable",
         fail_change_output_variable,
     )
 
@@ -372,7 +542,7 @@ def test_uk_constituency_impact_uses_policyengine_output_function(monkeypatch):
         return compute
 
     monkeypatch.setattr(
-        "src.modal.simulation_output_builder._output_module_function",
+        "policyengine_api_simulation.simulation_output_builder._output_module_function",
         fake_output_module_function,
     )
 
@@ -407,7 +577,7 @@ def test_uk_local_authority_impact_uses_policyengine_output_function(monkeypatch
         return compute
 
     monkeypatch.setattr(
-        "src.modal.simulation_output_builder._output_module_function",
+        "policyengine_api_simulation.simulation_output_builder._output_module_function",
         fake_output_module_function,
     )
 

@@ -2,7 +2,7 @@ import logging
 
 from fastapi import APIRouter
 
-from src.modal.simulation import run_simulation_impl
+from policyengine_api_simulation.simulation_runtime import run_simulation_impl
 from policyengine_api_simulation.compat_models import (
     EconomyComparison,
     SimulationOptions,

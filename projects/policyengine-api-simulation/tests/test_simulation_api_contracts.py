@@ -7,7 +7,7 @@ from src.modal.gateway.models import (
     BudgetWindowTotals,
     JobStatusResponse,
 )
-from src.modal.simulation_macro_output import SingleYearMacroOutput
+from policyengine_api_simulation.simulation_macro_output import SingleYearMacroOutput
 
 from fixtures.test_simulation_api_contracts import (
     CURRENT_REQUIRED_BUDGET_KEYS,

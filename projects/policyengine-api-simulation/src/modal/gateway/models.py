@@ -7,7 +7,7 @@ from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from src.modal.telemetry import TelemetryEnvelope
+from policyengine_api_simulation.telemetry import TelemetryEnvelope
 
 
 # Hard cap on request body size (bytes). SimulationOptions + telemetry + any
