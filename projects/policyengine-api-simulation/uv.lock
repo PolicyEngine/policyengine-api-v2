@@ -1611,7 +1611,7 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "4.10.0"
+version = "4.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h5py" },
@@ -1623,9 +1623,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/10/27/59ca969ab71647d526f6a7553f93cb61a1853d3f4fcc88552f08292be8a2/policyengine-4.10.0.tar.gz", hash = "sha256:68f634d107bd3ac81427364b03203a7d80407599cae9d13ff44231001436daa6", size = 571499, upload-time = "2026-05-21T19:04:09.051Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/29/0a/9a9e2262ee6b152ece050e59efdfd1654a7d76716b3f02c9e9ddc5c7de29/policyengine-4.12.0.tar.gz", hash = "sha256:dbf5505fb1739883be7475300eabd6a85eefaf04faed882fcfd878729a796717", size = 635887, upload-time = "2026-05-28T12:37:43.195Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ee/d2/b4d11bd59e87da0376255779da7c0fc8afc1141cb33e8891a1fa5ce2c7e5/policyengine-4.10.0-py3-none-any.whl", hash = "sha256:db7454a3bf9cbc791ed8b8ccb7d9d5dcb8f4a08f93bb6c2fb3cf920d1dcce7c2", size = 189098, upload-time = "2026-05-21T19:04:07.296Z" },
+    { url = "https://files.pythonhosted.org/packages/1c/54/45550717d035b98efb491c969fc33fa6554c39ef9ae7a518f2dd18c485cd/policyengine-4.12.0-py3-none-any.whl", hash = "sha256:92a28865929b895df1dc900e2a92337bbe81767b1939c9d7bfee892c2dbdf526", size = 190733, upload-time = "2026-05-28T12:37:41.716Z" },
 ]
 
 [[package]]
@@ -1732,7 +1732,7 @@ requires-dist = [
     { name = "openapi-python-client", marker = "extra == 'build'", specifier = ">=0.21.6" },
     { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.51b0,<0.52" },
     { name = "opentelemetry-instrumentation-sqlalchemy", specifier = ">=0.51b0,<0.52" },
-    { name = "policyengine", specifier = "==4.10.0" },
+    { name = "policyengine", specifier = "==4.12.0" },
     { name = "policyengine-core", specifier = "==3.26.1" },
     { name = "policyengine-fastapi", editable = "../../libs/policyengine-fastapi" },
     { name = "policyengine-uk", specifier = "==2.88.20" },

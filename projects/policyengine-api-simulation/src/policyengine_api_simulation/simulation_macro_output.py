@@ -110,6 +110,16 @@ class LaborSupplyResponseOutput(MacroRootModel[dict[str, Any]]):
     pass
 
 
+class CliffImpactInSimulation(MacroOutputModel):
+    cliff_gap: float
+    cliff_share: float
+
+
+class CliffImpactOutput(MacroOutputModel):
+    baseline: CliffImpactInSimulation
+    reform: CliffImpactInSimulation
+
+
 class GeographicImpactOutput(MacroRootModel[list[dict[str, Any]]]):
     pass
 
@@ -131,4 +141,4 @@ class SingleYearMacroOutput(MacroOutputModel):
     constituency_impact: GeographicImpactOutput | None
     local_authority_impact: GeographicImpactOutput | None
     congressional_district_impact: GeographicImpactOutput | None
-    cliff_impact: None = None
+    cliff_impact: CliffImpactOutput | None = None

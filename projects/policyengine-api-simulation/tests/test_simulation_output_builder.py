@@ -19,6 +19,7 @@ from fixtures.test_simulation_output_builder import (
     REFORM_POVERTY_BY_AGE,
     REFORM_POVERTY_BY_GENDER,
     REFORM_POVERTY_BY_RACE,
+    FakeModelOutput,
     fake_analysis,
 )
 from policyengine_api_simulation.simulation_runtime import RegionResolution
@@ -85,20 +86,32 @@ def _simulation_output_builder(
     baseline,
     reform,
     analysis=None,
+    include_cliffs: bool | None = None,
 ) -> SimulationOutputBuilder:
     analysis = analysis or fake_analysis()
+
+    def economic_impact_analysis(
+        baseline_simulation,
+        reform_simulation,
+        *,
+        include_cliff_impacts=False,
+    ):
+        return analysis
+
+    simulation_params = {
+        "country": country,
+        "data_version": "1.115.5" if country == "us" else "1.55.10",
+    }
+    if include_cliffs is not None:
+        simulation_params["include_cliffs"] = include_cliffs
+
     country_module = SimpleNamespace(
         model=SimpleNamespace(version="1.700.0" if country == "us" else "2.88.20"),
-        economic_impact_analysis=lambda baseline_simulation, reform_simulation: (
-            analysis
-        ),
+        economic_impact_analysis=economic_impact_analysis,
     )
     return SimulationOutputBuilder(
         country=country,
-        simulation_params={
-            "country": country,
-            "data_version": "1.115.5" if country == "us" else "1.55.10",
-        },
+        simulation_params=simulation_params,
         country_module=country_module,
         dataset=SimpleNamespace(metadata={}),
         baseline=baseline,
@@ -218,11 +231,19 @@ def test_builder_calls_policyengine_economic_impact_analysis():
     baseline, reform = _macro_baseline_reform()
     analysis = fake_analysis()
     calls = []
+
+    def economic_impact_analysis(
+        baseline_simulation,
+        reform_simulation,
+        *,
+        include_cliff_impacts=False,
+    ):
+        calls.append((baseline_simulation, reform_simulation, include_cliff_impacts))
+        return analysis
+
     country_module = SimpleNamespace(
         model=SimpleNamespace(version="1.700.0"),
-        economic_impact_analysis=lambda baseline_simulation, reform_simulation: (
-            calls.append((baseline_simulation, reform_simulation)) or analysis
-        ),
+        economic_impact_analysis=economic_impact_analysis,
     )
     builder = SimulationOutputBuilder(
         country="us",
@@ -235,7 +256,68 @@ def test_builder_calls_policyengine_economic_impact_analysis():
 
     assert builder.analysis is analysis
     assert builder.analysis is analysis
-    assert calls == [(baseline, reform)]
+    assert calls == [(baseline, reform, False)]
+
+
+def test_builder_passes_include_cliffs_to_policyengine_economic_impact_analysis():
+    baseline, reform = _macro_baseline_reform()
+    analysis = fake_analysis()
+    calls = []
+
+    def economic_impact_analysis(
+        baseline_simulation,
+        reform_simulation,
+        *,
+        include_cliff_impacts=False,
+    ):
+        calls.append(include_cliff_impacts)
+        return analysis
+
+    country_module = SimpleNamespace(
+        model=SimpleNamespace(version="1.700.0"),
+        economic_impact_analysis=economic_impact_analysis,
+    )
+    builder = SimulationOutputBuilder(
+        country="us",
+        simulation_params={
+            "country": "us",
+            "data_version": "1.115.5",
+            "include_cliffs": True,
+        },
+        country_module=country_module,
+        dataset=SimpleNamespace(metadata={}),
+        baseline=baseline,
+        reform=reform,
+    )
+
+    assert builder.analysis is analysis
+    assert calls == [True]
+
+
+def test_builder_serializes_cliff_impact_when_requested(monkeypatch):
+    baseline, reform = _macro_baseline_reform()
+    _stub_policyengine_output_calls(monkeypatch, baseline, reform)
+    analysis = fake_analysis()
+    analysis.cliff_impact = FakeModelOutput(
+        {
+            "baseline": {"cliff_gap": 10.0, "cliff_share": 0.25},
+            "reform": {"cliff_gap": 20.0, "cliff_share": 0.5},
+        }
+    )
+
+    output = _simulation_output_builder(
+        "us",
+        baseline,
+        reform,
+        analysis=analysis,
+        include_cliffs=True,
+    ).build()
+
+    assert output.cliff_impact is not None
+    assert output.model_dump(mode="json")["cliff_impact"] == {
+        "baseline": {"cliff_gap": 10.0, "cliff_share": 0.25},
+        "reform": {"cliff_gap": 20.0, "cliff_share": 0.5},
+    }
 
 
 def test_normalise_policy_converts_legacy_period_range_keys():
@@ -438,11 +520,18 @@ def test_resolve_region_scopes_uk_country_from_national_dataset():
 
 def test_builder_data_version_prefers_resolved_revision_then_dataset_metadata():
     baseline, reform = _macro_baseline_reform()
+
+    def economic_impact_analysis(
+        baseline_simulation,
+        reform_simulation,
+        *,
+        include_cliff_impacts=False,
+    ):
+        return fake_analysis()
+
     country_module = SimpleNamespace(
         model=SimpleNamespace(version="1.700.0"),
-        economic_impact_analysis=lambda baseline_simulation, reform_simulation: (
-            fake_analysis()
-        ),
+        economic_impact_analysis=economic_impact_analysis,
     )
 
     resolved_builder = SimulationOutputBuilder(

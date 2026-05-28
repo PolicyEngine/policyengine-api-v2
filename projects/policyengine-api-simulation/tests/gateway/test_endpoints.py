@@ -229,6 +229,27 @@ class TestSubmitSimulationEndpoint:
         assert data["poll_url"] == "/jobs/mock-job-id-123"
         assert data["status"] == "submitted"
 
+    def test__given_submission_with_include_cliffs__then_forwards_worker_flag(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
+        }
+
+        response = client.post(
+            "/simulate/economy/comparison",
+            json={
+                "country": "us",
+                "scope": "macro",
+                "reform": {},
+                "include_cliffs": True,
+            },
+        )
+
+        assert response.status_code == 200
+        assert mock_modal["func"].last_payload["include_cliffs"] is True
+
     def test__given_submission_with_telemetry__then_preserves_run_id(
         self, mock_modal, client: TestClient
     ):
@@ -713,6 +734,31 @@ class TestBudgetWindowBatchEndpoints:
             "resolved_app_name": "policyengine-simulation-py4-10-0",
             "policyengine_bundle": expected_bundle("us", "1.500.0"),
         }
+
+    def test__given_budget_window_include_cliffs__then_returns_422(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
+        }
+
+        response = client.post(
+            "/simulate/economy/budget-window",
+            json={
+                "country": "us",
+                "region": "us",
+                "scope": "macro",
+                "reform": {},
+                "start_year": "2026",
+                "window_size": 3,
+                "include_cliffs": True,
+            },
+        )
+
+        assert response.status_code == 422
+        assert "cliff impacts are not supported" in response.text
+        assert mock_modal["func"].last_payload is None
 
     def test__given_budget_window_submission__then_initial_poll_returns_seed_state(
         self, mock_modal, client: TestClient

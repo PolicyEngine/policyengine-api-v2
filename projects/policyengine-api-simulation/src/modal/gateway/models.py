@@ -184,6 +184,11 @@ class BudgetWindowBatchRequest(GatewayRequestBase):
             raise ValueError(
                 f"budget-window end_year must be {self.MAX_END_YEAR} or earlier"
             )
+        if self.include_cliffs is True:
+            raise ValueError(
+                "budget-window cliff impacts are not supported; use the single-year "
+                "simulation endpoint with include_cliffs=true"
+            )
         return self
 
 

@@ -62,3 +62,25 @@ def test_standalone_simulation_route_returns_legacy_macro_contract(monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == CURRENT_SINGLE_YEAR_MACRO_RESULT
+
+
+def test_standalone_simulation_route_forwards_include_cliffs(monkeypatch):
+    def fake_run_simulation_impl(params):
+        assert params == {
+            "country": "us",
+            "reform": {},
+            "include_cliffs": True,
+        }
+        return CURRENT_SINGLE_YEAR_MACRO_RESULT
+
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation.run_simulation_impl",
+        fake_run_simulation_impl,
+    )
+
+    response = TestClient(app).post(
+        "/simulate/economy/comparison",
+        json={"country": "us", "reform": {}, "include_cliffs": True},
+    )
+
+    assert response.status_code == 200

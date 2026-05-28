@@ -14,6 +14,8 @@ from policyengine_api_simulation.simulation_macro_output import (
     AgePovertyOutput,
     BaselineReformValue,
     BudgetaryImpact,
+    CliffImpactInSimulation,
+    CliffImpactOutput,
     DecileOutput,
     DetailedBudgetOutput,
     DetailedBudgetProgramOutput,
@@ -252,9 +254,14 @@ class SimulationOutputBuilder:
     def analysis(self) -> Any:
         if self._analysis is None:
             self._analysis = self.country_module.economic_impact_analysis(
-                self.baseline, self.reform
+                self.baseline,
+                self.reform,
+                include_cliff_impacts=self._include_cliff_impacts(),
             )
         return self._analysis
+
+    def _include_cliff_impacts(self) -> bool:
+        return self.simulation_params.get("include_cliffs") is True
 
     def build(self) -> SingleYearMacroOutput:
         poverty_outputs = self._build_poverty_outputs()
@@ -280,7 +287,7 @@ class SimulationOutputBuilder:
             congressional_district_impact=(self._build_congressional_district_impact()),
             constituency_impact=self._build_uk_constituency_impact(),
             local_authority_impact=self._build_uk_local_authority_impact(),
-            cliff_impact=None,
+            cliff_impact=self._build_cliff_impact(),
         )
 
     def serialize(self) -> dict[str, Any]:
@@ -447,6 +454,18 @@ class SimulationOutputBuilder:
             return labor_supply_response
         output = _output_model_dump(labor_supply_response)
         return LaborSupplyResponseOutput(output) if isinstance(output, dict) else None
+
+    def _build_cliff_impact(self) -> CliffImpactOutput | None:
+        cliff_impact = getattr(self.analysis, "cliff_impact", None)
+        if isinstance(cliff_impact, CliffImpactOutput):
+            return cliff_impact
+        output = _output_model_dump(cliff_impact)
+        if not isinstance(output, Mapping):
+            return None
+        return CliffImpactOutput(
+            baseline=CliffImpactInSimulation(**output["baseline"]),
+            reform=CliffImpactInSimulation(**output["reform"]),
+        )
 
     def _build_geographic_impact_output(
         self, value: Any
