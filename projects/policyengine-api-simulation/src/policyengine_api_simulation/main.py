@@ -4,6 +4,7 @@ from .settings import get_settings, Environment
 from policyengine_fastapi.opentelemetry import (
     GCPLoggingInstrumentor,
     FastAPIEnhancedInstrumenter,
+    export_ot_to_console,
     export_ot_to_gcp,
 )
 from policyengine_fastapi.exit import exit
@@ -63,7 +64,8 @@ resource = Resource.create(
 
 match get_settings().environment:
     case Environment.DESKTOP:
-        pass  # Don't print OpenTelemetry to console; it makes logs unreadable.
+        pass  # Don't print opentelemetry to console- this makes it impossible to read the logs. Alternatively, do by uncommenting this line.
+        # export_ot_to_console(resource)
     case Environment.PRODUCTION:
         export_ot_to_gcp(resource)
     case value:
