@@ -150,9 +150,7 @@ def test_put_app_release_bundle_metadata_records_app_and_py_version_aliases(
             ),
             "model_version": "1.0.0" if country == "us" else "2.0.0",
             "data_package_name": (
-                "policyengine-us-data"
-                if country == "us"
-                else "policyengine-uk-data"
+                "policyengine-us-data" if country == "us" else "policyengine-uk-data"
             ),
             "data_version": "3.0.0" if country == "us" else "4.0.0",
             "default_dataset": "default",
@@ -171,9 +169,7 @@ def test_put_app_release_bundle_metadata_records_app_and_py_version_aliases(
         policyengine_version="4.10.0",
     )
 
-    snapshot = patched_modal[
-        "main/simulation-api-app-release-bundles"
-    ].snapshot()
+    snapshot = patched_modal["main/simulation-api-app-release-bundles"].snapshot()
     metadata = snapshot["policyengine-simulation-py4-10-0"]
     assert snapshot["4.10.0"] == metadata
     assert metadata["policyengine_version"] == "4.10.0"

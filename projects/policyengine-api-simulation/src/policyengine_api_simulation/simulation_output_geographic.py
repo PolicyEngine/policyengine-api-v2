@@ -57,7 +57,9 @@ def build_uk_constituency_impact(
 
     impact = _try_compute_output(
         "constituency impacts",
-        _output_module_function("constituency_impact", "compute_uk_constituency_impacts"),
+        _output_module_function(
+            "constituency_impact", "compute_uk_constituency_impacts"
+        ),
         baseline,
         reform,
     )

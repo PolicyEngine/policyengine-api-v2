@@ -332,7 +332,9 @@ class TestAuthConfiguredGuard:
     def test__given_partial_auth_config__then_guard_raises(self, monkeypatch):
         monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
         monkeypatch.delenv(auth_module.GATEWAY_AUTH_REQUIRED_ENV, raising=False)
-        monkeypatch.setenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example/")
+        monkeypatch.setenv(
+            auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example/"
+        )
         monkeypatch.delenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, raising=False)
 
         with pytest.raises(auth_module.AuthMisconfiguredError):
@@ -350,7 +352,9 @@ class TestAuthConfiguredGuard:
     def test__given_required_and_configured__then_guard_noops(self, monkeypatch):
         monkeypatch.delenv(auth_module.GATEWAY_AUTH_DISABLED_ENV, raising=False)
         monkeypatch.setenv(auth_module.GATEWAY_AUTH_REQUIRED_ENV, "1")
-        monkeypatch.setenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example/")
+        monkeypatch.setenv(
+            auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example/"
+        )
         monkeypatch.setenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, "aud")
 
         auth_module.enforce_auth_configured_guard()
@@ -362,7 +366,9 @@ class TestIssuerNormalization:
     def test__given_issuer_without_slash__then_decoder_receives_normalized_value(
         self, monkeypatch
     ):
-        monkeypatch.setenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example")
+        monkeypatch.setenv(
+            auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example"
+        )
         monkeypatch.setenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, "aud")
         auth_module.reset_decoder_cache()
 
@@ -385,7 +391,9 @@ class TestIssuerNormalization:
     def test__given_issuer_with_slash__then_decoder_receives_unchanged_value(
         self, monkeypatch
     ):
-        monkeypatch.setenv(auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example/")
+        monkeypatch.setenv(
+            auth_module.GATEWAY_AUTH_ISSUER_ENV, "https://issuer.example/"
+        )
         monkeypatch.setenv(auth_module.GATEWAY_AUTH_AUDIENCE_ENV, "aud")
         auth_module.reset_decoder_cache()
 
