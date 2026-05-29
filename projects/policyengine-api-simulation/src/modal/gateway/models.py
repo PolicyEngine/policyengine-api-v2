@@ -7,7 +7,7 @@ from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from policyengine_api_simulation.telemetry import TelemetryEnvelope
+from src.modal.telemetry import TelemetryEnvelope
 
 
 # Hard cap on request body size (bytes). SimulationOptions + telemetry + any
@@ -183,11 +183,6 @@ class BudgetWindowBatchRequest(GatewayRequestBase):
         if end_year > self.MAX_END_YEAR:
             raise ValueError(
                 f"budget-window end_year must be {self.MAX_END_YEAR} or earlier"
-            )
-        if self.include_cliffs is True:
-            raise ValueError(
-                "budget-window cliff impacts are not supported; use the single-year "
-                "simulation endpoint with include_cliffs=true"
             )
         return self
 

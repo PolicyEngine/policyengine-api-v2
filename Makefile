@@ -1,5 +1,5 @@
 # Simplified Makefile using docker-compose
-.PHONY: help dev up down build test deploy clean logs format check terraform-deploy push-pr-branch
+.PHONY: help dev up down build test deploy clean logs format check terraform-deploy
 
 # Load environment variables if .env exists
 ifneq (,$(wildcard deployment/.env))
@@ -35,7 +35,6 @@ help:
 	@echo "  make clean            - Clean up containers and volumes"
 	@echo "  make format           - Format Python code with ruff"
 	@echo "  make check            - Run code quality checks"
-	@echo "  make push-pr-branch   - Push current branch to origin for PR creation"
 
 # Initialize GCP (enables APIs, creates bucket, etc)
 init-gcp: check-deploy-env
@@ -331,24 +330,6 @@ check:
 			uv run pyright $$dir; \
 		fi \
 	done
-
-push-pr-branch:
-	@BRANCH=$$(git branch --show-current); \
-	if [ -z "$$BRANCH" ]; then \
-		echo "Unable to determine current branch"; \
-		exit 1; \
-	fi; \
-	if [ "$$BRANCH" = "main" ]; then \
-		echo "Refusing to open a PR from main"; \
-		exit 1; \
-	fi; \
-	REMOTE_URL=$$(git remote get-url origin 2>/dev/null || true); \
-	case "$$REMOTE_URL" in \
-		*PolicyEngine/policyengine-api-v2* ) ;; \
-		* ) echo "Missing canonical origin remote PolicyEngine/policyengine-api-v2"; exit 1 ;; \
-	esac; \
-	git push -u origin HEAD:$$BRANCH; \
-	echo "Create the PR with: gh pr create --draft --repo PolicyEngine/policyengine-api-v2 --head $$BRANCH --base main"
 
 # Integration tests
 integ-test:

@@ -11,6 +11,7 @@ artifacts/
 .bootstrap_settings
 apply.tfvars
 backend.tfvars
+CLAUDE.md
 .vscode
 deployment/terraform/*/auto.tfvars
 .claude-plan

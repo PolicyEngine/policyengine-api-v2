@@ -163,7 +163,7 @@ def _build_parent_payload(*, window_size: int = 3):
     payload["_telemetry"] = request.telemetry.model_dump(mode="json")
     payload["_metadata"] = {
         "resolved_version": "1.500.0",
-        "resolved_app_name": "policyengine-simulation-py4-10-0",
+        "resolved_app_name": "policyengine-simulation-us1-500-0-uk2-66-0",
         "policyengine_bundle": PolicyEngineBundle(model_version="1.500.0").model_dump(
             mode="json"
         ),
@@ -176,7 +176,7 @@ def _seed_parent_batch(request: BudgetWindowBatchRequest, batch_job_id: str):
         batch_job_id=batch_job_id,
         request=request,
         resolved_version="1.500.0",
-        resolved_app_name="policyengine-simulation-py4-10-0",
+        resolved_app_name="policyengine-simulation-us1-500-0-uk2-66-0",
         bundle=PolicyEngineBundle(model_version="1.500.0"),
     )
     state_module.put_batch_job_seed(seed)
@@ -227,7 +227,7 @@ def test_run_budget_window_batch_impl_completes_and_respects_max_parallel(
         call_registry=mock_batch_modal["call_registry"],
     )
     mock_batch_modal["functions"][
-        ("policyengine-simulation-py4-10-0", "run_simulation")
+        ("policyengine-simulation-us1-500-0-uk2-66-0", "run_simulation")
     ] = run_simulation
 
     result = run_budget_window_batch_impl(payload)
@@ -269,7 +269,7 @@ def test_run_budget_window_batch_impl_marks_failure(mock_batch_modal):
         call_registry=mock_batch_modal["call_registry"],
     )
     mock_batch_modal["functions"][
-        ("policyengine-simulation-py4-10-0", "run_simulation")
+        ("policyengine-simulation-us1-500-0-uk2-66-0", "run_simulation")
     ] = run_simulation
 
     result = run_budget_window_batch_impl(payload)
@@ -324,7 +324,7 @@ def test_scheduler_sleep_exponentially_backs_off_then_resets_on_progress(
         call_registry=mock_batch_modal["call_registry"],
     )
     mock_batch_modal["functions"][
-        ("policyengine-simulation-py4-10-0", "run_simulation")
+        ("policyengine-simulation-us1-500-0-uk2-66-0", "run_simulation")
     ] = run_simulation
 
     sleeps: list[float] = []
@@ -335,7 +335,7 @@ def test_scheduler_sleep_exponentially_backs_off_then_resets_on_progress(
             batch_job_id=mock_batch_modal["parent_call_id"],
             request=request,
             resolved_version="1.500.0",
-            resolved_app_name="policyengine-simulation-py4-10-0",
+            resolved_app_name="policyengine-simulation-us1-500-0-uk2-66-0",
             bundle=PolicyEngineBundle(model_version="1.500.0"),
             raw_params=payload,
         ),
@@ -373,7 +373,7 @@ def test_run_budget_window_batch_impl_fails_on_malformed_child_result(
         call_registry=mock_batch_modal["call_registry"],
     )
     mock_batch_modal["functions"][
-        ("policyengine-simulation-py4-10-0", "run_simulation")
+        ("policyengine-simulation-us1-500-0-uk2-66-0", "run_simulation")
     ] = run_simulation
 
     result = run_budget_window_batch_impl(payload)

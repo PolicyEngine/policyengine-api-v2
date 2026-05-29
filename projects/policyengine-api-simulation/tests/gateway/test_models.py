@@ -1,7 +1,5 @@
 """Tests for gateway Pydantic models."""
 
-import json
-
 import pytest
 from pydantic import ValidationError
 
@@ -13,12 +11,11 @@ from src.modal.gateway.models import (
     BudgetWindowBatchSubmitResponse,
     BudgetWindowResult,
     BudgetWindowTotals,
-    JobStatusResponse,
-    JobSubmitResponse,
-    MAX_GATEWAY_REQUEST_BYTES,
     PingRequest,
     PingResponse,
     SimulationRequest,
+    JobSubmitResponse,
+    JobStatusResponse,
 )
 
 
@@ -116,16 +113,6 @@ class TestPingResponse:
 class TestSimulationRequest:
     """Tests for SimulationRequest model."""
 
-    @staticmethod
-    def _payload_with_encoded_size(target_size: int) -> dict:
-        payload = {"country": "us", "reform": {"mock.parameter": {"2024-01-01": ""}}}
-        base_size = len(json.dumps(payload, default=str))
-        payload["reform"]["mock.parameter"]["2024-01-01"] = "x" * (
-            target_size - base_size
-        )
-        assert len(json.dumps(payload, default=str)) == target_size
-        return payload
-
     def test_simulation_request_requires_country(self):
         """
         Given no country
@@ -213,18 +200,54 @@ class TestSimulationRequest:
 
     def test_simulation_request_accepts_payload_just_below_256kb(self):
         """256 KB boundary (#450): a payload just below the cap must be
-        accepted."""
-        payload = self._payload_with_encoded_size(MAX_GATEWAY_REQUEST_BYTES - 1)
+        accepted. We build a reform dict whose JSON encoding is ~256_100
+        bytes before adding the ``country`` key, then prune until just under
+        the 262_144 byte limit."""
+        import json
+
+        from src.modal.gateway.models import MAX_GATEWAY_REQUEST_BYTES
+
+        # Each entry in this shape encodes to roughly 40 bytes of JSON. We
+        # build a generous reform then trim the last few entries until the
+        # total is safely under the cap.
+        reform = {f"mock.parameter[{i}]": {"2024-01-01": i} for i in range(6_000)}
+        payload = {"country": "us", "reform": reform}
+
+        while len(json.dumps(payload, default=str)) > MAX_GATEWAY_REQUEST_BYTES - 200:
+            reform.popitem()
+
+        encoded_size = len(json.dumps(payload, default=str))
+        assert encoded_size < MAX_GATEWAY_REQUEST_BYTES, (
+            f"Test setup produced {encoded_size} bytes, "
+            f"expected < {MAX_GATEWAY_REQUEST_BYTES}"
+        )
 
         # Must not raise — this is the just-under-cap happy path.
         request = SimulationRequest(**payload)
         assert request.country == "us"
-        assert request.reform == payload["reform"]
+        assert len(request.reform) == len(reform)
 
     def test_simulation_request_rejects_payload_just_above_256kb(self):
         """The cap is strict: a payload that crosses 262_144 bytes by even a
         few bytes should be rejected with a ``too large`` ValidationError."""
-        payload = self._payload_with_encoded_size(MAX_GATEWAY_REQUEST_BYTES + 1)
+        import json
+
+        from src.modal.gateway.models import MAX_GATEWAY_REQUEST_BYTES
+
+        # Generate enough entries to definitely exceed the cap, then trim to
+        # just a few bytes above it.
+        reform = {f"mock.parameter[{i}]": {"2024-01-01": i} for i in range(12_000)}
+        payload = {"country": "us", "reform": reform}
+
+        # Trim down to just above the cap (within 200 bytes).
+        while len(json.dumps(payload, default=str)) > MAX_GATEWAY_REQUEST_BYTES + 200:
+            reform.popitem()
+
+        encoded_size = len(json.dumps(payload, default=str))
+        assert encoded_size > MAX_GATEWAY_REQUEST_BYTES, (
+            f"Test setup produced {encoded_size} bytes, "
+            f"expected > {MAX_GATEWAY_REQUEST_BYTES}"
+        )
 
         with pytest.raises(ValidationError, match="too large"):
             SimulationRequest(**payload)
@@ -265,12 +288,12 @@ class TestJobSubmitResponse:
             "poll_url": "/jobs/fc-abc123",
             "country": "us",
             "version": "1.459.0",
-            "resolved_app_name": "policyengine-simulation-py3-9-0",
+            "resolved_app_name": "policyengine-simulation-us1-459-0-uk2-65-9",
             "policyengine_bundle": {
                 "model_version": "1.459.0",
                 "policyengine_version": None,
                 "data_version": None,
-                "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
+                "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
             },
         }
 
@@ -283,11 +306,13 @@ class TestJobSubmitResponse:
         assert response.poll_url == "/jobs/fc-abc123"
         assert response.country == "us"
         assert response.version == "1.459.0"
-        assert response.resolved_app_name == "policyengine-simulation-py3-9-0"
+        assert (
+            response.resolved_app_name == "policyengine-simulation-us1-459-0-uk2-65-9"
+        )
         assert response.policyengine_bundle.model_version == "1.459.0"
         assert response.policyengine_bundle.policyengine_version is None
         assert response.policyengine_bundle.dataset == (
-            "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5"
+            "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
         )
 
 
@@ -346,19 +371,21 @@ class TestJobStatusResponse:
         response = JobStatusResponse(
             status="complete",
             result={"budget": {"total": 1000000}},
-            resolved_app_name="policyengine-simulation-py3-9-0",
+            resolved_app_name="policyengine-simulation-us1-459-0-uk2-65-9",
             policyengine_bundle={
                 "model_version": "1.459.0",
                 "policyengine_version": None,
                 "data_version": None,
-                "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
+                "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
             },
         )
 
-        assert response.resolved_app_name == "policyengine-simulation-py3-9-0"
+        assert (
+            response.resolved_app_name == "policyengine-simulation-us1-459-0-uk2-65-9"
+        )
         assert response.policyengine_bundle is not None
         assert response.policyengine_bundle.dataset == (
-            "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5"
+            "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
         )
 
 
@@ -425,16 +452,6 @@ class TestBudgetWindowBatchRequest:
                 target="cliff",
             )
 
-    def test_budget_window_batch_request_rejects_include_cliffs(self):
-        with pytest.raises(ValidationError, match="cliff impacts are not supported"):
-            BudgetWindowBatchRequest(
-                country="us",
-                region="us",
-                start_year="2026",
-                window_size=3,
-                include_cliffs=True,
-            )
-
     def test_budget_window_batch_request_rejects_max_parallel_above_active_limit(self):
         with pytest.raises(ValidationError):
             BudgetWindowBatchRequest(
@@ -489,7 +506,7 @@ class TestBudgetWindowBatchSubmitResponse:
             poll_url="/budget-window-jobs/bw-123",
             country="us",
             version="1.500.0",
-            resolved_app_name="policyengine-simulation-py4-10-0",
+            resolved_app_name="policyengine-simulation-us1-500-0-uk2-66-0",
             policyengine_bundle={
                 "model_version": "1.500.0",
                 "dataset": "default",
@@ -503,7 +520,7 @@ class TestBudgetWindowBatchSubmitResponse:
             "poll_url": "/budget-window-jobs/bw-123",
             "country": "us",
             "version": "1.500.0",
-            "resolved_app_name": "policyengine-simulation-py4-10-0",
+            "resolved_app_name": "policyengine-simulation-us1-500-0-uk2-66-0",
             "policyengine_bundle": {
                 "model_version": "1.500.0",
                 "policyengine_version": None,

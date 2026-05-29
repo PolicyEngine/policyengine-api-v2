@@ -137,7 +137,7 @@ def budget_window_semi_integration_client(
     runtime = SemiIntegrationRuntime()
     runtime.dicts["simulation-api-us-versions"] = {
         "latest": "1.500.0",
-        "1.500.0": "policyengine-simulation-py4-10-0",
+        "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
     }
 
     class MockModalDict:
