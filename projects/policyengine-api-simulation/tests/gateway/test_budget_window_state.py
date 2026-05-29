@@ -42,7 +42,7 @@ def test_create_initial_batch_state_builds_queued_years_and_run_id():
         batch_job_id="fc-parent-123",
         request=request,
         resolved_version="1.500.0",
-        resolved_app_name="policyengine-simulation-us1-500-0-uk2-66-0",
+        resolved_app_name="policyengine-simulation-py4-10-0",
         bundle=PolicyEngineBundle(model_version="1.500.0"),
     )
 
@@ -70,7 +70,7 @@ def test_build_batch_status_response_computes_progress_from_completed_years():
         batch_job_id="fc-parent-123",
         request=request,
         resolved_version="1.500.0",
-        resolved_app_name="policyengine-simulation-us1-500-0-uk2-66-0",
+        resolved_app_name="policyengine-simulation-py4-10-0",
         bundle=PolicyEngineBundle(model_version="1.500.0"),
     )
     state.completed_years = ["2026", "2027"]
@@ -100,7 +100,7 @@ def test_batch_state_round_trips_through_modal_dict(mock_modal):
         batch_job_id="fc-parent-123",
         request=request,
         resolved_version="1.500.0",
-        resolved_app_name="policyengine-simulation-us1-500-0-uk2-66-0",
+        resolved_app_name="policyengine-simulation-py4-10-0",
         bundle=PolicyEngineBundle(model_version="1.500.0"),
     )
     put_batch_job_state(state)
@@ -126,7 +126,7 @@ def test_state_transition_helpers_track_completion_path():
         batch_job_id="fc-parent-123",
         request=request,
         resolved_version="1.500.0",
-        resolved_app_name="policyengine-simulation-us1-500-0-uk2-66-0",
+        resolved_app_name="policyengine-simulation-py4-10-0",
         bundle=PolicyEngineBundle(model_version="1.500.0"),
     )
 
@@ -188,7 +188,7 @@ def test_state_transition_helpers_track_failed_child():
         batch_job_id="fc-parent-123",
         request=request,
         resolved_version="1.500.0",
-        resolved_app_name="policyengine-simulation-us1-500-0-uk2-66-0",
+        resolved_app_name="policyengine-simulation-py4-10-0",
         bundle=PolicyEngineBundle(model_version="1.500.0"),
     )
 
@@ -216,7 +216,7 @@ def test_mark_child_completed_handles_missing_child_jobs_entry(caplog):
         batch_job_id="fc-parent-123",
         request=request,
         resolved_version="1.500.0",
-        resolved_app_name="policyengine-simulation-us1-500-0-uk2-66-0",
+        resolved_app_name="policyengine-simulation-py4-10-0",
         bundle=PolicyEngineBundle(model_version="1.500.0"),
     )
     # Simulate the crash-recovery path where the running/completed lists
@@ -254,7 +254,7 @@ def test_mark_child_failed_handles_missing_child_jobs_entry(caplog):
         batch_job_id="fc-parent-123",
         request=request,
         resolved_version="1.500.0",
-        resolved_app_name="policyengine-simulation-us1-500-0-uk2-66-0",
+        resolved_app_name="policyengine-simulation-py4-10-0",
         bundle=PolicyEngineBundle(model_version="1.500.0"),
     )
     state.running_years = ["2026"]
@@ -279,7 +279,7 @@ def test_mark_batch_failed_cancels_any_remaining_running_children():
         batch_job_id="fc-parent-123",
         request=request,
         resolved_version="1.500.0",
-        resolved_app_name="policyengine-simulation-us1-500-0-uk2-66-0",
+        resolved_app_name="policyengine-simulation-py4-10-0",
         bundle=PolicyEngineBundle(model_version="1.500.0"),
     )
 

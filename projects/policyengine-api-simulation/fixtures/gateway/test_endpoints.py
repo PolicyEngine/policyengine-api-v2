@@ -2,6 +2,69 @@
 
 import pytest
 
+TEST_APP_RELEASE_BUNDLE = {
+    "app_name": "policyengine-simulation-py4-10-0",
+    "policyengine_version": "4.10.0",
+    "us": {
+        "model_version": "1.500.0",
+        "data_version": "1.110.12",
+        "default_dataset": "enhanced_cps_2024",
+        "default_dataset_uri": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
+        "dataset_uris": {
+            "enhanced_cps_2024": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
+            "cps_2023": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.110.12",
+            "pooled_3_year_cps_2023": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.110.12",
+        },
+        "dataset_aliases": {
+            "enhanced_cps": "enhanced_cps_2024",
+            "enhanced_cps_2024": "enhanced_cps_2024",
+            "cps": "cps_2023",
+            "cps_2023": "cps_2023",
+            "pooled_cps": "pooled_3_year_cps_2023",
+            "pooled_3_year_cps_2023": "pooled_3_year_cps_2023",
+        },
+    },
+    "uk": {
+        "model_version": "2.66.0",
+        "data_version": "1.40.3",
+        "default_dataset": "enhanced_frs_2023_24",
+        "default_dataset_uri": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3",
+        "dataset_uris": {
+            "enhanced_frs_2023_24": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3",
+            "frs_2023_24": "hf://policyengine/policyengine-uk-data-private/frs_2023_24.h5@1.40.3",
+        },
+        "dataset_aliases": {
+            "enhanced_frs": "enhanced_frs_2023_24",
+            "enhanced_frs_2023_24": "enhanced_frs_2023_24",
+            "frs": "frs_2023_24",
+            "frs_2023_24": "frs_2023_24",
+        },
+    },
+}
+
+TEST_APP_NAMES = (
+    "policyengine-simulation-py4-10-0",
+    "policyengine-simulation-py3-9-0",
+)
+
+
+def resolve_test_dataset_uri(country: str, dataset: str | None) -> str | None:
+    if dataset is None:
+        return None
+    if "://" in dataset:
+        return dataset
+    country_bundle = TEST_APP_RELEASE_BUNDLE[country]
+    dataset_name, revision = (
+        dataset.rsplit("@", maxsplit=1) if "@" in dataset else (dataset, None)
+    )
+    dataset_name = country_bundle["dataset_aliases"].get(dataset_name, dataset_name)
+    dataset_uri = country_bundle["dataset_uris"].get(dataset_name, dataset_name)
+    if revision is not None and dataset_uri == dataset_name:
+        return dataset
+    if revision is not None and dataset_uri.startswith("hf://"):
+        dataset_uri = f"{dataset_uri.rsplit('@', maxsplit=1)[0]}@{revision}"
+    return dataset_uri
+
 
 class MockDict:
     """Mock for Modal.Dict to simulate version registry."""
@@ -107,7 +170,11 @@ def mock_modal(monkeypatch):
     from src.modal.gateway import endpoints
 
     mock_func = MockFunction()
-    mock_dicts = {}
+    mock_dicts = {
+        "simulation-api-app-release-bundles": {
+            app_name: TEST_APP_RELEASE_BUNDLE for app_name in TEST_APP_NAMES
+        }
+    }
     MockFunctionCall.registry = {}
     MockFunctionCall.from_id_errors = {}
 
@@ -134,6 +201,20 @@ def mock_modal(monkeypatch):
 
     monkeypatch.setattr(endpoints, "modal", MockModal)
     monkeypatch.setattr(budget_window_state, "modal", MockModal)
+    monkeypatch.setattr(
+        endpoints,
+        "with_hf_revision",
+        lambda dataset_uri, revision: (
+            f"{dataset_uri.rsplit('@', maxsplit=1)[0]}@{revision}"
+            if dataset_uri.startswith("hf://")
+            else dataset_uri
+        ),
+    )
+    monkeypatch.setattr(
+        endpoints,
+        "validate_hf_dataset_uri",
+        lambda dataset_uri: dataset_uri,
+    )
 
     return {
         "func": mock_func,

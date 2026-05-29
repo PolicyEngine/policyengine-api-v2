@@ -32,8 +32,8 @@ class TestModalExtractVersions:
         )
         assert result.returncode == 0, f"Syntax error in script: {result.stderr}"
 
-    def test_extracts_versions_from_uv_lock(self, temp_github_output):
-        """Should extract policyengine-us and policyengine-uk versions from uv.lock."""
+    def test_extracts_versions_from_policyengine_bundle(self, temp_github_output):
+        """Should extract model and data versions from policyengine.py's bundle."""
         project_dir = REPO_ROOT / "projects" / "policyengine-api-simulation"
 
         if not (project_dir / "uv.lock").exists():
@@ -54,8 +54,11 @@ class TestModalExtractVersions:
         with open(temp_github_output) as f:
             output = f.read()
 
-        assert "us_version=" in output, "us_version not found in output"
-        assert "uk_version=" in output, "uk_version not found in output"
+        assert "policyengine_version=" in output
+        assert "us_version=" in output
+        assert "us_data_version=" in output
+        assert "uk_version=" in output
+        assert "uk_data_version=" in output
 
 
 class TestModalHealthCheck:
@@ -446,7 +449,7 @@ class TestModalRunIntegTests:
         fake_bin.mkdir()
         fake_uv = fake_bin / "uv"
         fake_uv.write_text(
-            '#!/bin/bash\n'
+            "#!/bin/bash\n"
             'printf "%s|base=%s|us=%s|uk=%s\\n" "$*" '
             '"${simulation_integ_test_base_url:-}" '
             '"${simulation_integ_test_us_model_version:-}" '
@@ -473,7 +476,7 @@ class TestModalRunIntegTests:
                 "prod",
                 "https://example.com",
                 "1.690.7",
-                "2.88.14",
+                "2.88.20",
             ],
             capture_output=True,
             text=True,
@@ -486,7 +489,7 @@ class TestModalRunIntegTests:
         assert "run pytest tests/simulation/ -v -m not beta_only" in log
         assert "base=https://example.com" in log
         assert "us=1.690.7" in log
-        assert "uk=2.88.14" in log
+        assert "uk=2.88.20" in log
 
 
 class TestAllScriptsHaveShebang:

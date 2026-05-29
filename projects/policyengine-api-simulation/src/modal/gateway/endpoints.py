@@ -34,31 +34,119 @@ from src.modal.gateway.responses import (
     failed_job_response,
     running_job_response,
 )
+from policyengine_api_simulation.hf_dataset import (
+    HuggingFaceDatasetReferenceError,
+    validate_hf_dataset_uri,
+    with_hf_revision,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 JOB_METADATA_DICT_NAME = "simulation-api-job-metadata"
-DATASET_URIS = {
-    "us": {
-        "enhanced_cps": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
-        "enhanced_cps_2024": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
-        "cps": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.110.12",
-        "cps_2023": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.110.12",
-        "pooled_cps": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.110.12",
-        "pooled_3_year_cps_2023": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.110.12",
-    },
-    "uk": {
-        "enhanced_frs": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3",
-        "enhanced_frs_2023_24": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3",
-        "frs": "hf://policyengine/policyengine-uk-data-private/frs_2023_24.h5@1.40.3",
-        "frs_2023_24": "hf://policyengine/policyengine-uk-data-private/frs_2023_24.h5@1.40.3",
-    },
-}
+APP_RELEASE_BUNDLES_DICT_NAME = "simulation-api-app-release-bundles"
 
 
 def _job_metadata_store():
     return modal.Dict.from_name(JOB_METADATA_DICT_NAME, create_if_missing=True)
+
+
+def _app_release_bundle_store():
+    return modal.Dict.from_name(APP_RELEASE_BUNDLES_DICT_NAME, create_if_missing=True)
+
+
+def _app_release_bundle(app_name: str) -> dict:
+    bundle = _app_release_bundle_store().get(app_name)
+    return bundle if isinstance(bundle, dict) else {}
+
+
+def _split_requested_revision(requested_data: str) -> tuple[str, str | None]:
+    if "@" not in requested_data:
+        return requested_data, None
+    dataset_name, revision = requested_data.rsplit("@", maxsplit=1)
+    if not dataset_name or not revision:
+        raise ValueError(f"Invalid dataset revision reference: {requested_data}")
+    return dataset_name, revision
+
+
+def _select_dataset_revision(
+    *,
+    requested_revision: str | None,
+    requested_data_version: str | None,
+) -> str | None:
+    if (
+        requested_revision is not None
+        and requested_data_version is not None
+        and requested_revision != requested_data_version
+    ):
+        raise ValueError(
+            "Conflicting dataset revisions: "
+            f"data requests {requested_revision!r} but data_version is "
+            f"{requested_data_version!r}"
+        )
+    return requested_revision or requested_data_version
+
+
+def _resolve_dataset_uri_from_app_bundle(
+    *,
+    app_bundle: dict,
+    country: str,
+    requested_data: str | None,
+    requested_data_version: str | None = None,
+) -> str | None:
+    if requested_data is None:
+        if requested_data_version is None:
+            return None
+        country_bundle = app_bundle.get(country.lower())
+        if not isinstance(country_bundle, dict):
+            return None
+        default_uri = country_bundle.get("default_dataset_uri")
+        if not isinstance(default_uri, str):
+            return None
+        return with_hf_revision(default_uri, requested_data_version)
+
+    requested_without_revision, requested_revision = _split_requested_revision(
+        requested_data
+    )
+    revision = _select_dataset_revision(
+        requested_revision=requested_revision,
+        requested_data_version=requested_data_version,
+    )
+
+    if "://" in requested_without_revision:
+        if requested_without_revision.startswith("hf://"):
+            return (
+                with_hf_revision(requested_without_revision, revision)
+                if revision is not None
+                else validate_hf_dataset_uri(requested_data)
+            )
+        return requested_data
+
+    country_bundle = app_bundle.get(country.lower())
+    if not isinstance(country_bundle, dict):
+        return requested_data
+
+    aliases = country_bundle.get("dataset_aliases")
+    if not isinstance(aliases, dict):
+        aliases = {}
+    dataset_name = aliases.get(requested_without_revision, requested_without_revision)
+
+    if "://" in dataset_name:
+        return (
+            with_hf_revision(dataset_name, revision)
+            if revision is not None
+            else dataset_name
+        )
+
+    dataset_uris = country_bundle.get("dataset_uris")
+    if not isinstance(dataset_uris, dict):
+        return requested_data
+    dataset_uri = dataset_uris.get(dataset_name)
+    if not isinstance(dataset_uri, str):
+        return requested_data
+    return (
+        with_hf_revision(dataset_uri, revision) if revision is not None else dataset_uri
+    )
 
 
 def _modal_exception_class(name: str):
@@ -80,18 +168,20 @@ def _is_modal_job_not_found(exc: BaseException) -> bool:
 
 
 def _build_policyengine_bundle(
-    country: str, resolved_version: str, payload: dict
+    country: str, resolved_version: str, app_name: str, payload: dict
 ) -> PolicyEngineBundle:
+    app_bundle = _app_release_bundle(app_name)
     dataset = payload.get("data")
-    if isinstance(dataset, str) and "://" in dataset:
-        resolved_dataset = dataset
-    elif isinstance(dataset, str):
-        resolved_dataset = DATASET_URIS.get(country.lower(), {}).get(dataset, dataset)
-    else:
-        resolved_dataset = None
+    data_version = payload.get("data_version")
+    resolved_dataset = _resolve_dataset_uri_from_app_bundle(
+        app_bundle=app_bundle,
+        country=country,
+        requested_data=dataset if isinstance(dataset, str) else None,
+        requested_data_version=data_version if isinstance(data_version, str) else None,
+    )
     return PolicyEngineBundle(
         model_version=resolved_version,
-        data_version=payload.get("data_version"),
+        data_version=data_version,
         dataset=resolved_dataset,
     )
 
@@ -187,6 +277,13 @@ async def submit_simulation(request: SimulationRequest):
     if request.telemetry is not None:
         payload["_telemetry"] = request.telemetry.model_dump(mode="json")
 
+    try:
+        bundle = _build_policyengine_bundle(
+            request.country, resolved_version, app_name, payload
+        )
+    except (ValueError, HuggingFaceDatasetReferenceError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     logger.info(
         "Routing %s:%s to app %s (run_id=%s)",
         request.country,
@@ -201,7 +298,6 @@ async def submit_simulation(request: SimulationRequest):
     # Spawn the job (returns immediately)
     call = sim_func.spawn(payload)
 
-    bundle = _build_policyengine_bundle(request.country, resolved_version, payload)
     job_metadata = _serialize_job_metadata(app_name, bundle, run_id)
     _job_metadata_store()[call.object_id] = job_metadata
 
@@ -232,11 +328,15 @@ async def submit_budget_window_batch(request: BudgetWindowBatchRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    bundle = _build_policyengine_bundle(
-        request.country,
-        resolved_version,
-        request.model_dump(mode="json"),
-    )
+    try:
+        bundle = _build_policyengine_bundle(
+            request.country,
+            resolved_version,
+            app_name,
+            request.model_dump(mode="json"),
+        )
+    except (ValueError, HuggingFaceDatasetReferenceError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     payload = _build_budget_window_parent_payload(
         request,
         resolved_version=resolved_version,
