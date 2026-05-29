@@ -135,6 +135,7 @@ printf 'uv %s\\n' "$*" >> "{log}"
 
 if [[ "$1" == "run" && "$2" == "python" && "$3" == "-m" && "$4" == "src.modal.utils.extract_bundle_versions" ]]; then
   echo "policyengine_version=4.1.0"
+  echo "policyengine_core_version=3.26.1"
   echo "us_version={bundled_us_version}"
   echo "us_data_version=1.10.0"
   echo "uk_version={bundled_uk_version}"
