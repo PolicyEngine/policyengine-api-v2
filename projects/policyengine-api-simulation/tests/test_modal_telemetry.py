@@ -1,7 +1,4 @@
-from policyengine_api_simulation.telemetry import (
-    TelemetryEnvelope,
-    split_internal_payload,
-)
+from src.modal.telemetry import TelemetryEnvelope, split_internal_payload
 
 
 def test_split_internal_payload__removes_internal_fields():

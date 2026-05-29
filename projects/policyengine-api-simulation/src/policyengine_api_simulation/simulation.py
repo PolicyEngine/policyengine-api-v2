@@ -1,12 +1,13 @@
-import logging
-
-from fastapi import APIRouter
-
-from policyengine_api_simulation.simulation_runtime import run_simulation_impl
-from policyengine_api_simulation.compat_models import (
+from typing import Annotated
+import os
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from policyengine.simulation import SimulationOptions, Simulation
+from policyengine.outputs.macro.comparison.calculate_economy_comparison import (
     EconomyComparison,
-    SimulationOptions,
 )
+from pathlib import Path
+import logging
 
 logger = logging.getLogger(__file__)
 
@@ -16,11 +17,15 @@ def create_router():
 
     @router.post("/simulate/economy/comparison", response_model=EconomyComparison)
     async def simulate(parameters: SimulationOptions) -> EconomyComparison:
+        model = SimulationOptions.model_validate(parameters)
+        logger.info("Initialising simulation from input")
+        simulation = Simulation(**model.model_dump())
         logger.info("Calculating comparison")
-        result = run_simulation_impl(
-            parameters.model_dump(mode="json", exclude_none=True)
+        result = (
+            simulation.calculate_economy_comparison()  # pyright: ignore [reportAttributeAccessIssue]
         )
         logger.info("Comparison complete")
-        return EconomyComparison.model_validate(result)
+
+        return result
 
     return router

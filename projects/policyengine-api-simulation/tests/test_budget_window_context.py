@@ -27,7 +27,7 @@ def _build_parent_payload():
     payload["_telemetry"] = request.telemetry.model_dump(mode="json")
     payload["_metadata"] = {
         "resolved_version": "1.500.0",
-        "resolved_app_name": "policyengine-simulation-py4-10-0",
+        "resolved_app_name": "policyengine-simulation-us1-500-0-uk2-66-0",
         "policyengine_bundle": PolicyEngineBundle(model_version="1.500.0").model_dump(
             mode="json"
         ),
@@ -49,7 +49,7 @@ def test_build_batch_context_extracts_request_and_metadata():
     assert context.request.telemetry is not None
     assert context.request.telemetry.run_id == "batch-run-123"
     assert context.resolved_version == "1.500.0"
-    assert context.resolved_app_name == "policyengine-simulation-py4-10-0"
+    assert context.resolved_app_name == "policyengine-simulation-us1-500-0-uk2-66-0"
     assert context.bundle == PolicyEngineBundle(model_version="1.500.0")
 
 

@@ -26,11 +26,7 @@ gateway_image = (
         # the auth module at runtime here.
         "cryptography>=41.0.0",
     )
-    .add_local_python_source(
-        "src.modal",
-        "policyengine_api_simulation",
-        copy=True,
-    )
+    .add_local_python_source("src.modal", copy=True)
     .add_local_python_source("policyengine_fastapi", copy=True)
 )
 
