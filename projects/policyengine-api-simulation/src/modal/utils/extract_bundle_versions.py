@@ -6,6 +6,7 @@ import os
 import sys
 from pathlib import Path
 
+from src.modal.dependency_pins import project_dependency_pin
 from policyengine_api_simulation.release_bundle import get_country_release_bundle
 
 
@@ -15,6 +16,7 @@ def _bundle_outputs() -> dict[str, str]:
 
     return {
         "policyengine_version": us_bundle.policyengine_version,
+        "policyengine_core_version": project_dependency_pin("policyengine-core"),
         "us_version": us_bundle.model_version,
         "us_data_version": us_bundle.data_version,
         "uk_version": uk_bundle.model_version,
@@ -40,6 +42,7 @@ def main() -> None:
     print(
         "Deploying with policyengine.py bundle "
         f"{outputs['policyengine_version']}: "
+        f"policyengine-core={outputs['policyengine_core_version']}, "
         f"policyengine-us={outputs['us_version']}, "
         f"policyengine-us-data={outputs['us_data_version']}, "
         f"policyengine-uk={outputs['uk_version']}, "

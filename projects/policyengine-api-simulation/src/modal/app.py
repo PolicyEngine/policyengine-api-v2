@@ -15,20 +15,47 @@ from src.modal.dependency_pins import project_dependency_pin
 from src.modal.logging_redaction import redact_params_for_logging
 from policyengine_api_simulation.release_bundle import get_bundled_country_model_version
 
-POLICYENGINE_VERSION = os.environ.get("POLICYENGINE_VERSION") or project_dependency_pin(
-    "policyengine"
-)
-POLICYENGINE_CORE_VERSION = os.environ.get(
-    "POLICYENGINE_CORE_VERSION"
-) or project_dependency_pin("policyengine-core")
 
-# Get versions from environment or the bundled policyengine.py release manifest.
-US_VERSION = os.environ.get(
-    "POLICYENGINE_US_VERSION"
-) or get_bundled_country_model_version("us")
-UK_VERSION = os.environ.get(
-    "POLICYENGINE_UK_VERSION"
-) or get_bundled_country_model_version("uk")
+def _version_from_env_or_local_dependency(env_var: str, package: str) -> str:
+    value = os.environ.get(env_var)
+    if value:
+        return value
+    if modal.is_local():
+        return project_dependency_pin(package)
+    raise RuntimeError(
+        f"{env_var} must be set in the Modal image environment for remote "
+        "simulation workers."
+    )
+
+
+def _version_from_env_or_local_bundle(env_var: str, country: str) -> str:
+    value = os.environ.get(env_var)
+    if value:
+        return value
+    if modal.is_local():
+        return get_bundled_country_model_version(country)
+    raise RuntimeError(
+        f"{env_var} must be set in the Modal image environment for remote "
+        "simulation workers."
+    )
+
+
+POLICYENGINE_VERSION = _version_from_env_or_local_dependency(
+    "POLICYENGINE_VERSION",
+    "policyengine",
+)
+POLICYENGINE_CORE_VERSION = _version_from_env_or_local_dependency(
+    "POLICYENGINE_CORE_VERSION",
+    "policyengine-core",
+)
+US_VERSION = _version_from_env_or_local_bundle("POLICYENGINE_US_VERSION", "us")
+UK_VERSION = _version_from_env_or_local_bundle("POLICYENGINE_UK_VERSION", "uk")
+VERSION_ENV = {
+    "POLICYENGINE_VERSION": POLICYENGINE_VERSION,
+    "POLICYENGINE_CORE_VERSION": POLICYENGINE_CORE_VERSION,
+    "POLICYENGINE_US_VERSION": US_VERSION,
+    "POLICYENGINE_UK_VERSION": UK_VERSION,
+}
 
 
 def get_app_name(policyengine_version: str) -> str:
@@ -67,6 +94,7 @@ simulation_image = (
         "tables>=3.10.2",
         "logfire",
     )
+    .env(VERSION_ENV)
     .add_local_python_source(
         "src.modal",
         "policyengine_api_simulation",

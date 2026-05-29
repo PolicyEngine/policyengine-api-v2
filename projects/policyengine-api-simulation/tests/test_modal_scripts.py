@@ -55,10 +55,23 @@ class TestModalExtractVersions:
             output = f.read()
 
         assert "policyengine_version=" in output
+        assert "policyengine_core_version=" in output
         assert "us_version=" in output
         assert "us_data_version=" in output
         assert "uk_version=" in output
         assert "uk_data_version=" in output
+
+    def test_deploy_workflow_passes_core_version_to_modal(self):
+        """Deploy workflow should pass core version into the Modal app build."""
+        workflow = (
+            REPO_ROOT / ".github" / "workflows" / "modal-deploy.reusable.yml"
+        ).read_text(encoding="utf-8")
+
+        assert "policyengine_core_version" in workflow
+        assert (
+            "POLICYENGINE_CORE_VERSION: ${{ steps.versions.outputs.policyengine_core_version }}"
+            in workflow
+        )
 
 
 class TestModalHealthCheck:

@@ -1,7 +1,8 @@
 #!/bin/bash
 # Deploy simulation API to Modal
 # Usage: ./modal-deploy-app.sh <modal-environment>
-# Required env vars: POLICYENGINE_VERSION, POLICYENGINE_US_VERSION, POLICYENGINE_UK_VERSION
+# Required env vars: POLICYENGINE_VERSION, POLICYENGINE_CORE_VERSION,
+# POLICYENGINE_US_VERSION, POLICYENGINE_UK_VERSION
 # These should come from the bundled policyengine.py release manifest.
 #
 # Deploys two apps:
@@ -19,6 +20,7 @@ SIMULATION_APP_NAME="policyengine-simulation-py${POLICYENGINE_VERSION_SAFE}"
 echo "========================================"
 echo "Deploying to Modal environment: $MODAL_ENV"
 echo "  policyengine.py version: ${POLICYENGINE_VERSION}"
+echo "  policyengine-core version: ${POLICYENGINE_CORE_VERSION}"
 echo "  US version: ${POLICYENGINE_US_VERSION}"
 echo "  UK version: ${POLICYENGINE_UK_VERSION}"
 echo "========================================"
