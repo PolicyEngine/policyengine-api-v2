@@ -63,7 +63,6 @@ simulation_image = (
         f"policyengine-uk=={UK_VERSION}",
         f"policyengine=={POLICYENGINE_VERSION}",
         f"policyengine-core=={POLICYENGINE_CORE_VERSION}",
-        "fastapi>=0.115.0",
         "tables>=3.10.2",
         "logfire",
     )
