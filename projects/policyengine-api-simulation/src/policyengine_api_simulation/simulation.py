@@ -1,12 +1,8 @@
-from typing import Annotated
-import os
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter
 from policyengine.simulation import SimulationOptions, Simulation
 from policyengine.outputs.macro.comparison.calculate_economy_comparison import (
     EconomyComparison,
 )
-from pathlib import Path
 import logging
 
 logger = logging.getLogger(__file__)

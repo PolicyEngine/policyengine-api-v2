@@ -1,11 +1,9 @@
 from contextlib import asynccontextmanager
-from typing import Any
 from fastapi import FastAPI
 from .settings import get_settings, Environment
 from policyengine_fastapi.opentelemetry import (
     GCPLoggingInstrumentor,
     FastAPIEnhancedInstrumenter,
-    export_ot_to_console,
     export_ot_to_gcp,
 )
 from policyengine_fastapi.exit import exit
