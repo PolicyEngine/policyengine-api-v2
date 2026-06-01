@@ -5,10 +5,15 @@ Tests verify the endpoint correctly resolves app names and routes
 simulation requests.
 """
 
+from copy import deepcopy
+
 import pytest
 from fastapi.testclient import TestClient
 
-from fixtures.gateway.test_endpoints import resolve_test_dataset_uri
+from fixtures.gateway.test_endpoints import (
+    TEST_APP_RELEASE_BUNDLE,
+    resolve_test_dataset_uri,
+)
 from policyengine_api_simulation.hf_dataset import HuggingFaceDatasetReferenceError
 
 
@@ -383,7 +388,7 @@ class TestSubmitSimulationEndpoint:
         assert response.status_code == 400
         assert mock_modal["func"].last_payload is None
 
-    def test__given_submission_with_invalid_hf_revision__then_returns_400_before_spawn(
+    def test__given_submission_with_invalid_unmanaged_hf_revision__then_returns_400_before_spawn(
         self, mock_modal, client: TestClient, monkeypatch
     ):
         mock_modal["dicts"]["simulation-api-us-versions"] = {
@@ -405,7 +410,7 @@ class TestSubmitSimulationEndpoint:
                 "country": "us",
                 "scope": "macro",
                 "reform": {},
-                "data": "enhanced_cps_2024@does-not-exist",
+                "data": "hf://external/example-data/file.h5@does-not-exist",
             },
         )
 
@@ -434,6 +439,54 @@ class TestSubmitSimulationEndpoint:
         data = response.json()
         assert data["policyengine_bundle"]["dataset"] == resolve_test_dataset_uri(
             "uk", "enhanced_frs"
+        )
+
+    def test__given_uk_submission_without_data_and_manifest_commit__then_resolves_gcs_default(
+        self,
+        mock_modal,
+        client: TestClient,
+        monkeypatch,
+    ):
+        app_name = "policyengine-simulation-py4-13-1"
+        manifest_uri = (
+            "hf://policyengine/policyengine-uk-data-private/"
+            "enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
+        )
+        bundle = deepcopy(TEST_APP_RELEASE_BUNDLE)
+        bundle["app_name"] = app_name
+        bundle["policyengine_version"] = "4.13.1"
+        bundle["uk"]["model_version"] = "2.88.20"
+        bundle["uk"]["data_version"] = "1.55.10"
+        bundle["uk"]["default_dataset_uri"] = manifest_uri
+        bundle["uk"]["dataset_uris"]["enhanced_frs_2023_24"] = manifest_uri
+        mock_modal["dicts"]["simulation-api-uk-versions"] = {
+            "2.88.20": app_name,
+        }
+        mock_modal["dicts"]["simulation-api-app-release-bundles"][app_name] = bundle
+
+        def reject_revision(dataset_uri, revision):
+            raise HuggingFaceDatasetReferenceError(
+                f"HF validation should not run for private GCS data: {dataset_uri}@{revision}"
+            )
+
+        monkeypatch.setattr(
+            "policyengine_api_simulation.dataset_uri.with_hf_revision",
+            reject_revision,
+        )
+
+        response = client.post(
+            "/simulate/economy/comparison",
+            json={
+                "country": "uk",
+                "version": "2.88.20",
+                "scope": "macro",
+                "reform": {},
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["policyengine_bundle"]["dataset"] == (
+            "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.55.10"
         )
 
     def test__given_submission_with_runtime_bundle__then_accepts_internal_provenance(
