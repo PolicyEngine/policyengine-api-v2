@@ -15,11 +15,9 @@ from dataclasses import dataclass
 from importlib import import_module
 from typing import Any, Iterator
 
-from policyengine_api_simulation.hf_dataset import with_hf_revision
+from policyengine_api_simulation.dataset_uri import runtime_dataset_uri
 from policyengine_api_simulation.release_bundle import (
-    get_country_release_bundle,
-    resolve_bundle_dataset_name,
-    resolve_bundle_dataset_uri,
+    resolve_runtime_bundle_dataset_uri,
 )
 from policyengine_api_simulation.simulation_output_builder import (
     SimulationOutputBuilder,
@@ -165,10 +163,6 @@ def _normalise_policy(policy: dict[str, Any] | None) -> dict[str, Any] | None:
     return normalised
 
 
-def _resolve_dataset_name(country: str, requested_data: str | None) -> str:
-    return resolve_bundle_dataset_name(country, requested_data)
-
-
 def _split_requested_revision(requested_data: str) -> tuple[str, str | None]:
     if "@" not in requested_data:
         return requested_data, None
@@ -193,26 +187,11 @@ def _requested_data_version(params: dict[str, Any]) -> str | None:
 def _resolve_dataset_reference(country: str, params: dict[str, Any]) -> str:
     requested_data = params.get("data")
     requested_data = requested_data if isinstance(requested_data, str) else None
-    requested_data_version = _requested_data_version(params)
-
-    if requested_data_version is None:
-        return _resolve_dataset_name(country, requested_data)
-
-    if requested_data is None:
-        dataset_uri = get_country_release_bundle(country).default_dataset_uri
-    else:
-        dataset_without_revision, data_revision = _split_requested_revision(
-            requested_data
-        )
-        if data_revision is not None and data_revision != requested_data_version:
-            raise ValueError(
-                "Conflicting dataset revisions: "
-                f"data requests {data_revision!r} but data_version is "
-                f"{requested_data_version!r}"
-            )
-        dataset_uri = resolve_bundle_dataset_uri(country, dataset_without_revision)
-
-    return with_hf_revision(dataset_uri, requested_data_version)
+    return resolve_runtime_bundle_dataset_uri(
+        country,
+        requested_data,
+        _requested_data_version(params),
+    )
 
 
 def _normalise_region_code(country: str, region: Any) -> str:
@@ -291,10 +270,9 @@ def _region_parent_dataset_reference(
         parent_dataset_path = getattr(parent_region, "dataset_path", None)
         if isinstance(parent_dataset_path, str):
             requested_data_version = _requested_data_version(params)
-            return (
-                with_hf_revision(parent_dataset_path, requested_data_version)
-                if requested_data_version is not None
-                else parent_dataset_path
+            return runtime_dataset_uri(
+                parent_dataset_path,
+                default_revision=requested_data_version,
             )
     return _resolve_dataset_reference(country, params)
 
@@ -321,10 +299,9 @@ def _resolve_region(
     dataset_path = getattr(region, "dataset_path", None)
     requested_data_version = _requested_data_version(params)
     if isinstance(dataset_path, str):
-        dataset_reference = (
-            with_hf_revision(dataset_path, requested_data_version)
-            if requested_data_version is not None
-            else dataset_path
+        dataset_reference = runtime_dataset_uri(
+            dataset_path,
+            default_revision=requested_data_version,
         )
     else:
         dataset_reference = _region_parent_dataset_reference(

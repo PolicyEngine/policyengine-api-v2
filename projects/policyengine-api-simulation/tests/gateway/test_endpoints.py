@@ -19,7 +19,7 @@ def expected_bundle(
     dataset: str | None = None,
     data_version: str | None = None,
 ) -> dict[str, str | None]:
-    resolved_dataset = resolve_test_dataset_uri(country, dataset)
+    resolved_dataset = resolve_test_dataset_uri(country, dataset, data_version)
     if (
         data_version is not None
         and resolved_dataset is not None
@@ -358,7 +358,7 @@ class TestSubmitSimulationEndpoint:
 
         assert response.status_code == 200
         assert response.json()["policyengine_bundle"]["dataset"] == (
-            "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+            "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
         )
 
     def test__given_submission_with_conflicting_data_versions__then_returns_400(
@@ -395,7 +395,7 @@ class TestSubmitSimulationEndpoint:
             raise HuggingFaceDatasetReferenceError("revision missing")
 
         monkeypatch.setattr(
-            "src.modal.gateway.endpoints.with_hf_revision",
+            "policyengine_api_simulation.dataset_uri.with_hf_revision",
             reject_revision,
         )
 

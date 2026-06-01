@@ -34,10 +34,12 @@ from src.modal.gateway.responses import (
     failed_job_response,
     running_job_response,
 )
+from policyengine_api_simulation.dataset_uri import (
+    runtime_dataset_uri,
+    select_dataset_revision,
+)
 from policyengine_api_simulation.hf_dataset import (
     HuggingFaceDatasetReferenceError,
-    validate_hf_dataset_uri,
-    with_hf_revision,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,22 +71,9 @@ def _split_requested_revision(requested_data: str) -> tuple[str, str | None]:
     return dataset_name, revision
 
 
-def _select_dataset_revision(
-    *,
-    requested_revision: str | None,
-    requested_data_version: str | None,
-) -> str | None:
-    if (
-        requested_revision is not None
-        and requested_data_version is not None
-        and requested_revision != requested_data_version
-    ):
-        raise ValueError(
-            "Conflicting dataset revisions: "
-            f"data requests {requested_revision!r} but data_version is "
-            f"{requested_data_version!r}"
-        )
-    return requested_revision or requested_data_version
+def _country_bundle_data_version(country_bundle: dict) -> str | None:
+    data_version = country_bundle.get("data_version")
+    return data_version if isinstance(data_version, str) else None
 
 
 def _resolve_dataset_uri_from_app_bundle(
@@ -94,35 +83,47 @@ def _resolve_dataset_uri_from_app_bundle(
     requested_data: str | None,
     requested_data_version: str | None = None,
 ) -> str | None:
+    country_bundle = app_bundle.get(country.lower())
+
     if requested_data is None:
-        if requested_data_version is None:
-            return None
-        country_bundle = app_bundle.get(country.lower())
         if not isinstance(country_bundle, dict):
             return None
         default_uri = country_bundle.get("default_dataset_uri")
         if not isinstance(default_uri, str):
             return None
-        return with_hf_revision(default_uri, requested_data_version)
+        return runtime_dataset_uri(
+            default_uri,
+            default_revision=(
+                requested_data_version or _country_bundle_data_version(country_bundle)
+            ),
+        )
 
     requested_without_revision, requested_revision = _split_requested_revision(
         requested_data
     )
-    revision = _select_dataset_revision(
+    revision = select_dataset_revision(
         requested_revision=requested_revision,
         requested_data_version=requested_data_version,
+    )
+    bundle_data_version = (
+        _country_bundle_data_version(country_bundle)
+        if isinstance(country_bundle, dict)
+        else None
     )
 
     if "://" in requested_without_revision:
         if requested_without_revision.startswith("hf://"):
-            return (
-                with_hf_revision(requested_without_revision, revision)
-                if revision is not None
-                else validate_hf_dataset_uri(requested_data)
+            return runtime_dataset_uri(
+                requested_without_revision,
+                default_revision=revision or bundle_data_version,
+            )
+        if requested_without_revision.startswith("gs://"):
+            return runtime_dataset_uri(
+                requested_without_revision,
+                default_revision=revision,
             )
         return requested_data
 
-    country_bundle = app_bundle.get(country.lower())
     if not isinstance(country_bundle, dict):
         return requested_data
 
@@ -132,10 +133,9 @@ def _resolve_dataset_uri_from_app_bundle(
     dataset_name = aliases.get(requested_without_revision, requested_without_revision)
 
     if "://" in dataset_name:
-        return (
-            with_hf_revision(dataset_name, revision)
-            if revision is not None
-            else dataset_name
+        return runtime_dataset_uri(
+            dataset_name,
+            default_revision=revision or bundle_data_version,
         )
 
     dataset_uris = country_bundle.get("dataset_uris")
@@ -144,8 +144,9 @@ def _resolve_dataset_uri_from_app_bundle(
     dataset_uri = dataset_uris.get(dataset_name)
     if not isinstance(dataset_uri, str):
         return requested_data
-    return (
-        with_hf_revision(dataset_uri, revision) if revision is not None else dataset_uri
+    return runtime_dataset_uri(
+        dataset_uri,
+        default_revision=revision or bundle_data_version,
     )
 
 

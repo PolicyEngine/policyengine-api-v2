@@ -6,18 +6,26 @@ from policyengine_api_simulation.release_bundle import (
     get_country_release_bundle,
     resolve_bundle_dataset_name,
     resolve_bundle_dataset_uri,
+    resolve_runtime_bundle_dataset_uri,
 )
 
 
 @pytest.fixture(autouse=True)
 def stub_hf_revision_validation(monkeypatch):
-    monkeypatch.setattr(
-        "policyengine_api_simulation.release_bundle.with_hf_revision",
-        lambda dataset_uri, revision: (
+    def with_revision(dataset_uri, revision):
+        return (
             f"{dataset_uri.rsplit('@', maxsplit=1)[0]}@{revision}"
             if dataset_uri.startswith("hf://")
             else dataset_uri
-        ),
+        )
+
+    monkeypatch.setattr(
+        "policyengine_api_simulation.release_bundle.with_hf_revision",
+        with_revision,
+    )
+    monkeypatch.setattr(
+        "policyengine_api_simulation.dataset_uri.with_hf_revision",
+        with_revision,
     )
 
 
@@ -100,3 +108,44 @@ def test_resolve_bundle_dataset_uri_preserves_unmanaged_unknown_values():
 def test_resolve_bundle_dataset_uri_rejects_unknown_logical_revision():
     with pytest.raises(ValueError, match="Unknown dataset revision reference"):
         resolve_bundle_dataset_uri("us", "custom_dataset_label@1.0.0")
+
+
+def test_resolve_runtime_bundle_dataset_uri_maps_default_to_gcs_version():
+    bundle = get_country_release_bundle("us")
+
+    assert resolve_runtime_bundle_dataset_uri("us", None) == (
+        f"gs://policyengine-us-data/enhanced_cps_2024.h5@{bundle.data_version}"
+    )
+
+
+def test_resolve_runtime_bundle_dataset_uri_maps_alias_to_gcs_version():
+    bundle = get_country_release_bundle("uk")
+
+    assert resolve_runtime_bundle_dataset_uri("uk", "enhanced_frs") == (
+        "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5"
+        f"@{bundle.data_version}"
+    )
+
+
+def test_resolve_runtime_bundle_dataset_uri_applies_requested_version():
+    assert (
+        resolve_runtime_bundle_dataset_uri(
+            "us",
+            "enhanced_cps_2024",
+            "1.77.0",
+        )
+        == "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+    )
+
+
+def test_resolve_runtime_bundle_dataset_uri_preserves_unmanaged_unknown_values():
+    assert (
+        resolve_runtime_bundle_dataset_uri("us", "custom_dataset_label")
+        == "custom_dataset_label"
+    )
+
+
+def test_resolve_runtime_bundle_dataset_uri_preserves_explicit_gcs_uri():
+    uri = "gs://policyengine-us-data/enhanced_cps_2024.h5"
+
+    assert resolve_runtime_bundle_dataset_uri("us", uri) == uri

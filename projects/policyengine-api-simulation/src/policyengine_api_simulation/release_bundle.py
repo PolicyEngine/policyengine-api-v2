@@ -12,6 +12,11 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Mapping
 
+from policyengine_api_simulation.dataset_uri import (
+    runtime_dataset_uri,
+    select_dataset_revision,
+    split_dataset_revision,
+)
 from policyengine_api_simulation.hf_dataset import with_hf_revision
 
 os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
@@ -136,3 +141,49 @@ def resolve_bundle_dataset_uri(country: str, requested_data: str | None) -> str:
     if "://" in dataset_name:
         return dataset_name
     return bundle.dataset_uris.get(dataset_name, dataset_name)
+
+
+def resolve_runtime_bundle_dataset_uri(
+    country: str,
+    requested_data: str | None,
+    requested_data_version: str | None = None,
+) -> str:
+    """Resolve a request dataset to the URI the worker should load."""
+
+    bundle = get_country_release_bundle(country)
+    if requested_data is None:
+        return runtime_dataset_uri(
+            bundle.default_dataset_uri,
+            default_revision=requested_data_version or bundle.data_version,
+        )
+
+    requested_without_revision, requested_revision = split_dataset_revision(
+        requested_data
+    )
+    revision = select_dataset_revision(
+        requested_revision=requested_revision,
+        requested_data_version=requested_data_version,
+    )
+
+    if "://" in requested_without_revision:
+        default_revision = revision
+        if requested_without_revision.startswith("hf://"):
+            default_revision = revision or bundle.data_version
+        return runtime_dataset_uri(
+            requested_without_revision,
+            default_revision=default_revision,
+        )
+
+    dataset_uri = resolve_bundle_dataset_uri(country, requested_without_revision)
+    if dataset_uri == requested_without_revision:
+        if revision is not None:
+            raise ValueError(
+                "Unknown dataset revision reference "
+                f"{requested_data!r} for country {bundle.country!r}"
+            )
+        return requested_data
+
+    return runtime_dataset_uri(
+        dataset_uri,
+        default_revision=revision or bundle.data_version,
+    )

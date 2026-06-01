@@ -404,7 +404,7 @@ def test_resolve_region_uses_dedicated_region_dataset_with_requested_version(
     monkeypatch,
 ):
     monkeypatch.setattr(
-        "policyengine_api_simulation.simulation_runtime.with_hf_revision",
+        "policyengine_api_simulation.dataset_uri.with_hf_revision",
         lambda dataset_uri, revision: (
             f"{dataset_uri.rsplit('@', maxsplit=1)[0]}@{revision}"
         ),
@@ -428,7 +428,7 @@ def test_resolve_region_uses_dedicated_region_dataset_with_requested_version(
 
     assert resolution.code == "state/ca"
     assert resolution.dataset_reference == (
-        "hf://policyengine/policyengine-us-data/states/CA.h5@1.77.0"
+        "gs://policyengine-us-data/states/CA.h5@1.77.0"
     )
     assert resolution.scoping_strategy is None
 
@@ -437,13 +437,7 @@ def test_resolve_dataset_reference_applies_data_version_to_logical_dataset(
     monkeypatch,
 ):
     monkeypatch.setattr(
-        "policyengine_api_simulation.simulation_runtime.resolve_bundle_dataset_uri",
-        lambda country, requested_data: (
-            "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
-        ),
-    )
-    monkeypatch.setattr(
-        "policyengine_api_simulation.simulation_runtime.with_hf_revision",
+        "policyengine_api_simulation.dataset_uri.with_hf_revision",
         lambda dataset_uri, revision: (
             f"{dataset_uri.rsplit('@', maxsplit=1)[0]}@{revision}"
         ),
@@ -454,11 +448,17 @@ def test_resolve_dataset_reference_applies_data_version_to_logical_dataset(
             "us",
             {"data": "enhanced_cps_2024", "data_version": "1.77.0"},
         )
-        == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+        == "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
     )
 
 
 def test_resolve_region_scopes_us_place_from_parent_state_dataset(monkeypatch):
+    monkeypatch.setattr(
+        "policyengine_api_simulation.dataset_uri.with_hf_revision",
+        lambda dataset_uri, revision: (
+            f"{dataset_uri.rsplit('@', maxsplit=1)[0]}@{revision}"
+        ),
+    )
     scoping_strategy = object()
     place = SimpleNamespace(
         dataset_path=None,
@@ -483,12 +483,18 @@ def test_resolve_region_scopes_us_place_from_parent_state_dataset(monkeypatch):
 
     assert resolution.code == "place/CA-57000"
     assert resolution.dataset_reference == (
-        "hf://policyengine/policyengine-us-data/states/CA.h5@1.110.12"
+        "gs://policyengine-us-data/states/CA.h5@1.110.12"
     )
     assert resolution.scoping_strategy is scoping_strategy
 
 
-def test_resolve_region_scopes_uk_country_from_national_dataset():
+def test_resolve_region_scopes_uk_country_from_national_dataset(monkeypatch):
+    monkeypatch.setattr(
+        "policyengine_api_simulation.dataset_uri.with_hf_revision",
+        lambda dataset_uri, revision: (
+            f"{dataset_uri.rsplit('@', maxsplit=1)[0]}@{revision}"
+        ),
+    )
     scoping_strategy = object()
     england = SimpleNamespace(
         dataset_path=None,
@@ -513,7 +519,7 @@ def test_resolve_region_scopes_uk_country_from_national_dataset():
 
     assert resolution.code == "country/england"
     assert resolution.dataset_reference == (
-        "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3"
+        "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3"
     )
     assert resolution.scoping_strategy is scoping_strategy
 
