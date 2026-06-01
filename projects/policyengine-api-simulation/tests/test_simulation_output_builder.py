@@ -106,7 +106,7 @@ def _simulation_output_builder(
         simulation_params["include_cliffs"] = include_cliffs
 
     country_module = SimpleNamespace(
-        model=SimpleNamespace(version="1.700.0" if country == "us" else "2.88.20"),
+        model=SimpleNamespace(version="1.715.2" if country == "us" else "2.88.20"),
         economic_impact_analysis=economic_impact_analysis,
     )
     return SimulationOutputBuilder(
@@ -242,7 +242,7 @@ def test_builder_calls_policyengine_economic_impact_analysis():
         return analysis
 
     country_module = SimpleNamespace(
-        model=SimpleNamespace(version="1.700.0"),
+        model=SimpleNamespace(version="1.715.2"),
         economic_impact_analysis=economic_impact_analysis,
     )
     builder = SimulationOutputBuilder(
@@ -274,7 +274,7 @@ def test_builder_passes_include_cliffs_to_policyengine_economic_impact_analysis(
         return analysis
 
     country_module = SimpleNamespace(
-        model=SimpleNamespace(version="1.700.0"),
+        model=SimpleNamespace(version="1.715.2"),
         economic_impact_analysis=economic_impact_analysis,
     )
     builder = SimulationOutputBuilder(
@@ -328,7 +328,7 @@ def test_normalise_policy_converts_legacy_period_range_keys():
 
 def test_run_simulation_impl_core_builds_and_serializes_macro_output(monkeypatch):
     dataset = object()
-    country_module = SimpleNamespace(model=SimpleNamespace(version="1.700.0"))
+    country_module = SimpleNamespace(model=SimpleNamespace(version="1.715.2"))
     baseline_simulation = object()
     reform_simulation = object()
     build_calls = []
@@ -536,7 +536,7 @@ def test_builder_data_version_prefers_resolved_revision_then_dataset_metadata():
         return fake_analysis()
 
     country_module = SimpleNamespace(
-        model=SimpleNamespace(version="1.700.0"),
+        model=SimpleNamespace(version="1.715.2"),
         economic_impact_analysis=economic_impact_analysis,
     )
 

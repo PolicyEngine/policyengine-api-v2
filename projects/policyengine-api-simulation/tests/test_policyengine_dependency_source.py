@@ -17,9 +17,9 @@ COUNTRY_PACKAGES = {
 }
 MODAL_APP_MODULE = "src.modal.app"
 VERSION_ENV = {
-    "POLICYENGINE_VERSION": "4.12.1",
+    "POLICYENGINE_VERSION": "4.13.1",
     "POLICYENGINE_CORE_VERSION": "3.26.1",
-    "POLICYENGINE_US_VERSION": "1.700.0",
+    "POLICYENGINE_US_VERSION": "1.715.2",
     "POLICYENGINE_UK_VERSION": "2.88.20",
 }
 
@@ -152,7 +152,7 @@ print(json.dumps({
     output = result.stdout.strip()
     assert '"version_env":' in output
     assert '"POLICYENGINE_CORE_VERSION": "3.26.1"' in output
-    assert '"app_name": "policyengine-simulation-py4-12-1"' in output
+    assert '"app_name": "policyengine-simulation-py4-13-1"' in output
 
 
 def test_modal_app_remote_import_fails_clearly_without_version_env():

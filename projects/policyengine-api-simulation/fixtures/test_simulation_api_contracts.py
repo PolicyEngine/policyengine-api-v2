@@ -30,7 +30,7 @@ CURRENT_REQUIRED_BUDGET_KEYS = {
 }
 
 CURRENT_SINGLE_YEAR_MACRO_RESULT = {
-    "model_version": "1.700.0",
+    "model_version": "1.715.2",
     "data_version": "1.115.5",
     "budget": {
         "budgetary_impact": 70.0,
