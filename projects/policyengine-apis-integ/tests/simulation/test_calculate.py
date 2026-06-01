@@ -72,6 +72,24 @@ def poll_for_completion(
     raise TimeoutError(f"Job {job_id} did not complete within {max_wait_seconds}s")
 
 
+def submit_simulation_request(
+    client: Client | AuthenticatedClient,
+    request: SimulationRequest,
+) -> JobSubmitResponse:
+    response = submit_simulation_simulate_economy_comparison_post.sync_detailed(
+        client=client,
+        body=request,
+    )
+    assert response.status_code == HTTPStatus.OK, (
+        f"Simulation submit failed with status {response.status_code}: "
+        f"{response.content!r}"
+    )
+    assert isinstance(response.parsed, JobSubmitResponse), (
+        f"Unexpected response type: {type(response.parsed)}"
+    )
+    return response.parsed
+
+
 @pytest.mark.beta_only
 def test_calculate_default_model(
     client: Client | AuthenticatedClient,
@@ -99,12 +117,7 @@ def test_calculate_default_model(
     )
 
     # When - submit job
-    submit_response = submit_simulation_simulate_economy_comparison_post.sync(
-        client=client, body=request
-    )
-    assert isinstance(submit_response, JobSubmitResponse), (
-        f"Unexpected response type: {type(submit_response)}"
-    )
+    submit_response = submit_simulation_request(client, request)
     job_id = submit_response.job_id
 
     # When - poll for completion
@@ -156,12 +169,7 @@ def test_calculate_specific_model(
     )
 
     # When - submit job
-    submit_response = submit_simulation_simulate_economy_comparison_post.sync(
-        client=client, body=request
-    )
-    assert isinstance(submit_response, JobSubmitResponse), (
-        f"Unexpected response type: {type(submit_response)}"
-    )
+    submit_response = submit_simulation_request(client, request)
     assert submit_response.version == us_model_version, (
         f"Version mismatch: expected {us_model_version}, got {submit_response.version}"
     )
@@ -206,12 +214,7 @@ def test_calculate_uk_model(
     )
 
     # When - submit job
-    submit_response = submit_simulation_simulate_economy_comparison_post.sync(
-        client=client, body=request
-    )
-    assert isinstance(submit_response, JobSubmitResponse), (
-        f"Unexpected response type: {type(submit_response)}"
-    )
+    submit_response = submit_simulation_request(client, request)
     assert submit_response.version == uk_model_version, (
         f"Version mismatch: expected {uk_model_version}, got {submit_response.version}"
     )

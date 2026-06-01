@@ -81,7 +81,6 @@ def runtime_dataset_uri(
         return validate_hf_dataset_uri(dataset_uri)
 
     if selected_revision is not None:
-        with_hf_revision(dataset_uri, selected_revision)
         return f"gs://{bucket}/{parsed.path}@{selected_revision}"
 
     return f"gs://{bucket}/{parsed.path}"
