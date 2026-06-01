@@ -1,23 +1,26 @@
 #!/bin/bash
 # Deploy simulation API to Modal
 # Usage: ./modal-deploy-app.sh <modal-environment>
-# Required env vars: POLICYENGINE_US_VERSION, POLICYENGINE_UK_VERSION
+# Required env vars: POLICYENGINE_VERSION, POLICYENGINE_CORE_VERSION,
+# POLICYENGINE_US_VERSION, POLICYENGINE_UK_VERSION
+# These should come from the bundled policyengine.py release manifest.
 #
 # Deploys two apps:
 # 1. policyengine-simulation-gateway - Stable gateway with fixed URL
-# 2. policyengine-simulation-us{X}-uk{Y} - Versioned simulation app
+# 2. policyengine-simulation-py{X} - Versioned simulation app
 
 set -euo pipefail
 
 MODAL_ENV="${1:?Modal environment required}"
 
 # Generate versioned simulation app name (dots replaced with dashes for URL safety)
-US_VERSION_SAFE="${POLICYENGINE_US_VERSION//./-}"
-UK_VERSION_SAFE="${POLICYENGINE_UK_VERSION//./-}"
-SIMULATION_APP_NAME="policyengine-simulation-us${US_VERSION_SAFE}-uk${UK_VERSION_SAFE}"
+POLICYENGINE_VERSION_SAFE="${POLICYENGINE_VERSION//./-}"
+SIMULATION_APP_NAME="policyengine-simulation-py${POLICYENGINE_VERSION_SAFE}"
 
 echo "========================================"
 echo "Deploying to Modal environment: $MODAL_ENV"
+echo "  policyengine.py version: ${POLICYENGINE_VERSION}"
+echo "  policyengine-core version: ${POLICYENGINE_CORE_VERSION}"
 echo "  US version: ${POLICYENGINE_US_VERSION}"
 echo "  UK version: ${POLICYENGINE_UK_VERSION}"
 echo "========================================"
@@ -40,6 +43,7 @@ echo ""
 echo "Step 3: Updating version registries..."
 uv run python -m src.modal.utils.update_version_registry \
     --app-name "$SIMULATION_APP_NAME" \
+    --policyengine-version "${POLICYENGINE_VERSION}" \
     --us-version "${POLICYENGINE_US_VERSION}" \
     --uk-version "${POLICYENGINE_UK_VERSION}" \
     --environment "$MODAL_ENV"

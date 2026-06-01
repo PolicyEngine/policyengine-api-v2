@@ -1,7 +1,9 @@
 #!/bin/bash
-# Extract policyengine-us and policyengine-uk versions from uv.lock
+# Extract policyengine.py, policyengine-core, policyengine-us,
+# policyengine-us-data, policyengine-uk, and policyengine-uk-data versions.
 # Usage: ./modal-extract-versions.sh <project-dir>
-# Outputs: Sets us_version and uk_version in GITHUB_OUTPUT
+# Outputs: Sets policyengine_version, policyengine_core_version, us_version,
+# us_data_version, uk_version, and uk_data_version in GITHUB_OUTPUT
 
 set -euo pipefail
 
@@ -9,9 +11,4 @@ PROJECT_DIR="${1:-.}"
 
 cd "$PROJECT_DIR"
 
-US_VERSION=$(grep -A1 'name = "policyengine-us"' uv.lock | grep version | head -1 | sed 's/.*"\(.*\)".*/\1/')
-UK_VERSION=$(grep -A1 'name = "policyengine-uk"' uv.lock | grep version | head -1 | sed 's/.*"\(.*\)".*/\1/')
-
-echo "us_version=$US_VERSION" >> "$GITHUB_OUTPUT"
-echo "uk_version=$UK_VERSION" >> "$GITHUB_OUTPUT"
-echo "Deploying with policyengine-us=$US_VERSION, policyengine-uk=$UK_VERSION"
+uv run python -m src.modal.utils.extract_bundle_versions

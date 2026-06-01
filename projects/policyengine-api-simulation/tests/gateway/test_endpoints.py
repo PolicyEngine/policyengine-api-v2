@@ -8,6 +8,34 @@ simulation requests.
 import pytest
 from fastapi.testclient import TestClient
 
+from fixtures.gateway.test_endpoints import resolve_test_dataset_uri
+from policyengine_api_simulation.hf_dataset import HuggingFaceDatasetReferenceError
+
+
+def expected_bundle(
+    country: str,
+    model_version: str,
+    *,
+    dataset: str | None = None,
+    data_version: str | None = None,
+) -> dict[str, str | None]:
+    resolved_dataset = resolve_test_dataset_uri(country, dataset, data_version)
+    if (
+        data_version is not None
+        and resolved_dataset is not None
+        and resolved_dataset.startswith("hf://")
+    ):
+        resolved_dataset = (
+            f"{resolved_dataset.rsplit('@', maxsplit=1)[0]}@{data_version}"
+        )
+    bundle: dict[str, str | None] = {
+        "model_version": model_version,
+        "dataset": resolved_dataset,
+    }
+    if data_version is not None:
+        bundle["data_version"] = data_version
+    return {key: value for key, value in bundle.items() if value is not None}
+
 
 class TestGetAppName:
     """Tests for the get_app_name helper function."""
@@ -23,7 +51,7 @@ class TestGetAppName:
         # Given
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
         # When
@@ -31,7 +59,7 @@ class TestGetAppName:
 
         # Then
         assert resolved_version == "1.500.0"
-        assert app_name == "policyengine-simulation-us1-500-0-uk2-66-0"
+        assert app_name == "policyengine-simulation-py4-10-0"
 
     def test__given_us_country_with_version__then_returns_specified_app(
         self, mock_modal
@@ -45,7 +73,7 @@ class TestGetAppName:
 
         # Given
         mock_modal["dicts"]["simulation-api-us-versions"] = {
-            "1.459.0": "policyengine-simulation-us1-459-0-uk2-65-9"
+            "1.459.0": "policyengine-simulation-py3-9-0"
         }
 
         # When
@@ -53,7 +81,7 @@ class TestGetAppName:
 
         # Then
         assert resolved_version == "1.459.0"
-        assert app_name == "policyengine-simulation-us1-459-0-uk2-65-9"
+        assert app_name == "policyengine-simulation-py3-9-0"
 
     def test__given_uk_country__then_uses_uk_version_dict(self, mock_modal):
         """
@@ -66,7 +94,7 @@ class TestGetAppName:
         # Given
         mock_modal["dicts"]["simulation-api-uk-versions"] = {
             "latest": "2.66.0",
-            "2.66.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "2.66.0": "policyengine-simulation-py4-10-0",
         }
 
         # When
@@ -74,7 +102,7 @@ class TestGetAppName:
 
         # Then
         assert resolved_version == "2.66.0"
-        assert app_name == "policyengine-simulation-us1-500-0-uk2-66-0"
+        assert app_name == "policyengine-simulation-py4-10-0"
 
     def test__given_invalid_country__then_raises_value_error(self):
         """
@@ -118,7 +146,7 @@ class TestSubmitSimulationEndpoint:
         # Given
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
         request_body = {
@@ -134,7 +162,7 @@ class TestSubmitSimulationEndpoint:
         # Then
         assert response.status_code == 200
         assert mock_modal["func"].last_from_name_call == (
-            "policyengine-simulation-us1-500-0-uk2-66-0",
+            "policyengine-simulation-py4-10-0",
             "run_simulation",
         )
 
@@ -149,7 +177,7 @@ class TestSubmitSimulationEndpoint:
         # Given
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
         request_body = {
@@ -164,7 +192,7 @@ class TestSubmitSimulationEndpoint:
         # Then
         assert response.status_code == 200
         assert mock_modal["func"].last_from_name_call == (
-            "policyengine-simulation-us1-500-0-uk2-66-0",
+            "policyengine-simulation-py4-10-0",
             "run_simulation",
         )
         assert "time_period" not in mock_modal["func"].last_payload
@@ -181,7 +209,7 @@ class TestSubmitSimulationEndpoint:
         # Given
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
         request_body = {
@@ -201,6 +229,27 @@ class TestSubmitSimulationEndpoint:
         assert data["poll_url"] == "/jobs/mock-job-id-123"
         assert data["status"] == "submitted"
 
+    def test__given_submission_with_include_cliffs__then_forwards_worker_flag(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
+        }
+
+        response = client.post(
+            "/simulate/economy/comparison",
+            json={
+                "country": "us",
+                "scope": "macro",
+                "reform": {},
+                "include_cliffs": True,
+            },
+        )
+
+        assert response.status_code == 200
+        assert mock_modal["func"].last_payload["include_cliffs"] is True
+
     def test__given_submission_with_telemetry__then_preserves_run_id(
         self, mock_modal, client: TestClient
     ):
@@ -211,7 +260,7 @@ class TestSubmitSimulationEndpoint:
         """
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
         request_body = {
@@ -243,14 +292,14 @@ class TestSubmitSimulationEndpoint:
         # Given
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
         request_body = {
             "country": "us",
             "scope": "macro",
             "reform": {},
-            "data": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
+            "data": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
         }
 
         # When
@@ -259,18 +308,19 @@ class TestSubmitSimulationEndpoint:
         # Then
         assert response.status_code == 200
         data = response.json()
-        assert data["resolved_app_name"] == "policyengine-simulation-us1-500-0-uk2-66-0"
-        assert data["policyengine_bundle"] == {
-            "model_version": "1.500.0",
-            "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
-        }
+        assert data["resolved_app_name"] == "policyengine-simulation-py4-10-0"
+        assert data["policyengine_bundle"] == expected_bundle(
+            "us",
+            "1.500.0",
+            dataset="hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
+        )
 
-    def test__given_submission_with_alias_data__then_bundle_dataset_stays_unresolved(
+    def test__given_submission_with_alias_data__then_bundle_dataset_uses_manifest_uri(
         self, mock_modal, client: TestClient
     ):
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
         request_body = {
@@ -284,17 +334,91 @@ class TestSubmitSimulationEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-        assert (
-            data["policyengine_bundle"]["dataset"]
-            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
+        assert data["policyengine_bundle"]["dataset"] == resolve_test_dataset_uri(
+            "us", "enhanced_cps_2024"
         )
+
+    def test__given_submission_with_logical_revision__then_bundle_dataset_uses_revision(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
+        }
+
+        response = client.post(
+            "/simulate/economy/comparison",
+            json={
+                "country": "us",
+                "scope": "macro",
+                "reform": {},
+                "data": "enhanced_cps_2024@1.77.0",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["policyengine_bundle"]["dataset"] == (
+            "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+        )
+
+    def test__given_submission_with_conflicting_data_versions__then_returns_400(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
+        }
+
+        response = client.post(
+            "/simulate/economy/comparison",
+            json={
+                "country": "us",
+                "scope": "macro",
+                "reform": {},
+                "data": "enhanced_cps_2024@1.77.0",
+                "data_version": "1.78.2",
+            },
+        )
+
+        assert response.status_code == 400
+        assert mock_modal["func"].last_payload is None
+
+    def test__given_submission_with_invalid_hf_revision__then_returns_400_before_spawn(
+        self, mock_modal, client: TestClient, monkeypatch
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
+        }
+
+        def reject_revision(dataset_uri, revision):
+            raise HuggingFaceDatasetReferenceError("revision missing")
+
+        monkeypatch.setattr(
+            "policyengine_api_simulation.dataset_uri.with_hf_revision",
+            reject_revision,
+        )
+
+        response = client.post(
+            "/simulate/economy/comparison",
+            json={
+                "country": "us",
+                "scope": "macro",
+                "reform": {},
+                "data": "enhanced_cps_2024@does-not-exist",
+            },
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "revision missing"
+        assert mock_modal["func"].last_payload is None
 
     def test__given_submission_with_uk_alias_data__then_bundle_dataset_is_versioned_uri(
         self, mock_modal, client: TestClient
     ):
         mock_modal["dicts"]["simulation-api-uk-versions"] = {
             "latest": "2.66.0",
-            "2.66.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "2.66.0": "policyengine-simulation-py4-10-0",
         }
 
         request_body = {
@@ -308,9 +432,8 @@ class TestSubmitSimulationEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-        assert (
-            data["policyengine_bundle"]["dataset"]
-            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3"
+        assert data["policyengine_bundle"]["dataset"] == resolve_test_dataset_uri(
+            "uk", "enhanced_frs"
         )
 
     def test__given_submission_with_runtime_bundle__then_accepts_internal_provenance(
@@ -318,7 +441,7 @@ class TestSubmitSimulationEndpoint:
     ):
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
         request_body = {
@@ -338,11 +461,12 @@ class TestSubmitSimulationEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["policyengine_bundle"] == {
-            "model_version": "1.500.0",
-            "data_version": "1.78.2",
-            "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
-        }
+        assert data["policyengine_bundle"] == expected_bundle(
+            "us",
+            "1.500.0",
+            dataset="enhanced_cps_2024",
+            data_version="1.78.2",
+        )
         assert mock_modal["func"].last_payload["data_version"] == "1.78.2"
         assert "_runtime_bundle" not in mock_modal["func"].last_payload
         assert "_metadata" not in mock_modal["func"].last_payload
@@ -352,7 +476,7 @@ class TestSubmitSimulationEndpoint:
     ):
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
         request_body = {
@@ -379,7 +503,7 @@ class TestSubmitSimulationEndpoint:
         # Given
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
         submit_response = client.post(
@@ -388,7 +512,7 @@ class TestSubmitSimulationEndpoint:
                 "country": "us",
                 "scope": "macro",
                 "reform": {},
-                "data": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
+                "data": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
             },
         )
 
@@ -400,18 +524,19 @@ class TestSubmitSimulationEndpoint:
         data = response.json()
         assert data["status"] == "complete"
         assert "run_id" not in data
-        assert data["resolved_app_name"] == "policyengine-simulation-us1-500-0-uk2-66-0"
-        assert data["policyengine_bundle"] == {
-            "model_version": "1.500.0",
-            "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
-        }
+        assert data["resolved_app_name"] == "policyengine-simulation-py4-10-0"
+        assert data["policyengine_bundle"] == expected_bundle(
+            "us",
+            "1.500.0",
+            dataset="hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
+        )
 
     def test__given_submitted_job_with_telemetry__then_polling_echoes_run_id(
         self, mock_modal, client: TestClient
     ):
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
         submit_response = client.post(
@@ -469,7 +594,7 @@ class TestSubmitSimulationEndpoint:
     ):
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
         submit_response = client.post(
@@ -493,7 +618,7 @@ class TestSubmitSimulationEndpoint:
     ):
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
         submit_response = client.post(
@@ -521,7 +646,7 @@ class TestSubmitSimulationEndpoint:
     ):
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
         submit_response = client.post(
@@ -547,7 +672,7 @@ class TestSubmitSimulationEndpoint:
     ):
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
         submit_response = client.post(
@@ -579,7 +704,7 @@ class TestBudgetWindowBatchEndpoints:
     ):
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
         response = client.post(
@@ -597,7 +722,7 @@ class TestBudgetWindowBatchEndpoints:
 
         assert response.status_code == 200
         assert mock_modal["func"].last_from_name_call == (
-            "policyengine-simulation-us1-500-0-uk2-66-0",
+            "policyengine-simulation-py4-10-0",
             "run_budget_window_batch",
         )
         assert response.json() == {
@@ -606,18 +731,41 @@ class TestBudgetWindowBatchEndpoints:
             "poll_url": "/budget-window-jobs/mock-batch-job-id-123",
             "country": "us",
             "version": "1.500.0",
-            "resolved_app_name": "policyengine-simulation-us1-500-0-uk2-66-0",
-            "policyengine_bundle": {
-                "model_version": "1.500.0",
-            },
+            "resolved_app_name": "policyengine-simulation-py4-10-0",
+            "policyengine_bundle": expected_bundle("us", "1.500.0"),
         }
+
+    def test__given_budget_window_include_cliffs__then_returns_422(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
+        }
+
+        response = client.post(
+            "/simulate/economy/budget-window",
+            json={
+                "country": "us",
+                "region": "us",
+                "scope": "macro",
+                "reform": {},
+                "start_year": "2026",
+                "window_size": 3,
+                "include_cliffs": True,
+            },
+        )
+
+        assert response.status_code == 422
+        assert "cliff impacts are not supported" in response.text
+        assert mock_modal["func"].last_payload is None
 
     def test__given_budget_window_submission__then_initial_poll_returns_seed_state(
         self, mock_modal, client: TestClient
     ):
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
         submit_response = client.post(
@@ -653,10 +801,8 @@ class TestBudgetWindowBatchEndpoints:
             "child_jobs": {},
             "result": None,
             "error": None,
-            "resolved_app_name": "policyengine-simulation-us1-500-0-uk2-66-0",
-            "policyengine_bundle": {
-                "model_version": "1.500.0",
-            },
+            "resolved_app_name": "policyengine-simulation-py4-10-0",
+            "policyengine_bundle": expected_bundle("us", "1.500.0"),
             "run_id": "batch-run-123",
         }
 
@@ -680,7 +826,7 @@ class TestBudgetWindowBatchEndpoints:
                 region="us",
                 version="1.500.0",
                 target="general",
-                resolved_app_name="policyengine-simulation-us1-500-0-uk2-66-0",
+                resolved_app_name="policyengine-simulation-py4-10-0",
                 policyengine_bundle=PolicyEngineBundle(model_version="1.500.0"),
                 start_year="2026",
                 window_size=2,
@@ -863,7 +1009,7 @@ class TestBudgetWindowBatchEndpoints:
 
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-us1-500-0-uk2-66-0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
         submit_response = client.post(

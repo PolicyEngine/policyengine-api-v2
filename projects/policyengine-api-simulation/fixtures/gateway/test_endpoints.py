@@ -2,6 +2,107 @@
 
 import pytest
 
+TEST_APP_RELEASE_BUNDLE = {
+    "app_name": "policyengine-simulation-py4-10-0",
+    "policyengine_version": "4.10.0",
+    "us": {
+        "model_version": "1.500.0",
+        "data_version": "1.110.12",
+        "default_dataset": "enhanced_cps_2024",
+        "default_dataset_uri": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
+        "dataset_uris": {
+            "enhanced_cps_2024": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
+            "cps_2023": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.110.12",
+            "pooled_3_year_cps_2023": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.110.12",
+        },
+        "dataset_aliases": {
+            "enhanced_cps": "enhanced_cps_2024",
+            "enhanced_cps_2024": "enhanced_cps_2024",
+            "cps": "cps_2023",
+            "cps_2023": "cps_2023",
+            "pooled_cps": "pooled_3_year_cps_2023",
+            "pooled_3_year_cps_2023": "pooled_3_year_cps_2023",
+        },
+    },
+    "uk": {
+        "model_version": "2.66.0",
+        "data_version": "1.40.3",
+        "default_dataset": "enhanced_frs_2023_24",
+        "default_dataset_uri": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3",
+        "dataset_uris": {
+            "enhanced_frs_2023_24": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3",
+            "frs_2023_24": "hf://policyengine/policyengine-uk-data-private/frs_2023_24.h5@1.40.3",
+        },
+        "dataset_aliases": {
+            "enhanced_frs": "enhanced_frs_2023_24",
+            "enhanced_frs_2023_24": "enhanced_frs_2023_24",
+            "frs": "frs_2023_24",
+            "frs_2023_24": "frs_2023_24",
+        },
+    },
+}
+
+TEST_APP_NAMES = (
+    "policyengine-simulation-py4-10-0",
+    "policyengine-simulation-py3-9-0",
+)
+
+
+def _split_revision(dataset: str) -> tuple[str, str | None]:
+    return dataset.rsplit("@", maxsplit=1) if "@" in dataset else (dataset, None)
+
+
+def _runtime_dataset_uri(
+    country_bundle: dict,
+    dataset_uri: str,
+    revision: str | None = None,
+    use_bundle_default: bool = True,
+) -> str:
+    dataset_without_revision, existing_revision = _split_revision(dataset_uri)
+    selected_revision = revision or existing_revision
+
+    if dataset_without_revision.startswith("hf://policyengine/"):
+        remainder = dataset_without_revision.removeprefix("hf://policyengine/")
+        bucket, _, path = remainder.partition("/")
+        dataset_without_revision = f"gs://{bucket}/{path}"
+
+    if selected_revision is None and use_bundle_default:
+        selected_revision = country_bundle["data_version"]
+
+    if dataset_without_revision.startswith(("hf://", "gs://")):
+        return f"{dataset_without_revision}@{selected_revision}"
+    return dataset_uri
+
+
+def resolve_test_dataset_uri(
+    country: str,
+    dataset: str | None,
+    data_version: str | None = None,
+) -> str | None:
+    country_bundle = TEST_APP_RELEASE_BUNDLE[country]
+    if dataset is None:
+        return _runtime_dataset_uri(
+            country_bundle,
+            country_bundle["default_dataset_uri"],
+            data_version,
+        )
+    if "://" in dataset:
+        return _runtime_dataset_uri(
+            country_bundle,
+            dataset,
+            data_version,
+            use_bundle_default=dataset.startswith("hf://"),
+        )
+
+    dataset_name, revision = _split_revision(dataset)
+    dataset_name = country_bundle["dataset_aliases"].get(dataset_name, dataset_name)
+    dataset_uri = country_bundle["dataset_uris"].get(dataset_name, dataset_name)
+    if revision is not None and dataset_uri == dataset_name:
+        return dataset
+    if dataset_uri == dataset_name:
+        return dataset_uri
+    return _runtime_dataset_uri(country_bundle, dataset_uri, revision or data_version)
+
 
 class MockDict:
     """Mock for Modal.Dict to simulate version registry."""
@@ -103,11 +204,16 @@ class MockModalException:
 @pytest.fixture
 def mock_modal(monkeypatch):
     """Patch Modal calls in the gateway endpoints module."""
+    from policyengine_api_simulation import dataset_uri
     from src.modal import budget_window_state
     from src.modal.gateway import endpoints
 
     mock_func = MockFunction()
-    mock_dicts = {}
+    mock_dicts = {
+        "simulation-api-app-release-bundles": {
+            app_name: TEST_APP_RELEASE_BUNDLE for app_name in TEST_APP_NAMES
+        }
+    }
     MockFunctionCall.registry = {}
     MockFunctionCall.from_id_errors = {}
 
@@ -134,6 +240,20 @@ def mock_modal(monkeypatch):
 
     monkeypatch.setattr(endpoints, "modal", MockModal)
     monkeypatch.setattr(budget_window_state, "modal", MockModal)
+    monkeypatch.setattr(
+        dataset_uri,
+        "with_hf_revision",
+        lambda dataset_uri, revision: (
+            f"{dataset_uri.rsplit('@', maxsplit=1)[0]}@{revision}"
+            if dataset_uri.startswith("hf://")
+            else dataset_uri
+        ),
+    )
+    monkeypatch.setattr(
+        dataset_uri,
+        "validate_hf_dataset_uri",
+        lambda dataset_uri: dataset_uri,
+    )
 
     return {
         "func": mock_func,

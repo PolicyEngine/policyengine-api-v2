@@ -2,7 +2,7 @@
 PolicyEngine Simulation - Versioned Modal App
 
 This app contains the heavy simulation workload with snapshotted models.
-Each deployment creates a versioned app (e.g., policyengine-simulation-us1-459-0-uk2-65-9).
+Each deployment creates a versioned app (e.g., policyengine-simulation-py4-10-0).
 
 The gateway app (policyengine-simulation-gateway) routes requests to these versioned apps.
 """
@@ -11,27 +11,66 @@ import modal
 import os
 
 from src.modal._image_setup import snapshot_models
+from src.modal.dependency_pins import project_dependency_pin
 from src.modal.logging_redaction import redact_params_for_logging
-
-# Get versions from environment or use defaults
-US_VERSION = os.environ.get("POLICYENGINE_US_VERSION", "1.715.2")
-UK_VERSION = os.environ.get("POLICYENGINE_UK_VERSION", "2.88.20")
+from policyengine_api_simulation.release_bundle import get_bundled_country_model_version
 
 
-def get_app_name(us_version: str, uk_version: str) -> str:
+def _version_from_env_or_local_dependency(env_var: str, package: str) -> str:
+    value = os.environ.get(env_var)
+    if value:
+        return value
+    if modal.is_local():
+        return project_dependency_pin(package)
+    raise RuntimeError(
+        f"{env_var} must be set in the Modal image environment for remote "
+        "simulation workers."
+    )
+
+
+def _version_from_env_or_local_bundle(env_var: str, country: str) -> str:
+    value = os.environ.get(env_var)
+    if value:
+        return value
+    if modal.is_local():
+        return get_bundled_country_model_version(country)
+    raise RuntimeError(
+        f"{env_var} must be set in the Modal image environment for remote "
+        "simulation workers."
+    )
+
+
+POLICYENGINE_VERSION = _version_from_env_or_local_dependency(
+    "POLICYENGINE_VERSION",
+    "policyengine",
+)
+POLICYENGINE_CORE_VERSION = _version_from_env_or_local_dependency(
+    "POLICYENGINE_CORE_VERSION",
+    "policyengine-core",
+)
+US_VERSION = _version_from_env_or_local_bundle("POLICYENGINE_US_VERSION", "us")
+UK_VERSION = _version_from_env_or_local_bundle("POLICYENGINE_UK_VERSION", "uk")
+VERSION_ENV = {
+    "POLICYENGINE_VERSION": POLICYENGINE_VERSION,
+    "POLICYENGINE_CORE_VERSION": POLICYENGINE_CORE_VERSION,
+    "POLICYENGINE_US_VERSION": US_VERSION,
+    "POLICYENGINE_UK_VERSION": UK_VERSION,
+}
+
+
+def get_app_name(policyengine_version: str) -> str:
     """
-    Generate versioned app name from package versions.
+    Generate versioned app name from the policyengine.py package version.
 
     Replaces dots with dashes for URL safety.
-    Example: us1.459.0, uk2.65.9 -> policyengine-simulation-us1-459-0-uk2-65-9
+    Example: 4.10.0 -> policyengine-simulation-py4-10-0
     """
-    us_safe = us_version.replace(".", "-")
-    uk_safe = uk_version.replace(".", "-")
-    return f"policyengine-simulation-us{us_safe}-uk{uk_safe}"
+    policyengine_safe = policyengine_version.replace(".", "-")
+    return f"policyengine-simulation-py{policyengine_safe}"
 
 
 # App name can be overridden via environment variable, otherwise generated from versions
-APP_NAME = os.environ.get("MODAL_APP_NAME", get_app_name(US_VERSION, UK_VERSION))
+APP_NAME = os.environ.get("MODAL_APP_NAME", get_app_name(POLICYENGINE_VERSION))
 
 # App definition with versioned name
 app = modal.App(APP_NAME)
@@ -49,11 +88,18 @@ simulation_image = (
     .pip_install(
         f"policyengine-us=={US_VERSION}",
         f"policyengine-uk=={UK_VERSION}",
-        "policyengine==0.13.0",
+        f"policyengine=={POLICYENGINE_VERSION}",
+        f"policyengine-core=={POLICYENGINE_CORE_VERSION}",
+        "fastapi>=0.115.0",
         "tables>=3.10.2",
         "logfire",
     )
-    .add_local_python_source("src.modal", copy=True)
+    .env(VERSION_ENV)
+    .add_local_python_source(
+        "src.modal",
+        "policyengine_api_simulation",
+        copy=True,
+    )
     .run_function(snapshot_models)
 )
 
@@ -92,7 +138,7 @@ def run_simulation(params: dict) -> dict:
     """
     import logfire
 
-    from src.modal.simulation import run_simulation_impl
+    from policyengine_api_simulation.simulation_runtime import run_simulation_impl
 
     configure_logfire()
 

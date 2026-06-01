@@ -1,63 +1,28 @@
-"""Fixtures and helpers for country package updater script tests."""
+"""Fixtures and helpers for policyengine package updater script tests."""
 
 from __future__ import annotations
 
-import importlib.util
 import os
 import subprocess
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 
 from fixtures.test_modal_scripts import REPO_ROOT, SCRIPTS_DIR
 
-
-SCRIPT = SCRIPTS_DIR / "update-country-package.sh"
-CHANGELOG_SCRIPT = SCRIPTS_DIR / "check-country-package-updates.py"
-SAMPLE_CHANGELOG = """
-# Changelog
-
-## 1.2.2
-### Added
-- New variable
-
-### Fixed
-- Important bug fix
-
-## [1.2.1]
-### Changed
-- Existing calculation changed
-
-## 1.2.0
-### Added
-- Old change
-"""
-
-
-@pytest.fixture
-def changelog_module() -> ModuleType:
-    spec = importlib.util.spec_from_file_location(
-        "check_country_package_updates", CHANGELOG_SCRIPT
-    )
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+SCRIPT = SCRIPTS_DIR / "update-policyengine-package.sh"
 
 
 @pytest.fixture
 def fake_repo(tmp_path: Path) -> Path:
     project = tmp_path / "simulation"
-    modal_dir = project / "src" / "modal"
-    modal_dir.mkdir(parents=True)
+    project.mkdir(parents=True)
 
     (project / "pyproject.toml").write_text(
         "\n".join(
             [
                 "[project]",
-                'dependencies = ["policyengine-us==1.0.0", "policyengine-uk==2.0.0"]',
+                'dependencies = ["policyengine==4.0.0", "policyengine-us==1.0.0", "policyengine-uk==2.0.0"]',
             ]
         ),
         encoding="utf-8",
@@ -65,6 +30,10 @@ def fake_repo(tmp_path: Path) -> Path:
     (project / "uv.lock").write_text(
         "\n".join(
             [
+                "[[package]]",
+                'name = "policyengine"',
+                'version = "4.0.0"',
+                "",
                 "[[package]]",
                 'name = "policyengine-us"',
                 'version = "1.0.0"',
@@ -74,23 +43,6 @@ def fake_repo(tmp_path: Path) -> Path:
                 'version = "2.0.0"',
             ]
         ),
-        encoding="utf-8",
-    )
-    (modal_dir / "app.py").write_text(
-        "\n".join(
-            [
-                "import os",
-                'US_VERSION = os.environ.get("POLICYENGINE_US_VERSION", "1.0.0")',
-                'UK_VERSION = os.environ.get("POLICYENGINE_UK_VERSION", "2.0.0")',
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    helper_dir = tmp_path / ".github" / "scripts"
-    helper_dir.mkdir(parents=True)
-    (helper_dir / "check-country-package-updates.py").write_text(
-        '#!/usr/bin/env python3\nprint("### Added\\n- Example upstream change")\n',
         encoding="utf-8",
     )
 
@@ -168,18 +120,35 @@ exit 0
     )
 
 
-def install_fake_uv(fake_bin: Path, *, log: Path) -> None:
+def install_fake_uv(
+    fake_bin: Path,
+    *,
+    log: Path,
+    bundled_us_version: str = "1.1.0",
+    bundled_uk_version: str = "2.1.0",
+) -> None:
     write_executable(
         fake_bin / "uv",
         f"""#!/usr/bin/env bash
 set -euo pipefail
 printf 'uv %s\\n' "$*" >> "{log}"
+
+if [[ "$1" == "run" && "$2" == "python" && "$3" == "-m" && "$4" == "src.modal.utils.extract_bundle_versions" ]]; then
+  echo "policyengine_version=4.1.0"
+  echo "policyengine_core_version=3.26.1"
+  echo "us_version={bundled_us_version}"
+  echo "us_data_version=1.10.0"
+  echo "uk_version={bundled_uk_version}"
+  echo "uk_data_version=1.20.0"
+  exit 0
+fi
+
 exit 0
 """,
     )
 
 
-def updater_env(fake_bin: Path, fake_repo: Path, **extra: str) -> dict[str, str]:
+def updater_env(fake_bin: Path, **extra: str) -> dict[str, str]:
     env = os.environ.copy()
     env.update(
         {
