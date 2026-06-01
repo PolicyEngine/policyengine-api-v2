@@ -363,6 +363,25 @@ class TestModalSetupEnvironments:
         assert result.returncode == 0, f"Syntax error: {result.stderr}"
 
 
+class TestPublishSimulationApiTag:
+    """Tests for publish-simulation-api-tag.sh"""
+
+    script = SCRIPTS_DIR / "publish-simulation-api-tag.sh"
+
+    def test_script_exists(self):
+        """Script file should exist."""
+        assert self.script.exists(), f"Script not found at {self.script}"
+
+    def test_script_syntax(self):
+        """Script should have valid bash syntax."""
+        result = subprocess.run(
+            ["bash", "-n", str(self.script)],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"Syntax error: {result.stderr}"
+
+
 class TestModalRunIntegTests:
     """Tests for modal-run-integ-tests.sh"""
 
@@ -446,7 +465,7 @@ class TestModalRunIntegTests:
         fake_bin.mkdir()
         fake_uv = fake_bin / "uv"
         fake_uv.write_text(
-            '#!/bin/bash\n'
+            "#!/bin/bash\n"
             'printf "%s|base=%s|us=%s|uk=%s\\n" "$*" '
             '"${simulation_integ_test_base_url:-}" '
             '"${simulation_integ_test_us_model_version:-}" '

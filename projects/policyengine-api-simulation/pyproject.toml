@@ -34,6 +34,40 @@ policyengine-fastapi = { path = "../../libs/policyengine-fastapi", editable = tr
 [project.optional-dependencies]
 test = [ "pytest>=8.3.4", "pytest-asyncio>=0.25.3", "pytest-cov>=6.1.1",]
 build = [ "pyright>=1.1.401", "black>=25.1.0", "openapi-python-client>=0.21.6",]
+release = [ "towncrier>=24.8.0",]
+
+[tool.towncrier]
+package = "policyengine_api_simulation"
+directory = "changelog.d"
+filename = "CHANGELOG.md"
+title_format = "## [{version}] - {project_date}"
+issue_format = ""
+underlines = ["", "", ""]
+
+[[tool.towncrier.type]]
+directory = "breaking"
+name = "Breaking changes"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "added"
+name = "Added"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "changed"
+name = "Changed"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "fixed"
+name = "Fixed"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "removed"
+name = "Removed"
+showcontent = true
 
 [tool.pytest.ini_options]
 pythonpath = [

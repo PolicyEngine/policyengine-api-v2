@@ -76,6 +76,7 @@ def fake_repo(tmp_path: Path) -> Path:
         ),
         encoding="utf-8",
     )
+    (project / "changelog.d").mkdir()
     (modal_dir / "app.py").write_text(
         "\n".join(
             [
