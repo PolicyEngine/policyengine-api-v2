@@ -8,6 +8,7 @@ TEST_APP_RELEASE_BUNDLE = {
     "us": {
         "model_version": "1.500.0",
         "data_version": "1.110.12",
+        "data_artifact_revision": "1.110.12",
         "default_dataset": "enhanced_cps_2024",
         "default_dataset_uri": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
         "dataset_uris": {
@@ -27,6 +28,7 @@ TEST_APP_RELEASE_BUNDLE = {
     "uk": {
         "model_version": "2.66.0",
         "data_version": "1.40.3",
+        "data_artifact_revision": "1.40.3",
         "default_dataset": "enhanced_frs_2023_24",
         "default_dataset_uri": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3",
         "dataset_uris": {
@@ -62,6 +64,11 @@ def _runtime_dataset_uri(
     selected_revision = revision or existing_revision
 
     if dataset_without_revision.startswith("hf://policyengine/"):
+        if (
+            selected_revision == country_bundle.get("data_artifact_revision")
+            and revision is None
+        ):
+            selected_revision = country_bundle["data_version"]
         remainder = dataset_without_revision.removeprefix("hf://policyengine/")
         bucket, _, path = remainder.partition("/")
         dataset_without_revision = f"gs://{bucket}/{path}"

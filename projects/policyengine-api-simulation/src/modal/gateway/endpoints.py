@@ -76,6 +76,11 @@ def _country_bundle_data_version(country_bundle: dict) -> str | None:
     return data_version if isinstance(data_version, str) else None
 
 
+def _country_bundle_data_artifact_revision(country_bundle: dict) -> str | None:
+    artifact_revision = country_bundle.get("data_artifact_revision")
+    return artifact_revision if isinstance(artifact_revision, str) else None
+
+
 def _resolve_dataset_uri_from_app_bundle(
     *,
     app_bundle: dict,
@@ -93,9 +98,9 @@ def _resolve_dataset_uri_from_app_bundle(
             return None
         return runtime_dataset_uri(
             default_uri,
-            default_revision=(
-                requested_data_version or _country_bundle_data_version(country_bundle)
-            ),
+            default_revision=_country_bundle_data_version(country_bundle),
+            override_revision=requested_data_version,
+            artifact_revision=_country_bundle_data_artifact_revision(country_bundle),
         )
 
     requested_without_revision, requested_revision = _split_requested_revision(
@@ -110,16 +115,30 @@ def _resolve_dataset_uri_from_app_bundle(
         if isinstance(country_bundle, dict)
         else None
     )
+    artifact_revision = (
+        _country_bundle_data_artifact_revision(country_bundle)
+        if isinstance(country_bundle, dict)
+        else None
+    )
 
     if "://" in requested_without_revision:
+        runtime_input = (
+            requested_data
+            if requested_revision is not None and requested_data_version is None
+            else requested_without_revision
+        )
         if requested_without_revision.startswith("hf://"):
             return runtime_dataset_uri(
-                requested_without_revision,
-                default_revision=revision or bundle_data_version,
+                runtime_input,
+                default_revision=bundle_data_version,
+                override_revision=(
+                    revision if requested_data_version is not None else None
+                ),
+                artifact_revision=artifact_revision,
             )
         if requested_without_revision.startswith("gs://"):
             return runtime_dataset_uri(
-                requested_without_revision,
+                runtime_input,
                 default_revision=revision,
             )
         return requested_data
@@ -135,7 +154,9 @@ def _resolve_dataset_uri_from_app_bundle(
     if "://" in dataset_name:
         return runtime_dataset_uri(
             dataset_name,
-            default_revision=revision or bundle_data_version,
+            default_revision=bundle_data_version,
+            override_revision=revision,
+            artifact_revision=artifact_revision,
         )
 
     dataset_uris = country_bundle.get("dataset_uris")
@@ -146,7 +167,9 @@ def _resolve_dataset_uri_from_app_bundle(
         return requested_data
     return runtime_dataset_uri(
         dataset_uri,
-        default_revision=revision or bundle_data_version,
+        default_revision=bundle_data_version,
+        override_revision=revision,
+        artifact_revision=artifact_revision,
     )
 
 

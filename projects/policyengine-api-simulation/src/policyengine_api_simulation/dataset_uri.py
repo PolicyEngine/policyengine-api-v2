@@ -60,11 +60,13 @@ def runtime_dataset_uri(
     dataset_uri: str,
     *,
     default_revision: str | None = None,
+    override_revision: str | None = None,
+    artifact_revision: str | None = None,
 ) -> str:
     """Convert PolicyEngine HF data artifacts to their GCS runtime URI."""
 
     if dataset_uri.startswith("gs://"):
-        return _with_gs_revision(dataset_uri, default_revision)
+        return _with_gs_revision(dataset_uri, override_revision or default_revision)
 
     if not dataset_uri.startswith("hf://"):
         return dataset_uri
@@ -74,9 +76,21 @@ def runtime_dataset_uri(
         return dataset_uri
 
     bucket = _policyengine_gcs_bucket_for_hf_repo(parsed.repo_id)
-    selected_revision = default_revision or parsed.revision
+    selected_revision = parsed.revision
+    if override_revision is not None:
+        selected_revision = override_revision
+    elif (
+        default_revision is not None
+        and artifact_revision is not None
+        and parsed.revision == artifact_revision
+    ):
+        selected_revision = default_revision
+    elif selected_revision is None:
+        selected_revision = default_revision
     if bucket is None:
-        if default_revision is not None:
+        if override_revision is not None:
+            return with_hf_revision(dataset_uri, override_revision)
+        if default_revision is not None and parsed.revision is None:
             return with_hf_revision(dataset_uri, default_revision)
         return validate_hf_dataset_uri(dataset_uri)
 

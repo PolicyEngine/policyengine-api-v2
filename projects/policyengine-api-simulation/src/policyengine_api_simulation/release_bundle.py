@@ -51,6 +51,7 @@ class CountryReleaseBundle:
     model_version: str
     data_package_name: str
     data_version: str
+    data_artifact_revision: str
     default_dataset: str
     default_dataset_uri: str
     dataset_uris: Mapping[str, str]
@@ -91,6 +92,7 @@ def get_country_release_bundle(country: str) -> CountryReleaseBundle:
         model_version=manifest.model_package.version,
         data_package_name=manifest.data_package.name,
         data_version=manifest.data_package.version,
+        data_artifact_revision=_artifact_revision(manifest.data_package),
         default_dataset=manifest.default_dataset,
         default_dataset_uri=manifest.default_dataset_uri,
         dataset_uris=dataset_uris,
@@ -154,7 +156,9 @@ def resolve_runtime_bundle_dataset_uri(
     if requested_data is None:
         return runtime_dataset_uri(
             bundle.default_dataset_uri,
-            default_revision=requested_data_version or bundle.data_version,
+            default_revision=bundle.data_version,
+            override_revision=requested_data_version,
+            artifact_revision=bundle.data_artifact_revision,
         )
 
     requested_without_revision, requested_revision = split_dataset_revision(
@@ -166,12 +170,21 @@ def resolve_runtime_bundle_dataset_uri(
     )
 
     if "://" in requested_without_revision:
-        default_revision = revision
-        if requested_without_revision.startswith("hf://"):
-            default_revision = revision or bundle.data_version
+        override_revision = revision if requested_data_version is not None else None
+        runtime_input = (
+            requested_data
+            if requested_revision is not None and requested_data_version is None
+            else requested_without_revision
+        )
         return runtime_dataset_uri(
-            requested_without_revision,
-            default_revision=default_revision,
+            runtime_input,
+            default_revision=(
+                bundle.data_version
+                if requested_without_revision.startswith("hf://")
+                else None
+            ),
+            override_revision=override_revision,
+            artifact_revision=bundle.data_artifact_revision,
         )
 
     dataset_uri = resolve_bundle_dataset_uri(country, requested_without_revision)
@@ -185,5 +198,7 @@ def resolve_runtime_bundle_dataset_uri(
 
     return runtime_dataset_uri(
         dataset_uri,
-        default_revision=revision or bundle.data_version,
+        default_revision=bundle.data_version,
+        override_revision=revision,
+        artifact_revision=bundle.data_artifact_revision,
     )

@@ -23,8 +23,32 @@ def test_runtime_dataset_uri_converts_policyengine_hf_to_gcs_without_hf_validati
             "hf://policyengine/policyengine-uk-data-private/"
             "enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f",
             default_revision="1.55.10",
+            artifact_revision="655dd07e4bb9c777b00dac044949611f1feb824f",
         )
         == "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.55.10"
+    )
+
+
+def test_runtime_dataset_uri_preserves_explicit_policyengine_hf_data_version():
+    assert (
+        runtime_dataset_uri(
+            "hf://policyengine/policyengine-us-data/states/CA.h5@1.110.12",
+            default_revision="1.115.5",
+            artifact_revision="d47fb5475144260a75467d2f2e22b2d5d53d4d57",
+        )
+        == "gs://policyengine-us-data/states/CA.h5@1.110.12"
+    )
+
+
+def test_runtime_dataset_uri_override_revision_wins_for_policyengine_hf_uri():
+    assert (
+        runtime_dataset_uri(
+            "hf://policyengine/policyengine-us-data/states/CA.h5@1.110.12",
+            default_revision="1.115.5",
+            override_revision="1.77.0",
+            artifact_revision="d47fb5475144260a75467d2f2e22b2d5d53d4d57",
+        )
+        == "gs://policyengine-us-data/states/CA.h5@1.77.0"
     )
 
 
@@ -40,7 +64,7 @@ def test_runtime_dataset_uri_still_validates_unmanaged_hf_revisions(monkeypatch)
     assert (
         runtime_dataset_uri(
             "hf://external/example-data/file.h5@old",
-            default_revision="new",
+            override_revision="new",
         )
         == "hf://external/example-data/file.h5@new"
     )

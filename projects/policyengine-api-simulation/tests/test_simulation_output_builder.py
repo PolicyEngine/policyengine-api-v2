@@ -433,6 +433,43 @@ def test_resolve_region_uses_dedicated_region_dataset_with_requested_version(
     assert resolution.scoping_strategy is None
 
 
+def test_resolve_region_maps_bundle_manifest_revision_to_data_version(monkeypatch):
+    manifest_revision = "d47fb5475144260a75467d2f2e22b2d5d53d4d57"
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime.get_country_release_bundle",
+        lambda country: SimpleNamespace(
+            data_version="1.115.5",
+            data_artifact_revision=manifest_revision,
+        ),
+    )
+    state = SimpleNamespace(
+        dataset_path=(
+            f"hf://policyengine/policyengine-us-data/states/UT.h5@{manifest_revision}"
+        ),
+        scoping_strategy=None,
+        parent_code="us",
+    )
+    country_module = SimpleNamespace(
+        model=SimpleNamespace(
+            get_region=lambda code: state if code == "state/ut" else None
+        )
+    )
+
+    resolution = _resolve_region(
+        country_module=country_module,
+        country="us",
+        params={
+            "region": "state/ut",
+            "data": "gs://policyengine-us-data/states/UT.h5",
+        },
+    )
+
+    assert resolution.code == "state/ut"
+    assert resolution.dataset_reference == (
+        "gs://policyengine-us-data/states/UT.h5@1.115.5"
+    )
+
+
 def test_resolve_dataset_reference_applies_data_version_to_logical_dataset(
     monkeypatch,
 ):
@@ -484,6 +521,46 @@ def test_resolve_region_scopes_us_place_from_parent_state_dataset(monkeypatch):
     assert resolution.code == "place/CA-57000"
     assert resolution.dataset_reference == (
         "gs://policyengine-us-data/states/CA.h5@1.110.12"
+    )
+    assert resolution.scoping_strategy is scoping_strategy
+
+
+def test_resolve_region_maps_parent_manifest_revision_to_data_version(monkeypatch):
+    manifest_revision = "d47fb5475144260a75467d2f2e22b2d5d53d4d57"
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime.get_country_release_bundle",
+        lambda country: SimpleNamespace(
+            data_version="1.115.5",
+            data_artifact_revision=manifest_revision,
+        ),
+    )
+    scoping_strategy = object()
+    place = SimpleNamespace(
+        dataset_path=None,
+        scoping_strategy=scoping_strategy,
+        parent_code="state/ca",
+    )
+    state = SimpleNamespace(
+        dataset_path=(
+            f"hf://policyengine/policyengine-us-data/states/CA.h5@{manifest_revision}"
+        ),
+        scoping_strategy=None,
+        parent_code="us",
+    )
+    regions = {"place/CA-57000": place, "state/ca": state}
+    country_module = SimpleNamespace(
+        model=SimpleNamespace(get_region=lambda code: regions.get(code))
+    )
+
+    resolution = _resolve_region(
+        country_module=country_module,
+        country="us",
+        params={"region": "place/ca-57000"},
+    )
+
+    assert resolution.code == "place/CA-57000"
+    assert resolution.dataset_reference == (
+        "gs://policyengine-us-data/states/CA.h5@1.115.5"
     )
     assert resolution.scoping_strategy is scoping_strategy
 

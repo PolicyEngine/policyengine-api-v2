@@ -17,6 +17,7 @@ from typing import Any, Iterator
 
 from policyengine_api_simulation.dataset_uri import runtime_dataset_uri
 from policyengine_api_simulation.release_bundle import (
+    get_country_release_bundle,
     resolve_runtime_bundle_dataset_uri,
 )
 from policyengine_api_simulation.simulation_output_builder import (
@@ -269,10 +270,13 @@ def _region_parent_dataset_reference(
         parent_region = country_module.model.get_region(parent_code)
         parent_dataset_path = getattr(parent_region, "dataset_path", None)
         if isinstance(parent_dataset_path, str):
+            bundle = get_country_release_bundle(country)
             requested_data_version = _requested_data_version(params)
             return runtime_dataset_uri(
                 parent_dataset_path,
-                default_revision=requested_data_version,
+                default_revision=bundle.data_version,
+                override_revision=requested_data_version,
+                artifact_revision=bundle.data_artifact_revision,
             )
     return _resolve_dataset_reference(country, params)
 
@@ -299,9 +303,12 @@ def _resolve_region(
     dataset_path = getattr(region, "dataset_path", None)
     requested_data_version = _requested_data_version(params)
     if isinstance(dataset_path, str):
+        bundle = get_country_release_bundle(country)
         dataset_reference = runtime_dataset_uri(
             dataset_path,
-            default_revision=requested_data_version,
+            default_revision=bundle.data_version,
+            override_revision=requested_data_version,
+            artifact_revision=bundle.data_artifact_revision,
         )
     else:
         dataset_reference = _region_parent_dataset_reference(

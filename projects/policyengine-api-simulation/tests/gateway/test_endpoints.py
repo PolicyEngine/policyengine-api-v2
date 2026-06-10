@@ -396,11 +396,11 @@ class TestSubmitSimulationEndpoint:
             "1.500.0": "policyengine-simulation-py4-10-0",
         }
 
-        def reject_revision(dataset_uri, revision):
+        def reject_revision(dataset_uri):
             raise HuggingFaceDatasetReferenceError("revision missing")
 
         monkeypatch.setattr(
-            "policyengine_api_simulation.dataset_uri.with_hf_revision",
+            "policyengine_api_simulation.dataset_uri.validate_hf_dataset_uri",
             reject_revision,
         )
 
@@ -457,6 +457,9 @@ class TestSubmitSimulationEndpoint:
         bundle["policyengine_version"] = "4.13.1"
         bundle["uk"]["model_version"] = "2.88.20"
         bundle["uk"]["data_version"] = "1.55.10"
+        bundle["uk"]["data_artifact_revision"] = (
+            "655dd07e4bb9c777b00dac044949611f1feb824f"
+        )
         bundle["uk"]["default_dataset_uri"] = manifest_uri
         bundle["uk"]["dataset_uris"]["enhanced_frs_2023_24"] = manifest_uri
         mock_modal["dicts"]["simulation-api-uk-versions"] = {

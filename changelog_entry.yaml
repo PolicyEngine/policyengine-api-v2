@@ -1,4 +1,5 @@
 - bump: patch
   changes:
-    changed:
-      - Bumped policyengine-core minimum version to 3.23.5 for pandas 3.0 compatibility
+    fixed:
+      - Resolved PolicyEngine-managed regional datasets using bundled data versions instead of release-manifest commit hashes when loading from GCS
+      - Added a Modal app-release bundle backfill for missing data artifact revisions

@@ -19,12 +19,18 @@ Usage:
         --us-version 1.459.0 \
         --uk-version 2.65.9 \
         --environment staging
+
+    uv run python -m src.modal.utils.update_version_registry \
+        --environment staging \
+        --backfill-app-release-bundles
 """
 
 import argparse
 import modal
 from packaging.version import InvalidVersion, Version
-from typing import TypedDict
+from typing import Any, TypedDict
+
+from policyengine_api_simulation.dataset_uri import split_dataset_revision
 
 POLICYENGINE_VERSION_DICT_NAME = "simulation-api-policyengine-versions"
 US_VERSION_DICT_NAME = "simulation-api-us-versions"
@@ -38,6 +44,7 @@ class CountryBundleMetadata(TypedDict):
     model_version: str
     data_package_name: str
     data_version: str
+    data_artifact_revision: str
     default_dataset: str
     default_dataset_uri: str
     dataset_uris: dict[str, str]
@@ -149,6 +156,7 @@ def _country_bundle_metadata(country: str) -> CountryBundleMetadata:
         "model_version": bundle.model_version,
         "data_package_name": bundle.data_package_name,
         "data_version": bundle.data_version,
+        "data_artifact_revision": bundle.data_artifact_revision,
         "default_dataset": bundle.default_dataset,
         "default_dataset_uri": bundle.default_dataset_uri,
         "dataset_uris": dict(bundle.dataset_uris),
@@ -167,6 +175,91 @@ def build_app_release_bundle_metadata(
         "us": _country_bundle_metadata("us"),
         "uk": _country_bundle_metadata("uk"),
     }
+
+
+def _dataset_revision(dataset_uri: object) -> str | None:
+    if not isinstance(dataset_uri, str):
+        return None
+    try:
+        _, revision = split_dataset_revision(dataset_uri)
+    except ValueError:
+        return None
+    return revision
+
+
+def _infer_data_artifact_revision(country_bundle: dict[str, Any]) -> str | None:
+    candidates: list[object] = [country_bundle.get("default_dataset_uri")]
+    default_dataset = country_bundle.get("default_dataset")
+    dataset_uris = country_bundle.get("dataset_uris")
+    if isinstance(default_dataset, str) and isinstance(dataset_uris, dict):
+        candidates.append(dataset_uris.get(default_dataset))
+    if isinstance(dataset_uris, dict):
+        candidates.extend(dataset_uris.values())
+
+    for candidate in candidates:
+        revision = _dataset_revision(candidate)
+        if revision is not None:
+            return revision
+
+    data_version = country_bundle.get("data_version")
+    return data_version if isinstance(data_version, str) and data_version else None
+
+
+def _backfill_country_bundle(
+    country_bundle: dict[str, Any],
+) -> tuple[dict[str, Any], bool]:
+    existing_revision = country_bundle.get("data_artifact_revision")
+    if isinstance(existing_revision, str) and existing_revision:
+        return country_bundle, False
+
+    artifact_revision = _infer_data_artifact_revision(country_bundle)
+    if artifact_revision is None:
+        return country_bundle, False
+
+    updated = dict(country_bundle)
+    updated["data_artifact_revision"] = artifact_revision
+    return updated, True
+
+
+def backfill_app_release_bundle_metadata(
+    metadata: object,
+) -> tuple[dict[str, Any] | None, bool]:
+    if not isinstance(metadata, dict):
+        return None, False
+
+    updated_metadata = dict(metadata)
+    changed = False
+    for country in ("us", "uk"):
+        country_bundle = metadata.get(country)
+        if not isinstance(country_bundle, dict):
+            continue
+        updated_country_bundle, country_changed = _backfill_country_bundle(
+            country_bundle
+        )
+        if country_changed:
+            updated_metadata[country] = updated_country_bundle
+            changed = True
+
+    return updated_metadata, changed
+
+
+def backfill_app_release_bundles(*, environment: str) -> int:
+    bundle_store = modal.Dict.from_name(
+        APP_RELEASE_BUNDLES_DICT_NAME,
+        environment_name=environment,
+        create_if_missing=True,
+    )
+
+    updated_count = 0
+    for key, metadata in list(bundle_store.items()):
+        updated_metadata, changed = backfill_app_release_bundle_metadata(metadata)
+        if not changed or updated_metadata is None:
+            continue
+        bundle_store[key] = updated_metadata
+        updated_count += 1
+        print(f"  {APP_RELEASE_BUNDLES_DICT_NAME}[{key}]: backfilled")
+
+    return updated_count
 
 
 def put_app_release_bundle_metadata(
@@ -195,22 +288,18 @@ def main():
     )
     parser.add_argument(
         "--app-name",
-        required=True,
         help="Versioned app name (e.g., policyengine-simulation-py4-10-0)",
     )
     parser.add_argument(
         "--policyengine-version",
-        required=True,
         help="policyengine.py package version (e.g., 4.10.0)",
     )
     parser.add_argument(
         "--us-version",
-        required=True,
         help="US package version (e.g., 1.459.0)",
     )
     parser.add_argument(
         "--uk-version",
-        required=True,
         help="UK package version (e.g., 2.65.9)",
     )
     parser.add_argument(
@@ -226,7 +315,37 @@ def main():
             "the currently recorded latest (use for intentional rollbacks)."
         ),
     )
+    parser.add_argument(
+        "--backfill-app-release-bundles",
+        action="store_true",
+        help=(
+            "Populate missing data_artifact_revision fields in existing app-release "
+            "bundle metadata without changing version routing."
+        ),
+    )
     args = parser.parse_args()
+
+    if args.backfill_app_release_bundles:
+        print(
+            "Backfilling app release bundle metadata in Modal environment: "
+            f"{args.environment}"
+        )
+        updated_count = backfill_app_release_bundles(environment=args.environment)
+        print(f"Backfilled {updated_count} app release bundle entries.")
+        return
+
+    required_args = {
+        "--app-name": args.app_name,
+        "--policyengine-version": args.policyengine_version,
+        "--us-version": args.us_version,
+        "--uk-version": args.uk_version,
+    }
+    missing_args = [name for name, value in required_args.items() if not value]
+    if missing_args:
+        parser.error(
+            "the following arguments are required unless "
+            f"--backfill-app-release-bundles is set: {', '.join(missing_args)}"
+        )
 
     print(f"Updating version registries in Modal environment: {args.environment}")
     print(f"  App name: {args.app_name}")
