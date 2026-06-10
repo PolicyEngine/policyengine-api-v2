@@ -141,6 +141,61 @@ def test_calculate_default_model(
 
 
 @pytest.mark.beta_only
+def test_calculate_us_state_region_model(
+    client: Client | AuthenticatedClient,
+    us_model_version: str,
+    max_wait_seconds: float,
+    poll_interval: float,
+):
+    """
+    Given a US state-region simulation request
+    When the simulation is submitted and polled to completion
+    Then the worker can load the region dataset from its bundled manifest.
+    """
+    # Given
+    request = SimulationRequest.from_dict(
+        {
+            "country": "us",
+            "version": us_model_version,
+            "region": "state/ut",
+            "scope": "macro",
+            "reform": {
+                "gov.irs.credits.ctc.refundable.fully_refundable": {
+                    "2023-01-01.2100-12-31": True
+                }
+            },
+            "subsample": 200,
+            "time_period": "2026",
+            "data": "gs://policyengine-us-data/states/UT.h5",
+        }
+    )
+
+    # When - submit job
+    submit_response = submit_simulation_request(client, request)
+    assert submit_response.version == us_model_version
+    job_id = submit_response.job_id
+
+    # When - poll for completion
+    result = poll_for_completion(client, job_id, max_wait_seconds, poll_interval)
+
+    # Then - verify result structure
+    assert result.status == "complete"
+    assert result.result is not None
+
+    # Verify key economic impact sections are present
+    economy_result = result.result
+    assert "budget" in economy_result, (
+        f"Missing 'budget' in result: {economy_result.keys()}"
+    )
+    assert "poverty" in economy_result, (
+        f"Missing 'poverty' in result: {economy_result.keys()}"
+    )
+    assert "inequality" in economy_result, (
+        f"Missing 'inequality' in result: {economy_result.keys()}"
+    )
+
+
+@pytest.mark.beta_only
 def test_calculate_specific_model(
     client: Client | AuthenticatedClient,
     us_model_version: str,

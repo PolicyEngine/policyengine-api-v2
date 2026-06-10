@@ -37,10 +37,12 @@ def test_country_release_bundle_exposes_model_and_data_versions():
     assert us_bundle.model_version
     assert us_bundle.data_package_name == "policyengine-us-data"
     assert us_bundle.data_version
+    assert us_bundle.data_artifact_revision
     assert uk_bundle.model_package_name == "policyengine-uk"
     assert uk_bundle.model_version
     assert uk_bundle.data_package_name == "policyengine-uk-data"
     assert uk_bundle.data_version
+    assert uk_bundle.data_artifact_revision
 
 
 def test_resolve_bundle_dataset_name_uses_manifest_default():
@@ -133,6 +135,26 @@ def test_resolve_runtime_bundle_dataset_uri_applies_requested_version():
             "us",
             "enhanced_cps_2024",
             "1.77.0",
+        )
+        == "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+    )
+
+
+def test_resolve_runtime_bundle_dataset_uri_preserves_explicit_hf_data_version():
+    assert (
+        resolve_runtime_bundle_dataset_uri(
+            "us",
+            "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
+        )
+        == "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+    )
+
+
+def test_resolve_runtime_bundle_dataset_uri_preserves_explicit_gcs_data_version():
+    assert (
+        resolve_runtime_bundle_dataset_uri(
+            "us",
+            "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
         )
         == "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
     )

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 import pytest
 
 from src.modal.utils import update_version_registry as registry
@@ -19,6 +21,9 @@ class FakeDict:
 
     def get(self, key, default=None):
         return self._data.get(key, default)
+
+    def items(self):
+        return self._data.items()
 
     def snapshot(self) -> dict:
         return dict(self._data)
@@ -153,6 +158,7 @@ def test_put_app_release_bundle_metadata_records_app_and_py_version_aliases(
                 "policyengine-us-data" if country == "us" else "policyengine-uk-data"
             ),
             "data_version": "3.0.0" if country == "us" else "4.0.0",
+            "data_artifact_revision": "sha-us" if country == "us" else "sha-uk",
             "default_dataset": "default",
             "default_dataset_uri": f"hf://datasets/policyengine/{country}/default",
             "dataset_uris": {"default": f"hf://datasets/policyengine/{country}"},
@@ -174,3 +180,123 @@ def test_put_app_release_bundle_metadata_records_app_and_py_version_aliases(
     assert snapshot["4.10.0"] == metadata
     assert metadata["policyengine_version"] == "4.10.0"
     assert metadata["us"]["dataset_aliases"] == {"alias": "default"}
+
+
+def test_backfill_app_release_bundle_metadata_adds_artifact_revision_from_uri():
+    metadata = {
+        "app_name": "policyengine-simulation-py4-13-1",
+        "policyengine_version": "4.13.1",
+        "us": {
+            "data_version": "1.115.5",
+            "default_dataset": "enhanced_cps_2024",
+            "default_dataset_uri": (
+                "hf://policyengine/policyengine-us-data/"
+                "enhanced_cps_2024.h5@d47fb5475144260a75467d2f2e22b2d5d53d4d57"
+            ),
+            "dataset_uris": {},
+        },
+        "uk": {
+            "data_version": "1.55.10",
+            "default_dataset": "enhanced_frs_2023_24",
+            "default_dataset_uri": (
+                "hf://policyengine/policyengine-uk-data-private/"
+                "enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
+            ),
+            "dataset_uris": {},
+        },
+    }
+
+    updated, changed = registry.backfill_app_release_bundle_metadata(metadata)
+
+    assert changed is True
+    assert updated is not None
+    assert (
+        updated["us"]["data_artifact_revision"]
+        == "d47fb5475144260a75467d2f2e22b2d5d53d4d57"
+    )
+    assert (
+        updated["uk"]["data_artifact_revision"]
+        == "655dd07e4bb9c777b00dac044949611f1feb824f"
+    )
+    assert "data_artifact_revision" not in metadata["us"]
+
+
+def test_backfill_app_release_bundle_metadata_preserves_existing_revision():
+    metadata = {
+        "app_name": "policyengine-simulation-py4-10-0",
+        "policyengine_version": "4.10.0",
+        "us": {
+            "data_version": "1.110.12",
+            "data_artifact_revision": "existing-us-revision",
+            "default_dataset": "enhanced_cps_2024",
+            "default_dataset_uri": (
+                "hf://policyengine/policyengine-us-data/"
+                "enhanced_cps_2024.h5@new-us-revision"
+            ),
+            "dataset_uris": {},
+        },
+        "uk": {
+            "data_version": "1.40.3",
+            "data_artifact_revision": "existing-uk-revision",
+            "default_dataset": "enhanced_frs_2023_24",
+            "default_dataset_uri": (
+                "hf://policyengine/policyengine-uk-data-private/"
+                "enhanced_frs_2023_24.h5@new-uk-revision"
+            ),
+            "dataset_uris": {},
+        },
+    }
+
+    updated, changed = registry.backfill_app_release_bundle_metadata(metadata)
+
+    assert changed is False
+    assert updated == metadata
+    assert updated["us"]["data_artifact_revision"] == "existing-us-revision"
+    assert updated["uk"]["data_artifact_revision"] == "existing-uk-revision"
+
+
+def test_backfill_app_release_bundles_updates_all_alias_entries(patched_modal):
+    legacy_bundle = {
+        "app_name": "policyengine-simulation-py4-13-1",
+        "policyengine_version": "4.13.1",
+        "us": {
+            "data_version": "1.115.5",
+            "default_dataset": "enhanced_cps_2024",
+            "default_dataset_uri": (
+                "hf://policyengine/policyengine-us-data/"
+                "enhanced_cps_2024.h5@d47fb5475144260a75467d2f2e22b2d5d53d4d57"
+            ),
+            "dataset_uris": {},
+        },
+        "uk": {
+            "data_version": "1.55.10",
+            "default_dataset": "enhanced_frs_2023_24",
+            "default_dataset_uri": (
+                "hf://policyengine/policyengine-uk-data-private/"
+                "enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
+            ),
+            "dataset_uris": {},
+        },
+    }
+    patched_modal["main/simulation-api-app-release-bundles"] = FakeDict(
+        {
+            "policyengine-simulation-py4-13-1": deepcopy(legacy_bundle),
+            "4.13.1": deepcopy(legacy_bundle),
+            "policyengine-simulation-py4-10-0": {
+                "us": {"data_artifact_revision": "already-present"},
+            },
+        }
+    )
+
+    updated_count = registry.backfill_app_release_bundles(environment="main")
+
+    assert updated_count == 2
+    snapshot = patched_modal["main/simulation-api-app-release-bundles"].snapshot()
+    for key in ("policyengine-simulation-py4-13-1", "4.13.1"):
+        assert (
+            snapshot[key]["uk"]["data_artifact_revision"]
+            == "655dd07e4bb9c777b00dac044949611f1feb824f"
+        )
+    assert snapshot["policyengine-simulation-py4-10-0"] == {
+        "us": {"data_artifact_revision": "already-present"},
+    }
