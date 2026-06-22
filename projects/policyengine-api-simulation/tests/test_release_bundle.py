@@ -171,3 +171,66 @@ def test_resolve_runtime_bundle_dataset_uri_preserves_explicit_gcs_uri():
     uri = "gs://policyengine-us-data/enhanced_cps_2024.h5"
 
     assert resolve_runtime_bundle_dataset_uri("us", uri) == uri
+
+
+def test_resolve_runtime_bundle_dataset_uri_prefers_installed_default_dataset(
+    tmp_path, monkeypatch
+):
+    bundle = get_country_release_bundle("us")
+    dataset_path = tmp_path / "enhanced_cps_2024.h5"
+    dataset_path.write_bytes(b"data")
+    receipt_path = tmp_path / ".policyengine-bundle.json"
+    receipt_path.write_text(
+        """
+        {
+          "bundle_version": "4.13.1",
+          "policyengine_version": "4.13.1",
+          "datasets": [
+            {
+              "country": "us",
+              "dataset": "enhanced_cps_2024",
+              "version": "%s",
+              "path": "%s"
+            }
+          ]
+        }
+        """
+        % (bundle.data_version, str(dataset_path)),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("POLICYENGINE_BUNDLE_RECEIPT", str(receipt_path))
+    get_country_release_bundle.cache_clear()
+
+    assert resolve_runtime_bundle_dataset_uri("us", None) == str(dataset_path)
+    assert resolve_runtime_bundle_dataset_uri("us", "enhanced_cps") == str(dataset_path)
+
+
+def test_resolve_runtime_bundle_dataset_uri_preserves_nondefault_override_with_receipt(
+    tmp_path, monkeypatch
+):
+    bundle = get_country_release_bundle("us")
+    dataset_path = tmp_path / "enhanced_cps_2024.h5"
+    dataset_path.write_bytes(b"data")
+    receipt_path = tmp_path / ".policyengine-bundle.json"
+    receipt_path.write_text(
+        """
+        {
+          "datasets": [
+            {
+              "country": "us",
+              "dataset": "enhanced_cps_2024",
+              "version": "%s",
+              "path": "%s"
+            }
+          ]
+        }
+        """
+        % (bundle.data_version, str(dataset_path)),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("POLICYENGINE_BUNDLE_RECEIPT", str(receipt_path))
+    get_country_release_bundle.cache_clear()
+
+    assert resolve_runtime_bundle_dataset_uri("us", "cps") == (
+        "gs://policyengine-us-data/cps_2023.h5@1.110.12"
+    )

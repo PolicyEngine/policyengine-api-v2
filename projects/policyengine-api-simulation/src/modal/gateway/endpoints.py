@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 JOB_METADATA_DICT_NAME = "simulation-api-job-metadata"
+POLICYENGINE_VERSION_DICT_NAME = "simulation-api-policyengine-versions"
 APP_RELEASE_BUNDLES_DICT_NAME = "simulation-api-app-release-bundles"
 
 
@@ -195,17 +196,32 @@ def _build_policyengine_bundle(
     country: str, resolved_version: str, app_name: str, payload: dict
 ) -> PolicyEngineBundle:
     app_bundle = _app_release_bundle(app_name)
+    country_bundle = app_bundle.get(country.lower())
+    if not isinstance(country_bundle, dict):
+        country_bundle = {}
     dataset = payload.get("data")
-    data_version = payload.get("data_version")
+    requested_data_version = payload.get("data_version")
     resolved_dataset = _resolve_dataset_uri_from_app_bundle(
         app_bundle=app_bundle,
         country=country,
         requested_data=dataset if isinstance(dataset, str) else None,
-        requested_data_version=data_version if isinstance(data_version, str) else None,
+        requested_data_version=(
+            requested_data_version if isinstance(requested_data_version, str) else None
+        ),
     )
+    data_version = (
+        requested_data_version
+        if isinstance(requested_data_version, str)
+        else country_bundle.get("data_version")
+    )
+    model_version = country_bundle.get("model_version") or resolved_version
+    policyengine_version = app_bundle.get("policyengine_version")
     return PolicyEngineBundle(
-        model_version=resolved_version,
-        data_version=data_version,
+        model_version=str(model_version),
+        policyengine_version=(
+            str(policyengine_version) if isinstance(policyengine_version, str) else None
+        ),
+        data_version=str(data_version) if isinstance(data_version, str) else None,
         dataset=resolved_dataset,
     )
 
@@ -246,31 +262,41 @@ def _build_budget_window_parent_payload(
 
 
 def get_app_name(country: str, version: Optional[str]) -> tuple[str, str]:
-    """
-    Resolve country + version to Modal app name.
+    """Resolve country + bundle version to a Modal app name.
 
-    Returns:
-        Tuple of (app_name, resolved_version)
+    The canonical version registry is keyed by policyengine.py bundle version.
+    Country-version registries remain as a backward-compatible fallback for
+    callers that still pass a country package version.
     """
     country_lower = country.lower()
     if country_lower not in ("us", "uk"):
         raise ValueError(f"Unknown country: {country}")
 
-    version_dict = modal.Dict.from_name(f"simulation-api-{country_lower}-versions")
+    policyengine_versions = modal.Dict.from_name(POLICYENGINE_VERSION_DICT_NAME)
 
-    # Resolve version
     if version is None:
-        resolved_version = version_dict["latest"]
-    else:
-        resolved_version = version
+        resolved_version = policyengine_versions.get("latest")
+        if resolved_version is not None:
+            try:
+                return policyengine_versions[resolved_version], resolved_version
+            except KeyError:
+                pass
+        country_versions = modal.Dict.from_name(
+            f"simulation-api-{country_lower}-versions"
+        )
+        resolved_version = country_versions["latest"]
+        return country_versions[resolved_version], resolved_version
 
-    # Get app name for this version
     try:
-        app_name = version_dict[resolved_version]
+        return policyengine_versions[version], version
     except KeyError:
-        raise ValueError(f"Unknown version {resolved_version} for country {country}")
+        pass
 
-    return app_name, resolved_version
+    country_versions = modal.Dict.from_name(f"simulation-api-{country_lower}-versions")
+    try:
+        return country_versions[version], version
+    except KeyError:
+        raise ValueError(f"Unknown version {version} for country {country}")
 
 
 @router.post(

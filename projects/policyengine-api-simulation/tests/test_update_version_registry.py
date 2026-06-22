@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from copy import deepcopy
 
 import pytest
@@ -139,6 +140,68 @@ def test_update_version_dict__new_registry_sets_latest_even_without_force(
     snapshot = patched_modal["staging/simulation-api-uk-versions"].snapshot()
     assert snapshot["latest"] == "2.66.0"
     assert snapshot["2.66.0"] == "policyengine-simulation-py4-10-0"
+
+
+def test_main_updates_policyengine_and_country_registries(
+    patched_modal,
+    monkeypatch,
+):
+    def fake_country_bundle_metadata(
+        country: str,
+    ) -> registry.CountryBundleMetadata:
+        return {
+            "country": country,
+            "model_package_name": (
+                "policyengine-us" if country == "us" else "policyengine-uk"
+            ),
+            "model_version": "1.687.0" if country == "us" else "2.88.14",
+            "data_package_name": (
+                "policyengine-us-data" if country == "us" else "policyengine-uk-data"
+            ),
+            "data_version": "1.78.2" if country == "us" else "1.55.5",
+            "data_artifact_revision": "1.78.2" if country == "us" else "1.55.5",
+            "default_dataset": (
+                "enhanced_cps_2024" if country == "us" else "enhanced_frs_2023_24"
+            ),
+            "default_dataset_uri": f"hf://datasets/policyengine/{country}/default",
+            "dataset_uris": {"default": f"hf://datasets/policyengine/{country}"},
+            "dataset_aliases": {},
+        }
+
+    monkeypatch.setattr(
+        registry, "_country_bundle_metadata", fake_country_bundle_metadata
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "update_version_registry",
+            "--app-name",
+            "policyengine-simulation-py4-19-1",
+            "--policyengine-version",
+            "4.19.1",
+            "--us-version",
+            "1.687.0",
+            "--uk-version",
+            "2.88.14",
+            "--environment",
+            "main",
+        ],
+    )
+
+    registry.main()
+
+    py_versions = patched_modal["main/simulation-api-policyengine-versions"].snapshot()
+    assert py_versions["latest"] == "4.19.1"
+    assert py_versions["4.19.1"] == "policyengine-simulation-py4-19-1"
+    assert (
+        patched_modal["main/simulation-api-us-versions"].snapshot()["1.687.0"]
+        == "policyengine-simulation-py4-19-1"
+    )
+    app_release_bundles = patched_modal[
+        "main/simulation-api-app-release-bundles"
+    ].snapshot()
+    assert app_release_bundles["4.19.1"]["policyengine_version"] == "4.19.1"
 
 
 def test_put_app_release_bundle_metadata_records_app_and_py_version_aliases(

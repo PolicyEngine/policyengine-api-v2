@@ -217,9 +217,10 @@ def mock_modal(monkeypatch):
 
     mock_func = MockFunction()
     mock_dicts = {
+        "simulation-api-policyengine-versions": {},
         "simulation-api-app-release-bundles": {
             app_name: TEST_APP_RELEASE_BUNDLE for app_name in TEST_APP_NAMES
-        }
+        },
     }
     MockFunctionCall.registry = {}
     MockFunctionCall.from_id_errors = {}

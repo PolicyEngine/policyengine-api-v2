@@ -1,0 +1,86 @@
+import importlib
+import sys
+from types import ModuleType
+
+
+class FakeImage:
+    def __init__(self):
+        self.calls = []
+
+    @classmethod
+    def debian_slim(cls, python_version):
+        image = cls()
+        image.calls.append(("debian_slim", python_version))
+        return image
+
+    def pip_install(self, *packages):
+        self.calls.append(("pip_install", packages))
+        return self
+
+    def run_commands(self, *commands):
+        self.calls.append(("run_commands", commands))
+        return self
+
+    def env(self, env):
+        self.calls.append(("env", env))
+        return self
+
+    def add_local_python_source(self, *args, **kwargs):
+        self.calls.append(("add_local_python_source", args, kwargs))
+        return self
+
+    def run_function(self, function):
+        self.calls.append(("run_function", function.__name__))
+        return self
+
+
+class FakeSecret:
+    @staticmethod
+    def from_name(*args, **kwargs):
+        return {"args": args, "kwargs": kwargs}
+
+
+class FakeApp:
+    def __init__(self, name):
+        self.name = name
+
+    def function(self, **kwargs):
+        def decorator(function):
+            return function
+
+        return decorator
+
+
+def install_fake_modal(monkeypatch):
+    modal = ModuleType("modal")
+    modal.Image = FakeImage
+    modal.Secret = FakeSecret
+    modal.App = FakeApp
+    modal.is_local = lambda: True
+    monkeypatch.setitem(sys.modules, "modal", modal)
+
+
+def test_modal_image_uses_policyengine_bundle_install(monkeypatch):
+    install_fake_modal(monkeypatch)
+    monkeypatch.setenv("POLICYENGINE_VERSION", "4.19.1")
+    monkeypatch.setenv("POLICYENGINE_CORE_VERSION", "3.26.1")
+    monkeypatch.setenv("POLICYENGINE_US_VERSION", "1.700.0")
+    monkeypatch.setenv("POLICYENGINE_UK_VERSION", "2.90.0")
+    sys.modules.pop("src.modal.app", None)
+
+    app = importlib.import_module("src.modal.app")
+
+    command_calls = [
+        call for call in app.simulation_image.calls if call[0] == "run_commands"
+    ]
+    assert command_calls
+    command = command_calls[0][1][0]
+    assert command.startswith(
+        "uvx --from policyengine==4.19.1 policyengine bundle install 4.19.1"
+    )
+    assert "--python /usr/local/bin/python" in command
+    assert "--data-dir /opt/policyengine/data" in command
+    assert app.VERSION_ENV["POLICYENGINE_DATA_FOLDER"] == "/opt/policyengine/data"
+    assert app.VERSION_ENV["POLICYENGINE_BUNDLE_RECEIPT"].endswith(
+        "/.policyengine-bundle.json"
+    )

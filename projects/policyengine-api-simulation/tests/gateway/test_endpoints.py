@@ -33,17 +33,47 @@ def expected_bundle(
         resolved_dataset = (
             f"{resolved_dataset.rsplit('@', maxsplit=1)[0]}@{data_version}"
         )
+    country_bundle = TEST_APP_RELEASE_BUNDLE[country]
     bundle: dict[str, str | None] = {
         "model_version": model_version,
+        "policyengine_version": TEST_APP_RELEASE_BUNDLE["policyengine_version"],
+        "data_version": data_version or country_bundle.get("data_version"),
         "dataset": resolved_dataset,
     }
-    if data_version is not None:
-        bundle["data_version"] = data_version
     return {key: value for key, value in bundle.items() if value is not None}
 
 
 class TestGetAppName:
     """Tests for the get_app_name helper function."""
+
+    def test__given_no_version__then_prefers_latest_policyengine_bundle(
+        self, mock_modal
+    ):
+        from src.modal.gateway.endpoints import get_app_name
+
+        mock_modal["dicts"]["simulation-api-policyengine-versions"] = {
+            "latest": "4.10.0",
+            "4.10.0": "policyengine-simulation-py4-10-0",
+        }
+
+        app_name, resolved_version = get_app_name("us", None)
+
+        assert resolved_version == "4.10.0"
+        assert app_name == "policyengine-simulation-py4-10-0"
+
+    def test__given_policyengine_bundle_version__then_routes_by_bundle(
+        self, mock_modal
+    ):
+        from src.modal.gateway.endpoints import get_app_name
+
+        mock_modal["dicts"]["simulation-api-policyengine-versions"] = {
+            "4.10.0": "policyengine-simulation-py4-10-0",
+        }
+
+        app_name, resolved_version = get_app_name("uk", "4.10.0")
+
+        assert resolved_version == "4.10.0"
+        assert app_name == "policyengine-simulation-py4-10-0"
 
     def test__given_us_country_no_version__then_returns_latest_app(self, mock_modal):
         """
