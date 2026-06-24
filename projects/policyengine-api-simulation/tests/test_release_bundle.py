@@ -3,6 +3,7 @@
 import pytest
 
 from policyengine_api_simulation.release_bundle import (
+    BUNDLE_RECEIPT_FILENAME,
     get_country_release_bundle,
     resolve_bundle_dataset_name,
     resolve_bundle_dataset_uri,
@@ -20,10 +21,6 @@ def stub_hf_revision_validation(monkeypatch):
         )
 
     monkeypatch.setattr(
-        "policyengine_api_simulation.release_bundle.with_hf_revision",
-        with_revision,
-    )
-    monkeypatch.setattr(
         "policyengine_api_simulation.dataset_uri.with_hf_revision",
         with_revision,
     )
@@ -35,14 +32,20 @@ def test_country_release_bundle_exposes_model_and_data_versions():
 
     assert us_bundle.model_package_name == "policyengine-us"
     assert us_bundle.model_version
-    assert us_bundle.data_package_name == "policyengine-us-data"
+    assert us_bundle.data_package_name == "populace-data"
     assert us_bundle.data_version
     assert us_bundle.data_artifact_revision
+    assert us_bundle.default_dataset == "populace_us_2024"
+    assert us_bundle.default_dataset_uri.startswith("hf://policyengine/populace-us/")
     assert uk_bundle.model_package_name == "policyengine-uk"
     assert uk_bundle.model_version
-    assert uk_bundle.data_package_name == "policyengine-uk-data"
+    assert uk_bundle.data_package_name == "populace-data"
     assert uk_bundle.data_version
     assert uk_bundle.data_artifact_revision
+    assert uk_bundle.default_dataset == "populace_uk_2023"
+    assert uk_bundle.default_dataset_uri.startswith(
+        "hf://policyengine/populace-uk-private/"
+    )
 
 
 def test_resolve_bundle_dataset_name_uses_manifest_default():
@@ -56,14 +59,28 @@ def test_resolve_bundle_dataset_name_uses_manifest_default():
     )
 
 
-def test_resolve_bundle_dataset_uri_maps_known_aliases_to_manifest_uris():
+def test_resolve_bundle_dataset_uri_maps_certified_defaults_to_manifest_uris():
     assert (
-        resolve_bundle_dataset_uri("us", "enhanced_cps")
+        resolve_bundle_dataset_uri(
+            "us", get_country_release_bundle("us").default_dataset
+        )
         == get_country_release_bundle("us").default_dataset_uri
     )
     assert (
-        resolve_bundle_dataset_uri("uk", "enhanced_frs")
+        resolve_bundle_dataset_uri(
+            "uk", get_country_release_bundle("uk").default_dataset
+        )
         == get_country_release_bundle("uk").default_dataset_uri
+    )
+
+
+def test_resolve_bundle_dataset_uri_keeps_legacy_aliases_as_explicit_overrides():
+    assert resolve_bundle_dataset_uri("us", "enhanced_cps") == (
+        "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
+    )
+    assert (
+        resolve_bundle_dataset_uri("uk", "enhanced_frs")
+        == (get_country_release_bundle("uk").dataset_uris["enhanced_frs_2023_24"])
     )
 
 
@@ -115,18 +132,16 @@ def test_resolve_bundle_dataset_uri_rejects_unknown_logical_revision():
 def test_resolve_runtime_bundle_dataset_uri_maps_default_to_gcs_version():
     bundle = get_country_release_bundle("us")
 
-    assert resolve_runtime_bundle_dataset_uri("us", None) == (
-        f"gs://policyengine-us-data/enhanced_cps_2024.h5@{bundle.data_version}"
-    )
+    assert resolve_runtime_bundle_dataset_uri("us", None) == bundle.default_dataset_uri
 
 
 def test_resolve_runtime_bundle_dataset_uri_maps_alias_to_gcs_version():
     bundle = get_country_release_bundle("uk")
 
-    assert resolve_runtime_bundle_dataset_uri("uk", "enhanced_frs") == (
-        "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5"
-        f"@{bundle.data_version}"
+    assert resolve_runtime_bundle_dataset_uri("uk", "enhanced_frs").startswith(
+        "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5@"
     )
+    assert bundle.default_dataset == "populace_uk_2023"
 
 
 def test_resolve_runtime_bundle_dataset_uri_applies_requested_version():
@@ -177,55 +192,57 @@ def test_resolve_runtime_bundle_dataset_uri_prefers_installed_default_dataset(
     tmp_path, monkeypatch
 ):
     bundle = get_country_release_bundle("us")
-    dataset_path = tmp_path / "enhanced_cps_2024.h5"
+    dataset_path = tmp_path / f"{bundle.default_dataset}.h5"
     dataset_path.write_bytes(b"data")
-    receipt_path = tmp_path / ".policyengine-bundle.json"
+    receipt_path = tmp_path / BUNDLE_RECEIPT_FILENAME
     receipt_path.write_text(
         """
         {
-          "bundle_version": "4.13.1",
-          "policyengine_version": "4.13.1",
+          "bundle_version": "4.18.2",
+          "policyengine_version": "4.18.2",
           "datasets": [
             {
               "country": "us",
-              "dataset": "enhanced_cps_2024",
+              "dataset": "%s",
               "version": "%s",
               "path": "%s"
             }
           ]
         }
         """
-        % (bundle.data_version, str(dataset_path)),
+        % (bundle.default_dataset, bundle.data_version, str(dataset_path)),
         encoding="utf-8",
     )
     monkeypatch.setenv("POLICYENGINE_BUNDLE_RECEIPT", str(receipt_path))
     get_country_release_bundle.cache_clear()
 
     assert resolve_runtime_bundle_dataset_uri("us", None) == str(dataset_path)
-    assert resolve_runtime_bundle_dataset_uri("us", "enhanced_cps") == str(dataset_path)
+    assert resolve_runtime_bundle_dataset_uri("us", bundle.default_dataset) == str(
+        dataset_path
+    )
 
 
 def test_resolve_runtime_bundle_dataset_uri_preserves_nondefault_override_with_receipt(
     tmp_path, monkeypatch
 ):
     bundle = get_country_release_bundle("us")
-    dataset_path = tmp_path / "enhanced_cps_2024.h5"
+    dataset_path = tmp_path / f"{bundle.default_dataset}.h5"
     dataset_path.write_bytes(b"data")
-    receipt_path = tmp_path / ".policyengine-bundle.json"
+    receipt_path = tmp_path / BUNDLE_RECEIPT_FILENAME
     receipt_path.write_text(
         """
         {
           "datasets": [
             {
               "country": "us",
-              "dataset": "enhanced_cps_2024",
+              "dataset": "%s",
               "version": "%s",
               "path": "%s"
             }
           ]
         }
         """
-        % (bundle.data_version, str(dataset_path)),
+        % (bundle.default_dataset, bundle.data_version, str(dataset_path)),
         encoding="utf-8",
     )
     monkeypatch.setenv("POLICYENGINE_BUNDLE_RECEIPT", str(receipt_path))

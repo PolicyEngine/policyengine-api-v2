@@ -82,6 +82,34 @@ def _country_bundle_data_artifact_revision(country_bundle: dict) -> str | None:
     return artifact_revision if isinstance(artifact_revision, str) else None
 
 
+def _without_revision(dataset_uri: str) -> str:
+    return _split_requested_revision(dataset_uri)[0]
+
+
+def _bundle_certified_hf_uri_roots(country_bundle: dict) -> set[str]:
+    roots: set[str] = set()
+    default_uri = country_bundle.get("default_dataset_uri")
+    if isinstance(default_uri, str) and default_uri.startswith("hf://"):
+        roots.add(_without_revision(default_uri))
+
+    for key in ("dataset_uris", "dataset_aliases"):
+        values = country_bundle.get(key)
+        if not isinstance(values, dict):
+            continue
+        for value in values.values():
+            if isinstance(value, str) and value.startswith("hf://"):
+                roots.add(_without_revision(value))
+    return roots
+
+
+def _is_bundle_certified_hf_uri(country_bundle: dict, dataset_uri: str) -> bool:
+    if not dataset_uri.startswith("hf://"):
+        return False
+    return _without_revision(dataset_uri) in _bundle_certified_hf_uri_roots(
+        country_bundle
+    )
+
+
 def _resolve_dataset_uri_from_app_bundle(
     *,
     app_bundle: dict,
@@ -102,6 +130,7 @@ def _resolve_dataset_uri_from_app_bundle(
             default_revision=_country_bundle_data_version(country_bundle),
             override_revision=requested_data_version,
             artifact_revision=_country_bundle_data_artifact_revision(country_bundle),
+            validate_hf=False,
         )
 
     requested_without_revision, requested_revision = _split_requested_revision(
@@ -129,6 +158,12 @@ def _resolve_dataset_uri_from_app_bundle(
             else requested_without_revision
         )
         if requested_without_revision.startswith("hf://"):
+            validate_hf = not (
+                isinstance(country_bundle, dict)
+                and _is_bundle_certified_hf_uri(
+                    country_bundle, requested_without_revision
+                )
+            )
             return runtime_dataset_uri(
                 runtime_input,
                 default_revision=bundle_data_version,
@@ -136,6 +171,7 @@ def _resolve_dataset_uri_from_app_bundle(
                     revision if requested_data_version is not None else None
                 ),
                 artifact_revision=artifact_revision,
+                validate_hf=validate_hf,
             )
         if requested_without_revision.startswith("gs://"):
             return runtime_dataset_uri(
@@ -158,6 +194,7 @@ def _resolve_dataset_uri_from_app_bundle(
             default_revision=bundle_data_version,
             override_revision=revision,
             artifact_revision=artifact_revision,
+            validate_hf=not _is_bundle_certified_hf_uri(country_bundle, dataset_name),
         )
 
     dataset_uris = country_bundle.get("dataset_uris")
@@ -171,6 +208,7 @@ def _resolve_dataset_uri_from_app_bundle(
         default_revision=bundle_data_version,
         override_revision=revision,
         artifact_revision=artifact_revision,
+        validate_hf=False,
     )
 
 
@@ -190,6 +228,17 @@ def _is_modal_job_not_found(exc: BaseException) -> bool:
     return _is_modal_exception(exc, "NotFoundError") or _is_modal_exception(
         exc, "OutputExpiredError"
     )
+
+
+def _optional_modal_dict(name: str):
+    try:
+        return modal.Dict.from_name(name)
+    except KeyError:
+        return None
+    except Exception as exc:
+        if _is_modal_exception(exc, "NotFoundError"):
+            return None
+        raise
 
 
 def _build_policyengine_bundle(
@@ -272,25 +321,28 @@ def get_app_name(country: str, version: Optional[str]) -> tuple[str, str]:
     if country_lower not in ("us", "uk"):
         raise ValueError(f"Unknown country: {country}")
 
-    policyengine_versions = modal.Dict.from_name(POLICYENGINE_VERSION_DICT_NAME)
+    policyengine_versions = _optional_modal_dict(POLICYENGINE_VERSION_DICT_NAME)
 
-    if version is None:
+    if version is None and policyengine_versions is not None:
         resolved_version = policyengine_versions.get("latest")
         if resolved_version is not None:
             try:
                 return policyengine_versions[resolved_version], resolved_version
             except KeyError:
                 pass
+
+    if version is None:
         country_versions = modal.Dict.from_name(
             f"simulation-api-{country_lower}-versions"
         )
         resolved_version = country_versions["latest"]
         return country_versions[resolved_version], resolved_version
 
-    try:
-        return policyengine_versions[version], version
-    except KeyError:
-        pass
+    if policyengine_versions is not None:
+        try:
+            return policyengine_versions[version], version
+        except KeyError:
+            pass
 
     country_versions = modal.Dict.from_name(f"simulation-api-{country_lower}-versions")
     try:

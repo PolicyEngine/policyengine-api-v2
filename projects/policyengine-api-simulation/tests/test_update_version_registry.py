@@ -155,16 +155,19 @@ def test_main_updates_policyengine_and_country_registries(
                 "policyengine-us" if country == "us" else "policyengine-uk"
             ),
             "model_version": "1.687.0" if country == "us" else "2.88.14",
-            "data_package_name": (
-                "policyengine-us-data" if country == "us" else "policyengine-uk-data"
+            "data_package_name": "populace-data",
+            "data_version": "populace-us-build"
+            if country == "us"
+            else "populace-uk-build",
+            "data_artifact_revision": (
+                "populace-us-build" if country == "us" else "populace-uk-build"
             ),
-            "data_version": "1.78.2" if country == "us" else "1.55.5",
-            "data_artifact_revision": "1.78.2" if country == "us" else "1.55.5",
             "default_dataset": (
-                "enhanced_cps_2024" if country == "us" else "enhanced_frs_2023_24"
+                "populace_us_2024" if country == "us" else "populace_uk_2023"
             ),
             "default_dataset_uri": f"hf://datasets/policyengine/{country}/default",
             "dataset_uris": {"default": f"hf://datasets/policyengine/{country}"},
+            "dataset_repo_types": {"default": "dataset"},
             "dataset_aliases": {},
         }
 
@@ -217,14 +220,13 @@ def test_put_app_release_bundle_metadata_records_app_and_py_version_aliases(
                 "policyengine-us" if country == "us" else "policyengine-uk"
             ),
             "model_version": "1.0.0" if country == "us" else "2.0.0",
-            "data_package_name": (
-                "policyengine-us-data" if country == "us" else "policyengine-uk-data"
-            ),
+            "data_package_name": "populace-data",
             "data_version": "3.0.0" if country == "us" else "4.0.0",
             "data_artifact_revision": "sha-us" if country == "us" else "sha-uk",
             "default_dataset": "default",
             "default_dataset_uri": f"hf://datasets/policyengine/{country}/default",
             "dataset_uris": {"default": f"hf://datasets/policyengine/{country}"},
+            "dataset_repo_types": {"default": "dataset"},
             "dataset_aliases": {"alias": "default"},
         }
 
@@ -243,6 +245,7 @@ def test_put_app_release_bundle_metadata_records_app_and_py_version_aliases(
     assert snapshot["4.10.0"] == metadata
     assert metadata["policyengine_version"] == "4.10.0"
     assert metadata["us"]["dataset_aliases"] == {"alias": "default"}
+    assert metadata["us"]["dataset_repo_types"] == {"default": "dataset"}
 
 
 def test_backfill_app_release_bundle_metadata_adds_artifact_revision_from_uri():

@@ -19,23 +19,39 @@ from policyengine_api_simulation.dataset_uri import (
     select_dataset_revision,
     split_dataset_revision,
 )
-from policyengine_api_simulation.hf_dataset import with_hf_revision
 
 os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
 
 SUPPORTED_COUNTRIES = frozenset({"us", "uk"})
-BUNDLE_RECEIPT_FILENAME = ".policyengine-bundle.json"
+BUNDLE_RECEIPT_FILENAME = ".policyengine-bundle-receipt.json"
+LEGACY_US_DATA_REVISION = "1.110.12"
+LEGACY_ENHANCED_CPS_URI = (
+    "hf://policyengine/policyengine-us-data/"
+    f"enhanced_cps_2024.h5@{LEGACY_US_DATA_REVISION}"
+)
 
 DATASET_ALIASES: dict[str, dict[str, str]] = {
     "us": {
-        "enhanced_cps": "enhanced_cps_2024",
-        "enhanced_cps_2024": "enhanced_cps_2024",
+        "enhanced_cps": LEGACY_ENHANCED_CPS_URI,
+        "enhanced_cps_2024": LEGACY_ENHANCED_CPS_URI,
         "cps_small": "cps_small_2024",
         "cps_small_2024": "cps_small_2024",
-        "cps": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.110.12",
-        "cps_2023": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.110.12",
-        "pooled_cps": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.110.12",
-        "pooled_3_year_cps_2023": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.110.12",
+        "cps": (
+            "hf://policyengine/policyengine-us-data/"
+            f"cps_2023.h5@{LEGACY_US_DATA_REVISION}"
+        ),
+        "cps_2023": (
+            "hf://policyengine/policyengine-us-data/"
+            f"cps_2023.h5@{LEGACY_US_DATA_REVISION}"
+        ),
+        "pooled_cps": (
+            "hf://policyengine/policyengine-us-data/"
+            f"pooled_3_year_cps_2023.h5@{LEGACY_US_DATA_REVISION}"
+        ),
+        "pooled_3_year_cps_2023": (
+            "hf://policyengine/policyengine-us-data/"
+            f"pooled_3_year_cps_2023.h5@{LEGACY_US_DATA_REVISION}"
+        ),
     },
     "uk": {
         "enhanced_frs": "enhanced_frs_2023_24",
@@ -58,6 +74,7 @@ class CountryReleaseBundle:
     default_dataset: str
     default_dataset_uri: str
     dataset_uris: Mapping[str, str]
+    dataset_repo_types: Mapping[str, str]
 
 
 def _normalise_country(country: str) -> str:
@@ -71,18 +88,120 @@ def _artifact_revision(data_package) -> str:
     return data_package.release_manifest_revision or data_package.version
 
 
+def _mapping(value: object) -> Mapping:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _reference_value(reference: object, key: str) -> object:
+    if isinstance(reference, Mapping):
+        return reference.get(key)
+    return getattr(reference, key, None)
+
+
+def _revision_from_uri(uri: str | None) -> str | None:
+    if not uri or "@" not in uri:
+        return None
+    _, revision = split_dataset_revision(uri)
+    return revision
+
+
+def _with_hf_revision_unvalidated(dataset_uri: str, revision: str) -> str:
+    if not dataset_uri.startswith("hf://"):
+        return dataset_uri
+    without_revision = dataset_uri.rsplit("@", maxsplit=1)[0]
+    return f"{without_revision}@{revision}"
+
+
+def _artifact_hf_uri(
+    *,
+    data_package,
+    reference: object,
+) -> tuple[str | None, str | None]:
+    from policyengine.provenance.manifest import build_hf_uri
+
+    path = _reference_value(reference, "path")
+    if not isinstance(path, str) or not path:
+        return None, None
+    repo_id = _reference_value(reference, "repo_id") or data_package.repo_id
+    repo_type = _reference_value(reference, "repo_type") or data_package.repo_type
+    revision = _reference_value(reference, "revision") or _artifact_revision(
+        data_package
+    )
+    return (
+        build_hf_uri(
+            repo_id=str(repo_id),
+            path_in_repo=path,
+            revision=str(revision),
+        ),
+        str(repo_type),
+    )
+
+
+def _dataset_uris_from_manifest(manifest) -> tuple[dict[str, str], dict[str, str]]:
+    dataset_uris: dict[str, str] = {}
+    dataset_repo_types: dict[str, str] = {}
+    for name, reference in manifest.datasets.items():
+        uri, repo_type = _artifact_hf_uri(
+            data_package=manifest.data_package,
+            reference=reference,
+        )
+        if uri is None:
+            continue
+        dataset_uris[name] = uri
+        if repo_type is not None:
+            dataset_repo_types[name] = repo_type
+    return dataset_uris, dataset_repo_types
+
+
+def _dataset_uris_from_release(
+    *,
+    data_release: Mapping,
+    fallback_data_package,
+) -> tuple[dict[str, str], dict[str, str]]:
+    from policyengine.provenance.manifest import build_hf_uri
+
+    data_package = _mapping(data_release.get("data_package"))
+    datasets = _mapping(data_release.get("datasets"))
+    dataset_uris: dict[str, str] = {}
+    dataset_repo_types: dict[str, str] = {}
+    for name, reference in datasets.items():
+        if not isinstance(reference, Mapping):
+            continue
+        path = reference.get("path")
+        if not isinstance(path, str) or not path:
+            continue
+        repo_id = (
+            reference.get("repo_id")
+            or data_package.get("repo_id")
+            or fallback_data_package.repo_id
+        )
+        revision = (
+            reference.get("revision")
+            or data_package.get("release_manifest_revision")
+            or data_package.get("version")
+            or _artifact_revision(fallback_data_package)
+        )
+        repo_type = (
+            reference.get("repo_type")
+            or data_package.get("repo_type")
+            or fallback_data_package.repo_type
+        )
+        dataset_uris[str(name)] = build_hf_uri(
+            repo_id=str(repo_id),
+            path_in_repo=path,
+            revision=str(revision),
+        )
+        dataset_repo_types[str(name)] = str(repo_type)
+    return dataset_uris, dataset_repo_types
+
+
 def _current_policyengine_bundle() -> Mapping | None:
     try:
         from policyengine.bundle import get_current_bundle
 
         return get_current_bundle()
     except Exception:
-        try:
-            from policyengine.stack import get_current_stack
-
-            return get_current_stack()
-        except Exception:
-            return None
+        return None
 
 
 def _bundle_country_metadata(
@@ -96,11 +215,11 @@ def _bundle_country_metadata(
         return None
     packages = bundle.get("packages", {})
     model_package = packages.get(country_metadata.get("model_package"))
-    data_package = packages.get(country_metadata.get("data_package"), {})
     data_releases = bundle.get("data_releases", {})
     data_release = (
         data_releases.get(country, {}) if isinstance(data_releases, Mapping) else {}
     )
+    data_package = _mapping(data_release).get("data_package", {})
     if not isinstance(model_package, Mapping):
         return None
     if not isinstance(data_package, Mapping):
@@ -115,7 +234,7 @@ def get_country_release_bundle(country: str) -> CountryReleaseBundle:
     """Return package and dataset versions from policyengine.py metadata."""
 
     country = _normalise_country(country)
-    from policyengine.provenance.manifest import build_hf_uri, get_release_manifest
+    from policyengine.provenance.manifest import get_release_manifest
 
     manifest = get_release_manifest(country)
     bundle_metadata = _bundle_country_metadata(country)
@@ -127,6 +246,7 @@ def get_country_release_bundle(country: str) -> CountryReleaseBundle:
     data_artifact_revision = _artifact_revision(manifest.data_package)
     default_dataset = manifest.default_dataset
     default_dataset_uri = manifest.default_dataset_uri
+    dataset_uris, dataset_repo_types = _dataset_uris_from_manifest(manifest)
     if bundle_metadata is not None:
         bundle_manifest, model_package, data_package, data_release = bundle_metadata
         policyengine_version = (
@@ -134,29 +254,44 @@ def get_country_release_bundle(country: str) -> CountryReleaseBundle:
         )
         model_package_name = model_package.get("name") or model_package_name
         model_version = model_package.get("version") or model_version
-        data_package_name = (
-            data_release.get("data_package")
-            or data_package.get("name")
-            or data_package_name
-        )
+        certified_artifact = _mapping(data_release.get("certified_data_artifact"))
+        data_package_name = data_package.get("name") or data_package_name
         data_version = (
             data_release.get("version") or data_package.get("version") or data_version
         )
-        data_artifact_revision = data_release.get("artifact_revision") or data_version
-        default_dataset = data_release.get("default_dataset") or default_dataset
+        default_dataset = (
+            data_release.get("default_dataset")
+            or certified_artifact.get("dataset")
+            or default_dataset
+        )
         default_dataset_uri = (
-            data_release.get("default_dataset_uri") or default_dataset_uri
+            data_release.get("default_dataset_uri")
+            or certified_artifact.get("uri")
+            or default_dataset_uri
         )
-    dataset_uris = {
-        name: build_hf_uri(
-            repo_id=manifest.data_package.repo_id,
-            path_in_repo=reference.path,
-            revision=reference.revision or _artifact_revision(manifest.data_package),
+        data_artifact_revision = (
+            data_release.get("data_artifact_revision")
+            or data_release.get("artifact_revision")
+            or _revision_from_uri(default_dataset_uri)
+            or data_release.get("build_id")
+            or data_version
         )
-        for name, reference in manifest.datasets.items()
-    }
+        release_dataset_uris, release_dataset_repo_types = _dataset_uris_from_release(
+            data_release=data_release,
+            fallback_data_package=manifest.data_package,
+        )
+        dataset_uris.update(release_dataset_uris)
+        dataset_repo_types.update(release_dataset_repo_types)
     if default_dataset and default_dataset_uri:
         dataset_uris.setdefault(default_dataset, default_dataset_uri)
+        release_data_package = _mapping(data_release).get("data_package")
+        release_data_package = _mapping(release_data_package)
+        dataset_repo_types.setdefault(
+            default_dataset,
+            str(release_data_package.get("repo_type", "model"))
+            if bundle_metadata is not None
+            else manifest.data_package.repo_type,
+        )
 
     return CountryReleaseBundle(
         country=country,
@@ -169,6 +304,7 @@ def get_country_release_bundle(country: str) -> CountryReleaseBundle:
         default_dataset=str(default_dataset),
         default_dataset_uri=str(default_dataset_uri),
         dataset_uris=dataset_uris,
+        dataset_repo_types=dataset_repo_types,
     )
 
 
@@ -199,14 +335,14 @@ def resolve_bundle_dataset_name(country: str, requested_data: str | None) -> str
     )
     if revision is not None:
         if "://" in aliased:
-            return with_hf_revision(aliased, revision)
+            return _with_hf_revision_unvalidated(aliased, revision)
         uri = bundle.dataset_uris.get(aliased)
         if uri is None:
             raise ValueError(
                 "Unknown dataset revision reference "
                 f"{requested_data!r} for country {bundle.country!r}"
             )
-        return with_hf_revision(uri, revision)
+        return _with_hf_revision_unvalidated(uri, revision)
     return aliased
 
 
@@ -317,6 +453,7 @@ def resolve_runtime_bundle_dataset_uri(
             default_revision=bundle.data_version,
             override_revision=requested_data_version,
             artifact_revision=bundle.data_artifact_revision,
+            validate_hf=False,
         )
 
     requested_without_revision, requested_revision = split_dataset_revision(
@@ -343,6 +480,7 @@ def resolve_runtime_bundle_dataset_uri(
             ),
             override_revision=override_revision,
             artifact_revision=bundle.data_artifact_revision,
+            validate_hf=False,
         )
 
     dataset_uri = resolve_bundle_dataset_uri(country, requested_without_revision)
@@ -359,4 +497,5 @@ def resolve_runtime_bundle_dataset_uri(
         default_revision=bundle.data_version,
         override_revision=revision,
         artifact_revision=bundle.data_artifact_revision,
+        validate_hf=False,
     )

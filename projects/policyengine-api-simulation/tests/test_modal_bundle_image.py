@@ -17,8 +17,8 @@ class FakeImage:
         self.calls.append(("pip_install", packages))
         return self
 
-    def run_commands(self, *commands):
-        self.calls.append(("run_commands", commands))
+    def run_commands(self, *commands, **kwargs):
+        self.calls.append(("run_commands", commands, kwargs))
         return self
 
     def env(self, env):
@@ -63,7 +63,7 @@ def install_fake_modal(monkeypatch):
 def test_modal_image_uses_policyengine_bundle_install(monkeypatch):
     install_fake_modal(monkeypatch)
     monkeypatch.setenv("POLICYENGINE_VERSION", "4.19.1")
-    monkeypatch.setenv("POLICYENGINE_CORE_VERSION", "3.26.1")
+    monkeypatch.setenv("POLICYENGINE_CORE_VERSION", "3.27.1")
     monkeypatch.setenv("POLICYENGINE_US_VERSION", "1.700.0")
     monkeypatch.setenv("POLICYENGINE_UK_VERSION", "2.90.0")
     sys.modules.pop("src.modal.app", None)
@@ -82,5 +82,6 @@ def test_modal_image_uses_policyengine_bundle_install(monkeypatch):
     assert "--data-dir /opt/policyengine/data" in command
     assert app.VERSION_ENV["POLICYENGINE_DATA_FOLDER"] == "/opt/policyengine/data"
     assert app.VERSION_ENV["POLICYENGINE_BUNDLE_RECEIPT"].endswith(
-        "/.policyengine-bundle.json"
+        "/.policyengine-bundle-receipt.json"
     )
+    assert command_calls[0][2]["secrets"] == [app.data_secret]

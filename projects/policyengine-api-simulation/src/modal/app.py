@@ -54,7 +54,9 @@ SIMULATION_BUNDLE_DATA_DIR = os.environ.get(
     "POLICYENGINE_BUNDLE_DATA_DIR",
     "/opt/policyengine/data",
 )
-SIMULATION_BUNDLE_RECEIPT = f"{SIMULATION_BUNDLE_DATA_DIR}/.policyengine-bundle.json"
+SIMULATION_BUNDLE_RECEIPT = (
+    f"{SIMULATION_BUNDLE_DATA_DIR}/.policyengine-bundle-receipt.json"
+)
 VERSION_ENV = {
     "POLICYENGINE_VERSION": POLICYENGINE_VERSION,
     "POLICYENGINE_CORE_VERSION": POLICYENGINE_CORE_VERSION,
@@ -122,7 +124,7 @@ simulation_image = (
         "tables>=3.10.2",
         "logfire",
     )
-    .run_commands(bundle_install_command(POLICYENGINE_VERSION))
+    .run_commands(bundle_install_command(POLICYENGINE_VERSION), secrets=[data_secret])
     .env(VERSION_ENV)
     .add_local_python_source(
         "src.modal",

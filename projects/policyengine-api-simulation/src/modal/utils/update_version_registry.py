@@ -48,6 +48,7 @@ class CountryBundleMetadata(TypedDict):
     default_dataset: str
     default_dataset_uri: str
     dataset_uris: dict[str, str]
+    dataset_repo_types: dict[str, str]
     dataset_aliases: dict[str, str]
 
 
@@ -160,6 +161,7 @@ def _country_bundle_metadata(country: str) -> CountryBundleMetadata:
         "default_dataset": bundle.default_dataset,
         "default_dataset_uri": bundle.default_dataset_uri,
         "dataset_uris": dict(bundle.dataset_uris),
+        "dataset_repo_types": dict(bundle.dataset_repo_types),
         "dataset_aliases": dict(DATASET_ALIASES.get(bundle.country, {})),
     }
 
