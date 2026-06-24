@@ -169,6 +169,13 @@ class TestSimulationRequest:
         assert request.country == "uk"
         assert request.version == "1.0.0"
 
+    def test_simulation_request_accepts_policyengine_version(self):
+        request = SimulationRequest(country="uk", policyengine_version="4.10.0")
+
+        assert request.country == "uk"
+        assert request.version is None
+        assert request.policyengine_version == "4.10.0"
+
     def test_simulation_request_accepts_documented_simulation_fields(self):
         """
         Given the documented simulation fields (reform, region, data, ...)

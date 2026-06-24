@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from fixtures.gateway.test_endpoints import (
     TEST_APP_RELEASE_BUNDLE,
+    TEST_ROUTING_STATE,
     resolve_test_dataset_uri,
 )
 from policyengine_api_simulation.hf_dataset import HuggingFaceDatasetReferenceError
@@ -51,24 +52,15 @@ class TestGetAppName:
     ):
         from src.modal.gateway.endpoints import get_app_name
 
-        mock_modal["dicts"]["simulation-api-policyengine-versions"] = {
-            "latest": "4.10.0",
-            "4.10.0": "policyengine-simulation-py4-10-0",
-        }
-
         app_name, resolved_version = get_app_name("us", None)
 
         assert resolved_version == "4.10.0"
         assert app_name == "policyengine-simulation-py4-10-0"
 
-    def test__given_policyengine_bundle_version__then_routes_by_bundle(
+    def test__given_legacy_version_matching_policyengine_bundle__then_routes_by_bundle(
         self, mock_modal
     ):
         from src.modal.gateway.endpoints import get_app_name
-
-        mock_modal["dicts"]["simulation-api-policyengine-versions"] = {
-            "4.10.0": "policyengine-simulation-py4-10-0",
-        }
 
         app_name, resolved_version = get_app_name("uk", "4.10.0")
 
@@ -83,17 +75,11 @@ class TestGetAppName:
         """
         from src.modal.gateway.endpoints import get_app_name
 
-        # Given
-        mock_modal["dicts"]["simulation-api-us-versions"] = {
-            "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-py4-10-0",
-        }
-
         # When
         app_name, resolved_version = get_app_name("us", None)
 
         # Then
-        assert resolved_version == "1.500.0"
+        assert resolved_version == "4.10.0"
         assert app_name == "policyengine-simulation-py4-10-0"
 
     def test__given_us_country_with_version__then_returns_specified_app(
@@ -105,11 +91,6 @@ class TestGetAppName:
         Then returns the app name for that version.
         """
         from src.modal.gateway.endpoints import get_app_name
-
-        # Given
-        mock_modal["dicts"]["simulation-api-us-versions"] = {
-            "1.459.0": "policyengine-simulation-py3-9-0"
-        }
 
         # When
         app_name, resolved_version = get_app_name("us", "1.459.0")
@@ -126,17 +107,11 @@ class TestGetAppName:
         """
         from src.modal.gateway.endpoints import get_app_name
 
-        # Given
-        mock_modal["dicts"]["simulation-api-uk-versions"] = {
-            "latest": "2.66.0",
-            "2.66.0": "policyengine-simulation-py4-10-0",
-        }
-
         # When
         app_name, resolved_version = get_app_name("uk", None)
 
         # Then
-        assert resolved_version == "2.66.0"
+        assert resolved_version == "4.10.0"
         assert app_name == "policyengine-simulation-py4-10-0"
 
     def test__given_invalid_country__then_raises_value_error(self):
@@ -159,12 +134,34 @@ class TestGetAppName:
         """
         from src.modal.gateway.endpoints import get_app_name
 
-        # Given
-        mock_modal["dicts"]["simulation-api-us-versions"] = {"1.459.0": "some-app"}
-
         # When / Then
         with pytest.raises(ValueError, match="Unknown version"):
             get_app_name("us", "9.9.9")
+
+    def test__given_active_state_absent__then_falls_back_to_legacy_country_dict(
+        self, mock_modal
+    ):
+        from src.modal.gateway.endpoints import get_app_name
+
+        del mock_modal["dicts"]["simulation-api-routing-state"]
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "legacy-app",
+        }
+
+        app_name, resolved_version = get_app_name("us", None)
+
+        assert resolved_version == "1.500.0"
+        assert app_name == "legacy-app"
+
+    def test__given_policyengine_version_field__then_routes_by_bundle(self, mock_modal):
+        from src.modal.gateway.endpoints import resolve_route
+
+        route = resolve_route("us", None, "4.10.0")
+
+        assert route.response_version == "4.10.0"
+        assert route.policyengine_version == "4.10.0"
+        assert route.app_name == "policyengine-simulation-py4-10-0"
 
 
 class TestSubmitSimulationEndpoint:
@@ -492,10 +489,11 @@ class TestSubmitSimulationEndpoint:
         )
         bundle["uk"]["default_dataset_uri"] = manifest_uri
         bundle["uk"]["dataset_uris"]["enhanced_frs_2023_24"] = manifest_uri
-        mock_modal["dicts"]["simulation-api-uk-versions"] = {
-            "2.88.20": app_name,
-        }
-        mock_modal["dicts"]["simulation-api-app-release-bundles"][app_name] = bundle
+        state = deepcopy(TEST_ROUTING_STATE)
+        state["routes"]["policyengine"]["4.13.1"] = app_name
+        state["routes"]["uk"]["2.88.20"] = app_name
+        state["bundles"]["4.13.1"] = bundle
+        mock_modal["dicts"]["simulation-api-routing-state"] = {"active": state}
 
         def reject_revision(dataset_uri, revision):
             raise HuggingFaceDatasetReferenceError(
@@ -782,6 +780,63 @@ class TestSubmitSimulationEndpoint:
         assert "worker crashed" not in body["error"]
 
 
+class TestVersionEndpoints:
+    def test__given_active_state__then_lists_policyengine_and_country_routes(
+        self, mock_modal, client: TestClient
+    ):
+        response = client.get("/versions")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["policyengine"]["latest"] == "4.10.0"
+        assert data["policyengine"]["4.10.0"] == "policyengine-simulation-py4-10-0"
+        assert data["us"]["latest"] == "1.500.0"
+        assert data["uk"]["latest"] == "2.66.0"
+
+    def test__given_active_state__then_policyengine_versions_endpoint_works(
+        self, mock_modal, client: TestClient
+    ):
+        response = client.get("/versions/policyengine")
+
+        assert response.status_code == 200
+        assert response.json()["latest"] == "4.10.0"
+
+    def test__given_no_active_state__then_versions_fall_back_to_old_dicts(
+        self, mock_modal, client: TestClient
+    ):
+        del mock_modal["dicts"]["simulation-api-routing-state"]
+        mock_modal["dicts"]["simulation-api-policyengine-versions"] = {
+            "latest": "4.9.0",
+            "4.9.0": "old-py-app",
+        }
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.499.0",
+            "1.499.0": "old-us-app",
+        }
+        mock_modal["dicts"]["simulation-api-uk-versions"] = {
+            "latest": "2.65.0",
+            "2.65.0": "old-uk-app",
+        }
+
+        response = client.get("/versions")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "policyengine": {
+                "latest": "4.9.0",
+                "4.9.0": "old-py-app",
+            },
+            "us": {
+                "latest": "1.499.0",
+                "1.499.0": "old-us-app",
+            },
+            "uk": {
+                "latest": "2.65.0",
+                "2.65.0": "old-uk-app",
+            },
+        }
+
+
 class TestBudgetWindowBatchEndpoints:
     """Tests for budget-window batch gateway endpoints."""
 
@@ -816,7 +871,7 @@ class TestBudgetWindowBatchEndpoints:
             "status": "submitted",
             "poll_url": "/budget-window-jobs/mock-batch-job-id-123",
             "country": "us",
-            "version": "1.500.0",
+            "version": "4.10.0",
             "resolved_app_name": "policyengine-simulation-py4-10-0",
             "policyengine_bundle": expected_bundle("us", "1.500.0"),
         }

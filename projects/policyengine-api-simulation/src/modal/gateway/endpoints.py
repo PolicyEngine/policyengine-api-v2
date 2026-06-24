@@ -3,6 +3,7 @@ FastAPI endpoints for the Gateway API.
 """
 
 import logging
+from dataclasses import dataclass
 from typing import Optional
 
 import modal
@@ -47,20 +48,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 JOB_METADATA_DICT_NAME = "simulation-api-job-metadata"
 POLICYENGINE_VERSION_DICT_NAME = "simulation-api-policyengine-versions"
-APP_RELEASE_BUNDLES_DICT_NAME = "simulation-api-app-release-bundles"
+ROUTING_STATE_DICT_NAME = "simulation-api-routing-state"
+ROUTING_STATE_ACTIVE_KEY = "active"
+SUPPORTED_ROUTE_KINDS = ("policyengine", "us", "uk")
+
+
+@dataclass(frozen=True)
+class RouteResolution:
+    app_name: str
+    response_version: str
+    policyengine_version: str | None
+    bundle_manifest: dict
+    route_kind: str
 
 
 def _job_metadata_store():
     return modal.Dict.from_name(JOB_METADATA_DICT_NAME, create_if_missing=True)
-
-
-def _app_release_bundle_store():
-    return modal.Dict.from_name(APP_RELEASE_BUNDLES_DICT_NAME, create_if_missing=True)
-
-
-def _app_release_bundle(app_name: str) -> dict:
-    bundle = _app_release_bundle_store().get(app_name)
-    return bundle if isinstance(bundle, dict) else {}
 
 
 def _split_requested_revision(requested_data: str) -> tuple[str, str | None]:
@@ -241,10 +244,243 @@ def _optional_modal_dict(name: str):
         raise
 
 
+def _active_routing_state() -> dict:
+    store = _optional_modal_dict(ROUTING_STATE_DICT_NAME)
+    if store is None:
+        return {}
+    state = store.get(ROUTING_STATE_ACTIVE_KEY)
+    return state if isinstance(state, dict) else {}
+
+
+def _routing_state_routes(state: dict, kind: str) -> dict:
+    routes = state.get("routes")
+    if not isinstance(routes, dict):
+        return {}
+    route_map = routes.get(kind)
+    return route_map if isinstance(route_map, dict) else {}
+
+
+def _routing_state_latest(state: dict, kind: str) -> str | None:
+    latest = state.get("latest")
+    if not isinstance(latest, dict):
+        return None
+    value = latest.get(kind)
+    return value if isinstance(value, str) else None
+
+
+def _routing_state_bundles(state: dict) -> dict:
+    bundles = state.get("bundles")
+    return bundles if isinstance(bundles, dict) else {}
+
+
+def _bundle_manifest(state: dict, policyengine_version: str | None) -> dict:
+    if policyengine_version is None:
+        return {}
+    manifest = _routing_state_bundles(state).get(policyengine_version)
+    return manifest if isinstance(manifest, dict) else {}
+
+
+def _policyengine_version_for_app(state: dict, app_name: str) -> str | None:
+    for policyengine_version, routed_app in _routing_state_routes(
+        state, "policyengine"
+    ).items():
+        if routed_app == app_name:
+            return (
+                policyengine_version if isinstance(policyengine_version, str) else None
+            )
+
+    for policyengine_version, manifest in _routing_state_bundles(state).items():
+        if isinstance(manifest, dict) and manifest.get("app_name") == app_name:
+            return (
+                policyengine_version if isinstance(policyengine_version, str) else None
+            )
+
+    return None
+
+
+def _policyengine_version_from_app_name(app_name: str) -> str | None:
+    prefix = "policyengine-simulation-py"
+    if not app_name.startswith(prefix):
+        return None
+    suffix = app_name.removeprefix(prefix)
+    if not suffix:
+        return None
+    return suffix.replace("-", ".")
+
+
+def _resolve_policyengine_route(
+    state: dict,
+    *,
+    policyengine_version: str,
+    response_version: str | None = None,
+) -> RouteResolution:
+    app_name = _routing_state_routes(state, "policyengine").get(policyengine_version)
+    if not isinstance(app_name, str):
+        raise ValueError(f"Unknown policyengine.py version {policyengine_version}")
+    return RouteResolution(
+        app_name=app_name,
+        response_version=response_version or policyengine_version,
+        policyengine_version=policyengine_version,
+        bundle_manifest=_bundle_manifest(state, policyengine_version),
+        route_kind="policyengine",
+    )
+
+
+def _resolve_country_route(
+    state: dict,
+    *,
+    country: str,
+    version: str,
+) -> RouteResolution | None:
+    app_name = _routing_state_routes(state, country).get(version)
+    if not isinstance(app_name, str):
+        return None
+    policyengine_version = _policyengine_version_for_app(state, app_name)
+    return RouteResolution(
+        app_name=app_name,
+        response_version=version,
+        policyengine_version=policyengine_version,
+        bundle_manifest=_bundle_manifest(state, policyengine_version),
+        route_kind=country,
+    )
+
+
+def _validate_legacy_version_matches_bundle(
+    *,
+    country: str,
+    requested_version: str,
+    manifest: dict,
+) -> None:
+    country_bundle = manifest.get(country)
+    if not isinstance(country_bundle, dict):
+        return
+    model_version = country_bundle.get("model_version")
+    if isinstance(model_version, str) and requested_version != model_version:
+        raise ValueError(
+            f"Requested {country} version {requested_version} does not match "
+            f"policyengine.py bundle {manifest.get('policyengine_version')} "
+            f"({country} model version {model_version})"
+        )
+
+
+def _resolve_from_active_state(
+    *,
+    state: dict,
+    country: str,
+    version: str | None,
+    policyengine_version: str | None,
+) -> RouteResolution:
+    if policyengine_version is not None:
+        resolution = _resolve_policyengine_route(
+            state,
+            policyengine_version=policyengine_version,
+        )
+        if version is not None:
+            _validate_legacy_version_matches_bundle(
+                country=country,
+                requested_version=version,
+                manifest=resolution.bundle_manifest,
+            )
+        return resolution
+
+    if version is None:
+        latest_policyengine = _routing_state_latest(state, "policyengine")
+        if latest_policyengine is None:
+            raise ValueError("Routing state does not define latest policyengine.py")
+        return _resolve_policyengine_route(
+            state,
+            policyengine_version=latest_policyengine,
+        )
+
+    country_resolution = _resolve_country_route(
+        state,
+        country=country,
+        version=version,
+    )
+    policyengine_app = _routing_state_routes(state, "policyengine").get(version)
+    if country_resolution is not None and isinstance(policyengine_app, str):
+        if country_resolution.app_name != policyengine_app:
+            raise ValueError(
+                f"Ambiguous version {version} for country {country}; pass "
+                "policyengine_version to select a bundle explicitly"
+            )
+        return _resolve_policyengine_route(
+            state,
+            policyengine_version=version,
+        )
+    if country_resolution is not None:
+        return country_resolution
+    if isinstance(policyengine_app, str):
+        return _resolve_policyengine_route(
+            state,
+            policyengine_version=version,
+        )
+
+    raise ValueError(f"Unknown version {version} for country {country}")
+
+
+def _resolve_from_legacy_dicts(
+    *,
+    country: str,
+    version: str | None,
+    policyengine_version: str | None,
+) -> RouteResolution:
+    if policyengine_version is not None:
+        policyengine_versions = _optional_modal_dict(POLICYENGINE_VERSION_DICT_NAME)
+        if policyengine_versions is None:
+            raise ValueError(f"Unknown policyengine.py version {policyengine_version}")
+        try:
+            app_name = policyengine_versions[policyengine_version]
+        except KeyError:
+            raise ValueError(f"Unknown policyengine.py version {policyengine_version}")
+        return RouteResolution(
+            app_name=app_name,
+            response_version=policyengine_version,
+            policyengine_version=policyengine_version,
+            bundle_manifest={},
+            route_kind="policyengine",
+        )
+
+    country_versions = modal.Dict.from_name(f"simulation-api-{country}-versions")
+    if version is None:
+        resolved_version = country_versions["latest"]
+    else:
+        resolved_version = version
+
+    try:
+        app_name = country_versions[resolved_version]
+    except KeyError:
+        policyengine_versions = _optional_modal_dict(POLICYENGINE_VERSION_DICT_NAME)
+        if policyengine_versions is not None and version is not None:
+            try:
+                app_name = policyengine_versions[version]
+            except KeyError:
+                pass
+            else:
+                return RouteResolution(
+                    app_name=app_name,
+                    response_version=version,
+                    policyengine_version=version,
+                    bundle_manifest={},
+                    route_kind="policyengine",
+                )
+        raise ValueError(f"Unknown version {resolved_version} for country {country}")
+
+    return RouteResolution(
+        app_name=app_name,
+        response_version=resolved_version,
+        policyengine_version=_policyengine_version_from_app_name(app_name),
+        bundle_manifest={},
+        route_kind=country,
+    )
+
+
 def _build_policyengine_bundle(
-    country: str, resolved_version: str, app_name: str, payload: dict
+    country: str,
+    resolution: RouteResolution,
+    payload: dict,
 ) -> PolicyEngineBundle:
-    app_bundle = _app_release_bundle(app_name)
+    app_bundle = resolution.bundle_manifest
     country_bundle = app_bundle.get(country.lower())
     if not isinstance(country_bundle, dict):
         country_bundle = {}
@@ -263,8 +499,10 @@ def _build_policyengine_bundle(
         if isinstance(requested_data_version, str)
         else country_bundle.get("data_version")
     )
-    model_version = country_bundle.get("model_version") or resolved_version
-    policyengine_version = app_bundle.get("policyengine_version")
+    model_version = country_bundle.get("model_version") or resolution.response_version
+    policyengine_version = app_bundle.get(
+        "policyengine_version", resolution.policyengine_version
+    )
     return PolicyEngineBundle(
         model_version=str(model_version),
         policyengine_version=(
@@ -295,7 +533,7 @@ def _build_budget_window_parent_payload(
     bundle: PolicyEngineBundle,
 ) -> dict:
     payload = request.model_dump(
-        exclude={"telemetry"},
+        exclude={"version", "policyengine_version", "telemetry"},
         mode="json",
         exclude_none=True,
     )
@@ -310,45 +548,36 @@ def _build_budget_window_parent_payload(
     return payload
 
 
-def get_app_name(country: str, version: Optional[str]) -> tuple[str, str]:
-    """Resolve country + bundle version to a Modal app name.
-
-    The canonical version registry is keyed by policyengine.py bundle version.
-    Country-version registries remain as a backward-compatible fallback for
-    callers that still pass a country package version.
-    """
+def resolve_route(
+    country: str,
+    version: Optional[str],
+    policyengine_version: Optional[str] = None,
+) -> RouteResolution:
+    """Resolve a country/package or policyengine.py version to a Modal app."""
     country_lower = country.lower()
     if country_lower not in ("us", "uk"):
         raise ValueError(f"Unknown country: {country}")
 
-    policyengine_versions = _optional_modal_dict(POLICYENGINE_VERSION_DICT_NAME)
-
-    if version is None and policyengine_versions is not None:
-        resolved_version = policyengine_versions.get("latest")
-        if resolved_version is not None:
-            try:
-                return policyengine_versions[resolved_version], resolved_version
-            except KeyError:
-                pass
-
-    if version is None:
-        country_versions = modal.Dict.from_name(
-            f"simulation-api-{country_lower}-versions"
+    state = _active_routing_state()
+    if state:
+        return _resolve_from_active_state(
+            state=state,
+            country=country_lower,
+            version=version,
+            policyengine_version=policyengine_version,
         )
-        resolved_version = country_versions["latest"]
-        return country_versions[resolved_version], resolved_version
 
-    if policyengine_versions is not None:
-        try:
-            return policyengine_versions[version], version
-        except KeyError:
-            pass
+    return _resolve_from_legacy_dicts(
+        country=country_lower,
+        version=version,
+        policyengine_version=policyengine_version,
+    )
 
-    country_versions = modal.Dict.from_name(f"simulation-api-{country_lower}-versions")
-    try:
-        return country_versions[version], version
-    except KeyError:
-        raise ValueError(f"Unknown version {version} for country {country}")
+
+def get_app_name(country: str, version: Optional[str]) -> tuple[str, str]:
+    """Backward-compatible helper for tests and API v1 health checks."""
+    resolution = resolve_route(country, version)
+    return resolution.app_name, resolution.response_version
 
 
 @router.post(
@@ -366,12 +595,16 @@ async def submit_simulation(request: SimulationRequest):
     Returns immediately with job_id for polling.
     """
     try:
-        app_name, resolved_version = get_app_name(request.country, request.version)
+        route = resolve_route(
+            request.country,
+            request.version,
+            request.policyengine_version,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     payload = request.model_dump(
-        exclude={"version", "telemetry"},
+        exclude={"version", "policyengine_version", "telemetry"},
         mode="json",
         exclude_none=True,
     )
@@ -381,7 +614,9 @@ async def submit_simulation(request: SimulationRequest):
 
     try:
         bundle = _build_policyengine_bundle(
-            request.country, resolved_version, app_name, payload
+            request.country,
+            route,
+            payload,
         )
     except (ValueError, HuggingFaceDatasetReferenceError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -389,18 +624,18 @@ async def submit_simulation(request: SimulationRequest):
     logger.info(
         "Routing %s:%s to app %s (run_id=%s)",
         request.country,
-        resolved_version,
-        app_name,
+        route.response_version,
+        route.app_name,
         run_id,
     )
 
     # Get function reference from the target app
-    sim_func = modal.Function.from_name(app_name, "run_simulation")
+    sim_func = modal.Function.from_name(route.app_name, "run_simulation")
 
     # Spawn the job (returns immediately)
     call = sim_func.spawn(payload)
 
-    job_metadata = _serialize_job_metadata(app_name, bundle, run_id)
+    job_metadata = _serialize_job_metadata(route.app_name, bundle, run_id)
     _job_metadata_store()[call.object_id] = job_metadata
 
     return JobSubmitResponse(
@@ -408,8 +643,8 @@ async def submit_simulation(request: SimulationRequest):
         status="submitted",
         poll_url=f"/jobs/{call.object_id}",
         country=request.country,
-        version=resolved_version,
-        resolved_app_name=app_name,
+        version=route.response_version,
+        resolved_app_name=route.app_name,
         policyengine_bundle=bundle,
         run_id=run_id,
     )
@@ -426,35 +661,38 @@ async def submit_budget_window_batch(request: BudgetWindowBatchRequest):
     Submit a budget-window batch job.
     """
     try:
-        app_name, resolved_version = get_app_name(request.country, request.version)
+        route = resolve_route(
+            request.country,
+            request.version,
+            request.policyengine_version,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     try:
         bundle = _build_policyengine_bundle(
             request.country,
-            resolved_version,
-            app_name,
+            route,
             request.model_dump(mode="json"),
         )
     except (ValueError, HuggingFaceDatasetReferenceError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     payload = _build_budget_window_parent_payload(
         request,
-        resolved_version=resolved_version,
-        resolved_app_name=app_name,
+        resolved_version=route.response_version,
+        resolved_app_name=route.app_name,
         bundle=bundle,
     )
 
-    batch_func = modal.Function.from_name(app_name, "run_budget_window_batch")
+    batch_func = modal.Function.from_name(route.app_name, "run_budget_window_batch")
     call = batch_func.spawn(payload)
     batch_job_id = call.object_id
 
     seed_state = create_initial_batch_state(
         batch_job_id=batch_job_id,
         request=request,
-        resolved_version=resolved_version,
-        resolved_app_name=app_name,
+        resolved_version=route.response_version,
+        resolved_app_name=route.app_name,
         bundle=bundle,
     )
     put_batch_job_seed(seed_state)
@@ -464,8 +702,8 @@ async def submit_budget_window_batch(request: BudgetWindowBatchRequest):
         status=seed_state.status,
         poll_url=f"/budget-window-jobs/{batch_job_id}",
         country=request.country,
-        version=resolved_version,
-        resolved_app_name=app_name,
+        version=route.response_version,
+        resolved_app_name=route.app_name,
         policyengine_bundle=bundle,
         run_id=seed_state.run_id,
     )
@@ -567,24 +805,49 @@ async def get_budget_window_job_status(batch_job_id: str):
 
 @router.get("/versions")
 async def list_versions():
-    """List all available versions for all countries."""
+    """List all available routing versions."""
+    state = _active_routing_state()
+    if state:
+        return {
+            kind: _version_map_from_state(state, kind) for kind in SUPPORTED_ROUTE_KINDS
+        }
+
+    policyengine_dict = _optional_modal_dict(POLICYENGINE_VERSION_DICT_NAME)
     us_dict = modal.Dict.from_name("simulation-api-us-versions")
     uk_dict = modal.Dict.from_name("simulation-api-uk-versions")
-
     return {
+        "policyengine": (
+            dict(policyengine_dict) if policyengine_dict is not None else {}
+        ),
         "us": dict(us_dict),
         "uk": dict(uk_dict),
     }
 
 
-@router.get("/versions/{country}")
-async def get_country_versions(country: str):
-    """Get available versions for a specific country."""
-    country_lower = country.lower()
-    if country_lower not in ("us", "uk"):
-        raise HTTPException(status_code=404, detail=f"Unknown country: {country}")
+def _version_map_from_state(state: dict, kind: str) -> dict:
+    versions = dict(_routing_state_routes(state, kind))
+    latest = _routing_state_latest(state, kind)
+    if latest is not None:
+        versions["latest"] = latest
+    return versions
 
-    version_dict = modal.Dict.from_name(f"simulation-api-{country_lower}-versions")
+
+@router.get("/versions/{kind}")
+async def get_country_versions(kind: str):
+    """Get available versions for policyengine, US, or UK routing."""
+    kind_lower = kind.lower()
+    if kind_lower not in SUPPORTED_ROUTE_KINDS:
+        raise HTTPException(status_code=404, detail=f"Unknown version kind: {kind}")
+
+    state = _active_routing_state()
+    if state:
+        return _version_map_from_state(state, kind_lower)
+
+    if kind_lower == "policyengine":
+        version_dict = _optional_modal_dict(POLICYENGINE_VERSION_DICT_NAME)
+        return dict(version_dict) if version_dict is not None else {}
+
+    version_dict = modal.Dict.from_name(f"simulation-api-{kind_lower}-versions")
     return dict(version_dict)
 
 

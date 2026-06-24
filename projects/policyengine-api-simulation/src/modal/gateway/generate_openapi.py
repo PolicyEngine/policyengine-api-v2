@@ -114,12 +114,12 @@ def create_openapi_app() -> FastAPI:
 
     @app.get("/versions")
     async def list_versions() -> dict:
-        """List all available versions for all countries."""
+        """List all available routing versions."""
         raise NotImplementedError("Stub for OpenAPI generation")
 
-    @app.get("/versions/{country}")
-    async def get_country_versions(country: str) -> dict:
-        """Get available versions for a specific country."""
+    @app.get("/versions/{kind}")
+    async def get_country_versions(kind: str) -> dict:
+        """Get available versions for policyengine, US, or UK routing."""
         raise NotImplementedError("Stub for OpenAPI generation")
 
     @app.get("/health")

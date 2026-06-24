@@ -1,9 +1,8 @@
-"""Tests for the Modal version-registry updater."""
+"""Tests for the Modal routing-state publisher."""
 
 from __future__ import annotations
 
 import sys
-from copy import deepcopy
 
 import pytest
 
@@ -23,9 +22,6 @@ class FakeDict:
     def get(self, key, default=None):
         return self._data.get(key, default)
 
-    def items(self):
-        return self._data.items()
-
     def snapshot(self) -> dict:
         return dict(self._data)
 
@@ -36,9 +32,15 @@ def patched_modal(monkeypatch):
 
     class _Dict:
         @staticmethod
-        def from_name(name: str, environment_name: str, create_if_missing: bool):
+        def from_name(
+            name: str,
+            environment_name: str,
+            create_if_missing: bool,
+        ):
             key = f"{environment_name}/{name}"
             if key not in stores:
+                if not create_if_missing:
+                    raise KeyError(key)
                 stores[key] = FakeDict()
             return stores[key]
 
@@ -47,6 +49,38 @@ def patched_modal(monkeypatch):
 
     monkeypatch.setattr(registry, "modal", _Modal)
     return stores
+
+
+@pytest.fixture
+def fake_bundle_metadata(monkeypatch):
+    def fake_country_bundle_metadata(
+        country: str,
+    ) -> registry.CountryBundleMetadata:
+        return {
+            "country": country,
+            "model_package_name": (
+                "policyengine-us" if country == "us" else "policyengine-uk"
+            ),
+            "model_version": "1.687.0" if country == "us" else "2.88.14",
+            "data_package_name": "populace-data",
+            "data_version": (
+                "populace-us-build" if country == "us" else "populace-uk-build"
+            ),
+            "data_artifact_revision": (
+                "populace-us-build" if country == "us" else "populace-uk-build"
+            ),
+            "default_dataset": (
+                "populace_us_2024" if country == "us" else "populace_uk_2023"
+            ),
+            "default_dataset_uri": f"hf://datasets/policyengine/{country}/default",
+            "dataset_uris": {"default": f"hf://datasets/policyengine/{country}"},
+            "dataset_repo_types": {"default": "dataset"},
+            "dataset_aliases": {"alias": "default"},
+        }
+
+    monkeypatch.setattr(
+        registry, "_country_bundle_metadata", fake_country_bundle_metadata
+    )
 
 
 def test__is_newer_version__advances_on_higher_minor():
@@ -65,115 +99,166 @@ def test__is_newer_version__does_not_advance_on_equal():
     assert registry._is_newer_version("1.500.0", "1.500.0") is False
 
 
-def test_update_version_dict__keeps_latest_when_incoming_older(patched_modal):
-    stores = patched_modal
-    stores["main/simulation-api-us-versions"] = FakeDict(
-        {
-            "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-py4-10-0",
-        }
+def test_validate_routing_state_accepts_complete_state(fake_bundle_metadata):
+    state = registry.build_next_routing_state(
+        current_state=None,
+        app_name="policyengine-simulation-py4-19-1",
+        policyengine_version="4.19.1",
+        us_version="1.687.0",
+        uk_version="2.88.14",
     )
 
-    registry.update_version_dict(
-        "simulation-api-us-versions",
-        "main",
-        "1.400.0",
-        "policyengine-simulation-py3-8-0",
+    registry.validate_routing_state(state)
+
+
+def test_validate_routing_state_rejects_missing_latest_route(fake_bundle_metadata):
+    state = registry.build_next_routing_state(
+        current_state=None,
+        app_name="policyengine-simulation-py4-19-1",
+        policyengine_version="4.19.1",
+        us_version="1.687.0",
+        uk_version="2.88.14",
+    )
+    state["routes"]["us"].pop("1.687.0")
+
+    with pytest.raises(ValueError, match="latest.us"):
+        registry.validate_routing_state(state)
+
+
+def test_validate_routing_state_rejects_policyengine_route_without_bundle(
+    fake_bundle_metadata,
+):
+    state = registry.build_next_routing_state(
+        current_state=None,
+        app_name="policyengine-simulation-py4-19-1",
+        policyengine_version="4.19.1",
+        us_version="1.687.0",
+        uk_version="2.88.14",
+    )
+    state["bundles"].pop("4.19.1")
+
+    with pytest.raises(ValueError, match="no bundle manifest"):
+        registry.validate_routing_state(state)
+
+
+def test_build_next_routing_state_preserves_existing_routes(fake_bundle_metadata):
+    current_state = registry.build_next_routing_state(
+        current_state=None,
+        app_name="policyengine-simulation-py4-18-0",
+        policyengine_version="4.18.0",
+        us_version="1.687.0",
+        uk_version="2.88.14",
     )
 
-    snapshot = stores["main/simulation-api-us-versions"].snapshot()
-    assert snapshot["latest"] == "1.500.0"
-    assert snapshot["1.400.0"] == "policyengine-simulation-py3-8-0"
-
-
-def test_update_version_dict__advances_latest_when_incoming_newer(patched_modal):
-    stores = patched_modal
-    stores["main/simulation-api-us-versions"] = FakeDict(
-        {
-            "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-py4-10-0",
-        }
+    next_state = registry.build_next_routing_state(
+        current_state=current_state,
+        app_name="policyengine-simulation-py4-19-1",
+        policyengine_version="4.19.1",
+        us_version="1.687.0",
+        uk_version="2.88.14",
     )
 
-    registry.update_version_dict(
-        "simulation-api-us-versions",
-        "main",
-        "1.601.2",
-        "policyengine-simulation-py4-11-0",
+    assert (
+        next_state["routes"]["policyengine"]["4.18.0"]
+        == "policyengine-simulation-py4-18-0"
+    )
+    assert (
+        next_state["routes"]["policyengine"]["4.19.1"]
+        == "policyengine-simulation-py4-19-1"
+    )
+    assert next_state["latest"]["policyengine"] == "4.19.1"
+    assert next_state["latest"]["us"] == "1.687.0"
+
+
+def test_build_next_routing_state_keeps_existing_latest_when_incoming_older(
+    fake_bundle_metadata,
+):
+    current_state = registry.build_next_routing_state(
+        current_state=None,
+        app_name="policyengine-simulation-py4-19-1",
+        policyengine_version="4.19.1",
+        us_version="1.687.0",
+        uk_version="2.88.14",
     )
 
-    snapshot = stores["main/simulation-api-us-versions"].snapshot()
-    assert snapshot["latest"] == "1.601.2"
-
-
-def test_update_version_dict__force_latest_allows_downgrade(patched_modal):
-    stores = patched_modal
-    stores["main/simulation-api-us-versions"] = FakeDict(
-        {
-            "latest": "1.500.0",
-            "1.500.0": "policyengine-simulation-py4-10-0",
-        }
+    next_state = registry.build_next_routing_state(
+        current_state=current_state,
+        app_name="policyengine-simulation-py4-18-0",
+        policyengine_version="4.18.0",
+        us_version="1.687.0",
+        uk_version="2.88.14",
     )
 
-    registry.update_version_dict(
-        "simulation-api-us-versions",
-        "main",
-        "1.400.0",
-        "policyengine-simulation-py3-8-0",
+    assert next_state["latest"]["policyengine"] == "4.19.1"
+    assert (
+        next_state["routes"]["policyengine"]["4.18.0"]
+        == "policyengine-simulation-py4-18-0"
+    )
+
+
+def test_build_next_routing_state_force_latest_allows_downgrade(
+    fake_bundle_metadata,
+):
+    current_state = registry.build_next_routing_state(
+        current_state=None,
+        app_name="policyengine-simulation-py4-19-1",
+        policyengine_version="4.19.1",
+        us_version="1.687.0",
+        uk_version="2.88.14",
+    )
+
+    next_state = registry.build_next_routing_state(
+        current_state=current_state,
+        app_name="policyengine-simulation-py4-18-0",
+        policyengine_version="4.18.0",
+        us_version="1.687.0",
+        uk_version="2.88.14",
         force_latest=True,
     )
 
-    snapshot = stores["main/simulation-api-us-versions"].snapshot()
-    assert snapshot["latest"] == "1.400.0"
+    assert next_state["latest"]["policyengine"] == "4.18.0"
 
 
-def test_update_version_dict__new_registry_sets_latest_even_without_force(
-    patched_modal,
+def test_build_next_routing_state_rejects_country_version_mismatch(
+    fake_bundle_metadata,
 ):
-    registry.update_version_dict(
-        "simulation-api-uk-versions",
-        "staging",
-        "2.66.0",
-        "policyengine-simulation-py4-10-0",
+    with pytest.raises(ValueError, match="US version"):
+        registry.build_next_routing_state(
+            current_state=None,
+            app_name="policyengine-simulation-py4-19-1",
+            policyengine_version="4.19.1",
+            us_version="1.999.0",
+            uk_version="2.88.14",
+        )
+
+
+def test_publish_routing_state_writes_only_active_snapshot(
+    patched_modal,
+    fake_bundle_metadata,
+):
+    registry.publish_routing_state(
+        environment="main",
+        app_name="policyengine-simulation-py4-19-1",
+        policyengine_version="4.19.1",
+        us_version="1.687.0",
+        uk_version="2.88.14",
     )
 
-    snapshot = patched_modal["staging/simulation-api-uk-versions"].snapshot()
-    assert snapshot["latest"] == "2.66.0"
-    assert snapshot["2.66.0"] == "policyengine-simulation-py4-10-0"
+    assert set(patched_modal) == {"main/simulation-api-routing-state"}
+    snapshot = patched_modal["main/simulation-api-routing-state"].snapshot()
+    active = snapshot["active"]
+    assert (
+        active["routes"]["policyengine"]["4.19.1"] == "policyengine-simulation-py4-19-1"
+    )
+    assert active["routes"]["us"]["1.687.0"] == "policyengine-simulation-py4-19-1"
+    assert active["bundles"]["4.19.1"]["us"]["dataset_aliases"] == {"alias": "default"}
 
 
-def test_main_updates_policyengine_and_country_registries(
+def test_main_publishes_routing_state(
     patched_modal,
+    fake_bundle_metadata,
     monkeypatch,
 ):
-    def fake_country_bundle_metadata(
-        country: str,
-    ) -> registry.CountryBundleMetadata:
-        return {
-            "country": country,
-            "model_package_name": (
-                "policyengine-us" if country == "us" else "policyengine-uk"
-            ),
-            "model_version": "1.687.0" if country == "us" else "2.88.14",
-            "data_package_name": "populace-data",
-            "data_version": "populace-us-build"
-            if country == "us"
-            else "populace-uk-build",
-            "data_artifact_revision": (
-                "populace-us-build" if country == "us" else "populace-uk-build"
-            ),
-            "default_dataset": (
-                "populace_us_2024" if country == "us" else "populace_uk_2023"
-            ),
-            "default_dataset_uri": f"hf://datasets/policyengine/{country}/default",
-            "dataset_uris": {"default": f"hf://datasets/policyengine/{country}"},
-            "dataset_repo_types": {"default": "dataset"},
-            "dataset_aliases": {},
-        }
-
-    monkeypatch.setattr(
-        registry, "_country_bundle_metadata", fake_country_bundle_metadata
-    )
     monkeypatch.setattr(
         sys,
         "argv",
@@ -194,175 +279,7 @@ def test_main_updates_policyengine_and_country_registries(
 
     registry.main()
 
-    py_versions = patched_modal["main/simulation-api-policyengine-versions"].snapshot()
-    assert py_versions["latest"] == "4.19.1"
-    assert py_versions["4.19.1"] == "policyengine-simulation-py4-19-1"
-    assert (
-        patched_modal["main/simulation-api-us-versions"].snapshot()["1.687.0"]
-        == "policyengine-simulation-py4-19-1"
-    )
-    app_release_bundles = patched_modal[
-        "main/simulation-api-app-release-bundles"
-    ].snapshot()
-    assert app_release_bundles["4.19.1"]["policyengine_version"] == "4.19.1"
-
-
-def test_put_app_release_bundle_metadata_records_app_and_py_version_aliases(
-    patched_modal,
-    monkeypatch,
-):
-    def fake_country_bundle_metadata(
-        country: str,
-    ) -> registry.CountryBundleMetadata:
-        return {
-            "country": country,
-            "model_package_name": (
-                "policyengine-us" if country == "us" else "policyengine-uk"
-            ),
-            "model_version": "1.0.0" if country == "us" else "2.0.0",
-            "data_package_name": "populace-data",
-            "data_version": "3.0.0" if country == "us" else "4.0.0",
-            "data_artifact_revision": "sha-us" if country == "us" else "sha-uk",
-            "default_dataset": "default",
-            "default_dataset_uri": f"hf://datasets/policyengine/{country}/default",
-            "dataset_uris": {"default": f"hf://datasets/policyengine/{country}"},
-            "dataset_repo_types": {"default": "dataset"},
-            "dataset_aliases": {"alias": "default"},
-        }
-
-    monkeypatch.setattr(
-        registry, "_country_bundle_metadata", fake_country_bundle_metadata
-    )
-
-    registry.put_app_release_bundle_metadata(
-        environment="main",
-        app_name="policyengine-simulation-py4-10-0",
-        policyengine_version="4.10.0",
-    )
-
-    snapshot = patched_modal["main/simulation-api-app-release-bundles"].snapshot()
-    metadata = snapshot["policyengine-simulation-py4-10-0"]
-    assert snapshot["4.10.0"] == metadata
-    assert metadata["policyengine_version"] == "4.10.0"
-    assert metadata["us"]["dataset_aliases"] == {"alias": "default"}
-    assert metadata["us"]["dataset_repo_types"] == {"default": "dataset"}
-
-
-def test_backfill_app_release_bundle_metadata_adds_artifact_revision_from_uri():
-    metadata = {
-        "app_name": "policyengine-simulation-py4-13-1",
-        "policyengine_version": "4.13.1",
-        "us": {
-            "data_version": "1.115.5",
-            "default_dataset": "enhanced_cps_2024",
-            "default_dataset_uri": (
-                "hf://policyengine/policyengine-us-data/"
-                "enhanced_cps_2024.h5@d47fb5475144260a75467d2f2e22b2d5d53d4d57"
-            ),
-            "dataset_uris": {},
-        },
-        "uk": {
-            "data_version": "1.55.10",
-            "default_dataset": "enhanced_frs_2023_24",
-            "default_dataset_uri": (
-                "hf://policyengine/policyengine-uk-data-private/"
-                "enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
-            ),
-            "dataset_uris": {},
-        },
-    }
-
-    updated, changed = registry.backfill_app_release_bundle_metadata(metadata)
-
-    assert changed is True
-    assert updated is not None
-    assert (
-        updated["us"]["data_artifact_revision"]
-        == "d47fb5475144260a75467d2f2e22b2d5d53d4d57"
-    )
-    assert (
-        updated["uk"]["data_artifact_revision"]
-        == "655dd07e4bb9c777b00dac044949611f1feb824f"
-    )
-    assert "data_artifact_revision" not in metadata["us"]
-
-
-def test_backfill_app_release_bundle_metadata_preserves_existing_revision():
-    metadata = {
-        "app_name": "policyengine-simulation-py4-10-0",
-        "policyengine_version": "4.10.0",
-        "us": {
-            "data_version": "1.110.12",
-            "data_artifact_revision": "existing-us-revision",
-            "default_dataset": "enhanced_cps_2024",
-            "default_dataset_uri": (
-                "hf://policyengine/policyengine-us-data/"
-                "enhanced_cps_2024.h5@new-us-revision"
-            ),
-            "dataset_uris": {},
-        },
-        "uk": {
-            "data_version": "1.40.3",
-            "data_artifact_revision": "existing-uk-revision",
-            "default_dataset": "enhanced_frs_2023_24",
-            "default_dataset_uri": (
-                "hf://policyengine/policyengine-uk-data-private/"
-                "enhanced_frs_2023_24.h5@new-uk-revision"
-            ),
-            "dataset_uris": {},
-        },
-    }
-
-    updated, changed = registry.backfill_app_release_bundle_metadata(metadata)
-
-    assert changed is False
-    assert updated == metadata
-    assert updated["us"]["data_artifact_revision"] == "existing-us-revision"
-    assert updated["uk"]["data_artifact_revision"] == "existing-uk-revision"
-
-
-def test_backfill_app_release_bundles_updates_all_alias_entries(patched_modal):
-    legacy_bundle = {
-        "app_name": "policyengine-simulation-py4-13-1",
-        "policyengine_version": "4.13.1",
-        "us": {
-            "data_version": "1.115.5",
-            "default_dataset": "enhanced_cps_2024",
-            "default_dataset_uri": (
-                "hf://policyengine/policyengine-us-data/"
-                "enhanced_cps_2024.h5@d47fb5475144260a75467d2f2e22b2d5d53d4d57"
-            ),
-            "dataset_uris": {},
-        },
-        "uk": {
-            "data_version": "1.55.10",
-            "default_dataset": "enhanced_frs_2023_24",
-            "default_dataset_uri": (
-                "hf://policyengine/policyengine-uk-data-private/"
-                "enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
-            ),
-            "dataset_uris": {},
-        },
-    }
-    patched_modal["main/simulation-api-app-release-bundles"] = FakeDict(
-        {
-            "policyengine-simulation-py4-13-1": deepcopy(legacy_bundle),
-            "4.13.1": deepcopy(legacy_bundle),
-            "policyengine-simulation-py4-10-0": {
-                "us": {"data_artifact_revision": "already-present"},
-            },
-        }
-    )
-
-    updated_count = registry.backfill_app_release_bundles(environment="main")
-
-    assert updated_count == 2
-    snapshot = patched_modal["main/simulation-api-app-release-bundles"].snapshot()
-    for key in ("policyengine-simulation-py4-13-1", "4.13.1"):
-        assert (
-            snapshot[key]["uk"]["data_artifact_revision"]
-            == "655dd07e4bb9c777b00dac044949611f1feb824f"
-        )
-    assert snapshot["policyengine-simulation-py4-10-0"] == {
-        "us": {"data_artifact_revision": "already-present"},
-    }
+    active = patched_modal["main/simulation-api-routing-state"].snapshot()["active"]
+    assert active["latest"]["policyengine"] == "4.19.1"
+    assert active["latest"]["us"] == "1.687.0"
+    assert active["latest"]["uk"] == "2.88.14"

@@ -38,9 +38,9 @@ echo "  App name: ${SIMULATION_APP_NAME}"
 export MODAL_APP_NAME="$SIMULATION_APP_NAME"
 uv run modal deploy --env="$MODAL_ENV" src/modal/app.py
 
-# 3. Update version registries
+# 3. Publish active routing state
 echo ""
-echo "Step 3: Updating version registries..."
+echo "Step 3: Publishing active routing state..."
 uv run python -m src.modal.utils.update_version_registry \
     --app-name "$SIMULATION_APP_NAME" \
     --policyengine-version "${POLICYENGINE_VERSION}" \
@@ -53,4 +53,5 @@ echo "========================================"
 echo "Deployment complete!"
 echo "  Gateway app: policyengine-simulation-gateway"
 echo "  Simulation app: $SIMULATION_APP_NAME"
+echo "  Routing state: simulation-api-routing-state[active]"
 echo "========================================"

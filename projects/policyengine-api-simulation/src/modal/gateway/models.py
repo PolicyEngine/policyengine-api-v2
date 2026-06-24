@@ -83,6 +83,7 @@ class GatewayRequestBase(BaseModel):
 
     country: str
     version: Optional[str] = None
+    policyengine_version: Optional[str] = None
     telemetry: TelemetryEnvelope | None = None
 
     # Fields forwarded to SimulationOptions on the worker side.
