@@ -242,6 +242,7 @@ class TestModalSyncSecrets:
     def test_fails_when_gateway_auth_config_is_partial(self):
         """Should fail before touching Modal when auth config is partial."""
         env = os.environ.copy()
+        env["HF_TOKEN"] = "hf_test"
         env["GATEWAY_AUTH_ISSUER"] = "https://tenant.auth0.com"
         env.pop("GATEWAY_AUTH_AUDIENCE", None)
         env.pop("GATEWAY_AUTH_CLIENT_ID", None)
@@ -260,6 +261,7 @@ class TestModalSyncSecrets:
     def test_fails_when_auth_required_but_gateway_auth_vars_missing(self):
         """Required auth must refuse deploy when the GitHub secrets are absent."""
         env = os.environ.copy()
+        env["HF_TOKEN"] = "hf_test"
         env["GATEWAY_AUTH_REQUIRED"] = "1"
         for key in (
             "GATEWAY_AUTH_ISSUER",
@@ -279,8 +281,23 @@ class TestModalSyncSecrets:
         assert result.returncode != 0
         assert "GATEWAY_AUTH_REQUIRED is enabled" in result.stderr
 
+    def test_requires_hf_token(self):
+        """Should fail before touching Modal when HF_TOKEN is absent."""
+        env = os.environ.copy()
+        env.pop("HF_TOKEN", None)
+
+        result = subprocess.run(
+            ["bash", str(self.script), "staging", "beta"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert result.returncode != 0
+        assert "HF_TOKEN is required" in result.stderr
+
     def test_creates_gateway_secret_with_normalized_issuer(self, tmp_path):
-        """Should sync only runtime gateway values and normalize issuer."""
+        """Should sync HF and runtime gateway values and normalize issuer."""
         uv_calls_log = tmp_path / "uv_calls.log"
         fake_bin = tmp_path / "bin"
         fake_bin.mkdir()
@@ -293,6 +310,7 @@ class TestModalSyncSecrets:
             {
                 "PATH": f"{fake_bin}:{env['PATH']}",
                 "UV_CALLS_LOG": str(uv_calls_log),
+                "HF_TOKEN": "hf_test",
                 "GATEWAY_AUTH_ISSUER": "https://tenant.auth0.com",
                 "GATEWAY_AUTH_AUDIENCE": "https://simulation-api-beta.policyengine.org",
                 "GATEWAY_AUTH_CLIENT_ID": "client-id",
@@ -310,6 +328,8 @@ class TestModalSyncSecrets:
 
         assert result.returncode == 0, result.stderr
         calls = uv_calls_log.read_text()
+        assert "run modal secret create huggingface-token" in calls
+        assert "HF_TOKEN=hf_test" in calls
         assert "run modal secret create policyengine-gateway-auth" in calls
         assert "GATEWAY_AUTH_ISSUER=https://tenant.auth0.com/" in calls
         assert (
