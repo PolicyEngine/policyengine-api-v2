@@ -44,9 +44,9 @@ def main() -> None:
         f"{outputs['policyengine_version']}: "
         f"policyengine-core={outputs['policyengine_core_version']}, "
         f"policyengine-us={outputs['us_version']}, "
-        f"policyengine-us-data={outputs['us_data_version']}, "
+        f"us-data-release={outputs['us_data_version']}, "
         f"policyengine-uk={outputs['uk_version']}, "
-        f"policyengine-uk-data={outputs['uk_data_version']}"
+        f"uk-data-release={outputs['uk_data_version']}"
     )
 
 

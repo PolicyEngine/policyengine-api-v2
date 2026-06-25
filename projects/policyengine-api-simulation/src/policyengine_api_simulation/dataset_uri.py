@@ -56,14 +56,29 @@ def _with_gs_revision(dataset_uri: str, revision: str | None) -> str:
     return f"{without_revision}@{selected_revision}"
 
 
+def _with_hf_revision_unvalidated(dataset_uri: str, revision: str) -> str:
+    if not dataset_uri.startswith("hf://"):
+        return dataset_uri
+    without_revision = dataset_uri.rsplit("@", maxsplit=1)[0]
+    return f"{without_revision}@{revision}"
+
+
 def runtime_dataset_uri(
     dataset_uri: str,
     *,
     default_revision: str | None = None,
     override_revision: str | None = None,
     artifact_revision: str | None = None,
+    validate_hf: bool = True,
 ) -> str:
-    """Convert PolicyEngine HF data artifacts to their GCS runtime URI."""
+    """Convert PolicyEngine HF data artifacts to their runtime URI.
+
+    PolicyEngine ``*-data`` HF repositories have corresponding GCS buckets
+    used by the runtime. Other HF repositories, including certified Populace
+    bundle datasets, should remain HF URIs. Callers that trust bundle metadata
+    can disable live HF validation to avoid requiring private Hub credentials
+    in request-routing code.
+    """
 
     if dataset_uri.startswith("gs://"):
         return _with_gs_revision(dataset_uri, override_revision or default_revision)
@@ -89,9 +104,15 @@ def runtime_dataset_uri(
         selected_revision = default_revision
     if bucket is None:
         if override_revision is not None:
-            return with_hf_revision(dataset_uri, override_revision)
+            if validate_hf:
+                return with_hf_revision(dataset_uri, override_revision)
+            return _with_hf_revision_unvalidated(dataset_uri, override_revision)
         if default_revision is not None and parsed.revision is None:
-            return with_hf_revision(dataset_uri, default_revision)
+            if validate_hf:
+                return with_hf_revision(dataset_uri, default_revision)
+            return _with_hf_revision_unvalidated(dataset_uri, default_revision)
+        if not validate_hf:
+            return dataset_uri
         return validate_hf_dataset_uri(dataset_uri)
 
     if selected_revision is not None:

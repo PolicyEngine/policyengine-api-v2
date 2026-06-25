@@ -1,5 +1,7 @@
 """Fixtures for gateway endpoint tests."""
 
+from copy import deepcopy
+
 import pytest
 
 TEST_APP_RELEASE_BUNDLE = {
@@ -48,6 +50,41 @@ TEST_APP_NAMES = (
     "policyengine-simulation-py4-10-0",
     "policyengine-simulation-py3-9-0",
 )
+
+TEST_ROUTING_STATE = {
+    "schema_version": 1,
+    "generation": "4.10.0:policyengine-simulation-py4-10-0",
+    "latest": {
+        "policyengine": "4.10.0",
+        "us": "1.500.0",
+        "uk": "2.66.0",
+    },
+    "routes": {
+        "policyengine": {
+            "4.10.0": "policyengine-simulation-py4-10-0",
+            "3.9.0": "policyengine-simulation-py3-9-0",
+        },
+        "us": {
+            "1.500.0": "policyengine-simulation-py4-10-0",
+            "1.459.0": "policyengine-simulation-py3-9-0",
+        },
+        "uk": {
+            "2.66.0": "policyengine-simulation-py4-10-0",
+        },
+    },
+    "bundles": {
+        "4.10.0": TEST_APP_RELEASE_BUNDLE,
+        "3.9.0": {
+            **TEST_APP_RELEASE_BUNDLE,
+            "app_name": "policyengine-simulation-py3-9-0",
+            "policyengine_version": "3.9.0",
+            "us": {
+                **TEST_APP_RELEASE_BUNDLE["us"],
+                "model_version": "1.459.0",
+            },
+        },
+    },
+}
 
 
 def _split_revision(dataset: str) -> tuple[str, str | None]:
@@ -127,6 +164,12 @@ class MockDict:
 
     def get(self, key: str, default=None):
         return self._data.get(key, default)
+
+    def keys(self):
+        return self._data.keys()
+
+    def items(self):
+        return self._data.items()
 
     @classmethod
     def from_name(cls, name: str):
@@ -217,9 +260,8 @@ def mock_modal(monkeypatch):
 
     mock_func = MockFunction()
     mock_dicts = {
-        "simulation-api-app-release-bundles": {
-            app_name: TEST_APP_RELEASE_BUNDLE for app_name in TEST_APP_NAMES
-        }
+        "simulation-api-policyengine-versions": {},
+        "simulation-api-routing-state": {"active": deepcopy(TEST_ROUTING_STATE)},
     }
     MockFunctionCall.registry = {}
     MockFunctionCall.from_id_errors = {}

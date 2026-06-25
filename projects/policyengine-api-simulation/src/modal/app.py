@@ -50,11 +50,20 @@ POLICYENGINE_CORE_VERSION = _version_from_env_or_local_dependency(
 )
 US_VERSION = _version_from_env_or_local_bundle("POLICYENGINE_US_VERSION", "us")
 UK_VERSION = _version_from_env_or_local_bundle("POLICYENGINE_UK_VERSION", "uk")
+SIMULATION_BUNDLE_DATA_DIR = os.environ.get(
+    "POLICYENGINE_BUNDLE_DATA_DIR",
+    "/opt/policyengine/data",
+)
+SIMULATION_BUNDLE_RECEIPT = (
+    f"{SIMULATION_BUNDLE_DATA_DIR}/.policyengine-bundle-receipt.json"
+)
 VERSION_ENV = {
     "POLICYENGINE_VERSION": POLICYENGINE_VERSION,
     "POLICYENGINE_CORE_VERSION": POLICYENGINE_CORE_VERSION,
     "POLICYENGINE_US_VERSION": US_VERSION,
     "POLICYENGINE_UK_VERSION": UK_VERSION,
+    "POLICYENGINE_DATA_FOLDER": SIMULATION_BUNDLE_DATA_DIR,
+    "POLICYENGINE_BUNDLE_RECEIPT": SIMULATION_BUNDLE_RECEIPT,
 }
 
 
@@ -82,18 +91,40 @@ data_secret = modal.Secret.from_name("policyengine-data-credentials")
 # Logfire secret is environment-specific
 logfire_secret = modal.Secret.from_name("policyengine-logfire")
 
+
+def bundle_install_command(policyengine_version: str) -> str:
+    return " ".join(
+        [
+            "uvx",
+            "--from",
+            f"policyengine=={policyengine_version}",
+            "policyengine",
+            "bundle",
+            "install",
+            policyengine_version,
+            "--python",
+            "/usr/local/bin/python",
+            "--country",
+            "us",
+            "--country",
+            "uk",
+            "--data-dir",
+            SIMULATION_BUNDLE_DATA_DIR,
+            "--yes",
+        ]
+    )
+
+
 # Heavy image with model snapshot for simulation
 simulation_image = (
     modal.Image.debian_slim(python_version="3.13")
     .pip_install(
-        f"policyengine-us=={US_VERSION}",
-        f"policyengine-uk=={UK_VERSION}",
-        f"policyengine=={POLICYENGINE_VERSION}",
-        f"policyengine-core=={POLICYENGINE_CORE_VERSION}",
+        "uv",
         "fastapi>=0.115.0",
         "tables>=3.10.2",
         "logfire",
     )
+    .run_commands(bundle_install_command(POLICYENGINE_VERSION), secrets=[data_secret])
     .env(VERSION_ENV)
     .add_local_python_source(
         "src.modal",

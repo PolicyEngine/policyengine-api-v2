@@ -231,7 +231,7 @@ def test__given_dependency_override__then_gated_endpoint_returns_200(
     body = response.json()
     assert body["job_id"] == "mock-job-id-123"
     assert body["country"] == "us"
-    assert body["version"] == "1.500.0"
+    assert body["version"] == "4.10.0"
 
 
 class TestProductionAuthGuard:
