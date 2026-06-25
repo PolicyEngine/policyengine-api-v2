@@ -288,9 +288,11 @@ def get_country_release_bundle(country: str) -> CountryReleaseBundle:
         release_data_package = _mapping(release_data_package)
         dataset_repo_types.setdefault(
             default_dataset,
-            str(release_data_package.get("repo_type", "model"))
-            if bundle_metadata is not None
-            else manifest.data_package.repo_type,
+            (
+                str(release_data_package.get("repo_type", "model"))
+                if bundle_metadata is not None
+                else manifest.data_package.repo_type
+            ),
         )
 
     return CountryReleaseBundle(
@@ -352,6 +354,34 @@ def resolve_bundle_dataset_uri(country: str, requested_data: str | None) -> str:
     if "://" in dataset_name:
         return dataset_name
     return bundle.dataset_uris.get(dataset_name, dataset_name)
+
+
+def resolve_bundle_region_dataset_uri(
+    country: str,
+    region_code: str,
+    requested_data_version: str | None = None,
+) -> str | None:
+    """Resolve a certified regional dataset from policyengine.py metadata."""
+
+    bundle = get_country_release_bundle(country)
+    region_code = region_code.lower()
+    dataset_name = None
+    if bundle.country == "us" and region_code.startswith("state/"):
+        state_code = region_code.removeprefix("state/").upper()
+        dataset_name = f"states/{state_code}"
+    if dataset_name is None:
+        return None
+
+    dataset_uri = bundle.dataset_uris.get(dataset_name)
+    if dataset_uri is None:
+        return None
+    return runtime_dataset_uri(
+        dataset_uri,
+        default_revision=bundle.data_version,
+        override_revision=requested_data_version,
+        artifact_revision=bundle.data_artifact_revision,
+        validate_hf=False,
+    )
 
 
 def _receipt_path() -> Path:
@@ -435,16 +465,19 @@ def resolve_runtime_bundle_dataset_uri(
     country: str,
     requested_data: str | None,
     requested_data_version: str | None = None,
+    *,
+    prefer_local: bool = True,
 ) -> str:
     """Resolve a request dataset to the reference the worker should load."""
 
-    local_path = resolve_local_bundle_dataset_path(
-        country,
-        requested_data,
-        requested_data_version,
-    )
-    if local_path is not None:
-        return local_path
+    if prefer_local:
+        local_path = resolve_local_bundle_dataset_path(
+            country,
+            requested_data,
+            requested_data_version,
+        )
+        if local_path is not None:
+            return local_path
 
     bundle = get_country_release_bundle(country)
     if requested_data is None:

@@ -372,6 +372,7 @@ class TestSubmitSimulationEndpoint:
             "us",
             "1.500.0",
             dataset="hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
+            data_version="1.115.5",
         )
 
     def test__given_submission_with_alias_data__then_bundle_dataset_uses_manifest_uri(
@@ -397,6 +398,32 @@ class TestSubmitSimulationEndpoint:
             "us", "enhanced_cps_2024"
         )
 
+    def test__given_us_state_region_without_data__then_bundle_metadata_uses_state_dataset(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
+        }
+
+        response = client.post(
+            "/simulate/economy/comparison",
+            json={
+                "country": "us",
+                "scope": "macro",
+                "region": "state/ut",
+                "reform": {},
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["policyengine_bundle"] == expected_bundle(
+            "us",
+            "1.500.0",
+            dataset="states/UT",
+            data_version="1.115.5",
+        )
+
     def test__given_submission_with_logical_revision__then_bundle_dataset_uses_revision(
         self, mock_modal, client: TestClient
     ):
@@ -416,9 +443,36 @@ class TestSubmitSimulationEndpoint:
         )
 
         assert response.status_code == 200
-        assert response.json()["policyengine_bundle"]["dataset"] == (
+        bundle = response.json()["policyengine_bundle"]
+        assert bundle["dataset"] == (
             "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
         )
+        assert bundle["data_version"] == "1.77.0"
+
+    def test__given_submission_with_explicit_uri_revision__then_bundle_data_version_uses_revision(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
+        }
+
+        response = client.post(
+            "/simulate/economy/comparison",
+            json={
+                "country": "us",
+                "scope": "macro",
+                "reform": {},
+                "data": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
+            },
+        )
+
+        assert response.status_code == 200
+        bundle = response.json()["policyengine_bundle"]
+        assert bundle["dataset"] == (
+            "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+        )
+        assert bundle["data_version"] == "1.77.0"
 
     def test__given_submission_with_conflicting_data_versions__then_returns_400(
         self, mock_modal, client: TestClient
@@ -511,9 +565,9 @@ class TestSubmitSimulationEndpoint:
         bundle["policyengine_version"] = "4.13.1"
         bundle["uk"]["model_version"] = "2.88.20"
         bundle["uk"]["data_version"] = "1.55.10"
-        bundle["uk"]["data_artifact_revision"] = (
-            "655dd07e4bb9c777b00dac044949611f1feb824f"
-        )
+        bundle["uk"][
+            "data_artifact_revision"
+        ] = "655dd07e4bb9c777b00dac044949611f1feb824f"
         bundle["uk"]["default_dataset_uri"] = manifest_uri
         bundle["uk"]["dataset_uris"]["enhanced_frs_2023_24"] = manifest_uri
         state = deepcopy(TEST_ROUTING_STATE)
@@ -640,6 +694,7 @@ class TestSubmitSimulationEndpoint:
             "us",
             "1.500.0",
             dataset="hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
+            data_version="1.115.5",
         )
 
     def test__given_submitted_job_with_telemetry__then_polling_echoes_run_id(

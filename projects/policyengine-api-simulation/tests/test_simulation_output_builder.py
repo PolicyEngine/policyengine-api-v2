@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pandas as pd
@@ -22,7 +23,10 @@ from fixtures.test_simulation_output_builder import (
     FakeModelOutput,
     fake_analysis,
 )
+from policyengine_api_simulation.release_bundle import BUNDLE_RECEIPT_FILENAME
+from policyengine_api_simulation.release_bundle import get_country_release_bundle
 from policyengine_api_simulation.simulation_runtime import RegionResolution
+from policyengine_api_simulation.simulation_runtime import _load_dataset
 from policyengine_api_simulation.simulation_runtime import _normalise_policy
 from policyengine_api_simulation.simulation_runtime import _resolve_dataset_reference
 from policyengine_api_simulation.simulation_runtime import _resolve_region
@@ -436,6 +440,10 @@ def test_resolve_region_uses_dedicated_region_dataset_with_requested_version(
 def test_resolve_region_maps_bundle_manifest_revision_to_data_version(monkeypatch):
     manifest_revision = "d47fb5475144260a75467d2f2e22b2d5d53d4d57"
     monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime.resolve_bundle_region_dataset_uri",
+        lambda country, region_code, requested_data_version=None: None,
+    )
+    monkeypatch.setattr(
         "policyengine_api_simulation.simulation_runtime.get_country_release_bundle",
         lambda country: SimpleNamespace(
             data_version="1.115.5",
@@ -489,6 +497,61 @@ def test_resolve_dataset_reference_applies_data_version_to_logical_dataset(
     )
 
 
+@pytest.mark.parametrize("country", ["us", "uk"])
+def test_load_dataset_passes_bundle_default_name_to_country_loader_with_receipt(
+    country,
+    tmp_path,
+    monkeypatch,
+):
+    bundle = get_country_release_bundle(country)
+    installed_dataset_path = tmp_path / f"{bundle.default_dataset}.h5"
+    installed_dataset_path.write_bytes(b"data")
+    receipt_path = tmp_path / BUNDLE_RECEIPT_FILENAME
+    receipt_path.write_text(
+        json.dumps(
+            {
+                "bundle_version": "4.18.3",
+                "policyengine_version": "4.18.3",
+                "datasets": [
+                    {
+                        "country": country,
+                        "dataset": bundle.default_dataset,
+                        "version": bundle.data_version,
+                        "path": str(installed_dataset_path),
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("POLICYENGINE_BUNDLE_RECEIPT", str(receipt_path))
+    monkeypatch.setenv("POLICYENGINE_DATA_FOLDER", str(tmp_path))
+    get_country_release_bundle.cache_clear()
+
+    dataset = SimpleNamespace()
+    ensure_calls = []
+
+    def ensure_datasets(**kwargs):
+        ensure_calls.append(kwargs)
+        return {"dataset": dataset}
+
+    assert (
+        _load_dataset(
+            {"country": country, "time_period": "2026"},
+            country_module=SimpleNamespace(ensure_datasets=ensure_datasets),
+        )
+        is dataset
+    )
+
+    assert ensure_calls == [
+        {
+            "datasets": [bundle.default_dataset],
+            "years": [2026],
+            "data_folder": str(tmp_path),
+        }
+    ]
+
+
 def test_resolve_region_scopes_us_place_from_parent_state_dataset(monkeypatch):
     monkeypatch.setattr(
         "policyengine_api_simulation.dataset_uri.with_hf_revision",
@@ -520,13 +583,17 @@ def test_resolve_region_scopes_us_place_from_parent_state_dataset(monkeypatch):
 
     assert resolution.code == "place/CA-57000"
     assert resolution.dataset_reference == (
-        "gs://policyengine-us-data/states/CA.h5@1.110.12"
+        "gs://policyengine-us-data/states/CA.h5@1.115.5"
     )
     assert resolution.scoping_strategy is scoping_strategy
 
 
 def test_resolve_region_maps_parent_manifest_revision_to_data_version(monkeypatch):
     manifest_revision = "d47fb5475144260a75467d2f2e22b2d5d53d4d57"
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime.resolve_bundle_region_dataset_uri",
+        lambda country, region_code, requested_data_version=None: None,
+    )
     monkeypatch.setattr(
         "policyengine_api_simulation.simulation_runtime.get_country_release_bundle",
         lambda country: SimpleNamespace(

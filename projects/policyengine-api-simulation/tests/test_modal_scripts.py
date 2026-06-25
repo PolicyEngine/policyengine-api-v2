@@ -342,7 +342,7 @@ class TestModalDeployApp:
             {
                 "PATH": f"{bin_dir}{os.pathsep}{env['PATH']}",
                 "UV_FAKE_LOG": str(log_path),
-                "POLICYENGINE_VERSION": "4.18.2",
+                "POLICYENGINE_VERSION": "4.18.3",
                 "POLICYENGINE_CORE_VERSION": "3.27.1",
                 "POLICYENGINE_US_VERSION": "1.729.0",
                 "POLICYENGINE_UK_VERSION": "2.89.2",
@@ -598,6 +598,6 @@ class TestAllScriptsHaveShebang:
                 capture_output=True,
                 text=True,
             )
-            assert result.returncode == 0, (
-                f"{script.name} has syntax errors: {result.stderr}"
-            )
+            assert (
+                result.returncode == 0
+            ), f"{script.name} has syntax errors: {result.stderr}"
