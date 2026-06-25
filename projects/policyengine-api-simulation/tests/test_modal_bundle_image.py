@@ -43,9 +43,11 @@ class FakeSecret:
 class FakeApp:
     def __init__(self, name):
         self.name = name
+        self.function_calls = []
 
     def function(self, **kwargs):
         def decorator(function):
+            self.function_calls.append((function.__name__, kwargs))
             return function
 
         return decorator
@@ -84,4 +86,14 @@ def test_modal_image_uses_policyengine_bundle_install(monkeypatch):
     assert app.VERSION_ENV["POLICYENGINE_BUNDLE_RECEIPT"].endswith(
         "/.policyengine-bundle-receipt.json"
     )
-    assert command_calls[0][2]["secrets"] == [app.data_secret]
+    assert command_calls[0][2]["secrets"] == [app.data_secret, app.hf_secret]
+    runtime_secret_sets = {
+        name: kwargs["secrets"] for name, kwargs in app.app.function_calls
+    }
+    for function_name in ("run_simulation", "run_budget_window_batch"):
+        assert runtime_secret_sets[function_name] == [
+            app.gcp_secret,
+            app.data_secret,
+            app.hf_secret,
+            app.logfire_secret,
+        ]

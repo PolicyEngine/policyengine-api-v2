@@ -1,7 +1,8 @@
 #!/bin/bash
 # Sync secrets from GitHub to Modal environment
 # Usage: ./modal-sync-secrets.sh <modal-environment> <gh-environment>
-# Required env vars: LOGFIRE_TOKEN, GCP_CREDENTIALS_JSON (optional)
+# Required env vars: LOGFIRE_TOKEN, HF_TOKEN
+# Optional env vars: GCP_CREDENTIALS_JSON
 
 set -euo pipefail
 
@@ -16,6 +17,12 @@ truthy() {
 }
 
 echo "Syncing secrets to Modal environment: $MODAL_ENV"
+
+if [ -z "${HF_TOKEN:-}" ]; then
+  echo "HF_TOKEN is required to sync the Hugging Face dataset secret." >&2
+  echo "Add HF_TOKEN to the GitHub environment secrets for '$GH_ENV'." >&2
+  exit 1
+fi
 
 GATEWAY_AUTH_VARS=(
   GATEWAY_AUTH_ISSUER
@@ -61,6 +68,13 @@ if [ -n "${GCP_CREDENTIALS_JSON:-}" ]; then
     --env="$MODAL_ENV" \
     --force || true
 fi
+
+# Sync Hugging Face token for private certified datasets used during bundle
+# image build and worker runtime.
+uv run modal secret create huggingface-token \
+  "HF_TOKEN=$HF_TOKEN" \
+  --env="$MODAL_ENV" \
+  --force
 
 # Sync gateway auth config. The gateway runtime only needs issuer/audience and
 # the explicit requirement flag; client credentials stay on the GitHub side and

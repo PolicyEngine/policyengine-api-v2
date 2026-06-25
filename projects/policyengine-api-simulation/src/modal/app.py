@@ -88,6 +88,7 @@ app = modal.App(APP_NAME)
 # GCP credentials are shared across environments (always from main)
 gcp_secret = modal.Secret.from_name("gcp-credentials", environment_name="main")
 data_secret = modal.Secret.from_name("policyengine-data-credentials")
+hf_secret = modal.Secret.from_name("huggingface-token")
 # Logfire secret is environment-specific
 logfire_secret = modal.Secret.from_name("policyengine-logfire")
 
@@ -124,7 +125,10 @@ simulation_image = (
         "tables>=3.10.2",
         "logfire",
     )
-    .run_commands(bundle_install_command(POLICYENGINE_VERSION), secrets=[data_secret])
+    .run_commands(
+        bundle_install_command(POLICYENGINE_VERSION),
+        secrets=[data_secret, hf_secret],
+    )
     .env(VERSION_ENV)
     .add_local_python_source(
         "src.modal",
@@ -158,7 +162,7 @@ def configure_logfire(service_name: str = "policyengine-simulation"):
     timeout=3600,
     retries=0,
     max_containers=100,
-    secrets=[gcp_secret, data_secret, logfire_secret],
+    secrets=[gcp_secret, data_secret, hf_secret, logfire_secret],
 )
 def run_simulation(params: dict) -> dict:
     """
@@ -196,7 +200,7 @@ def run_simulation(params: dict) -> dict:
     timeout=3600,
     retries=0,
     max_containers=100,
-    secrets=[gcp_secret, data_secret, logfire_secret],
+    secrets=[gcp_secret, data_secret, hf_secret, logfire_secret],
 )
 def run_budget_window_batch(params: dict) -> dict:
     """Execute a multi-year budget-window batch orchestration."""
