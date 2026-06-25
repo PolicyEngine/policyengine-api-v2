@@ -22,6 +22,9 @@ class FakeDict:
     def get(self, key, default=None):
         return self._data.get(key, default)
 
+    def items(self):
+        return self._data.items()
+
     def snapshot(self) -> dict:
         return dict(self._data)
 
@@ -125,7 +128,22 @@ def test_validate_routing_state_rejects_missing_latest_route(fake_bundle_metadat
         registry.validate_routing_state(state)
 
 
-def test_validate_routing_state_rejects_policyengine_route_without_bundle(
+def test_validate_routing_state_allows_migrated_policyengine_route_without_bundle(
+    fake_bundle_metadata,
+):
+    state = registry.build_next_routing_state(
+        current_state=None,
+        app_name="policyengine-simulation-py4-19-1",
+        policyengine_version="4.19.1",
+        us_version="1.687.0",
+        uk_version="2.88.14",
+    )
+    state["bundles"].pop("4.19.1")
+
+    registry.validate_routing_state(state)
+
+
+def test_validate_routing_state_rejects_required_policyengine_route_without_bundle(
     fake_bundle_metadata,
 ):
     state = registry.build_next_routing_state(
@@ -138,7 +156,10 @@ def test_validate_routing_state_rejects_policyengine_route_without_bundle(
     state["bundles"].pop("4.19.1")
 
     with pytest.raises(ValueError, match="no bundle manifest"):
-        registry.validate_routing_state(state)
+        registry.validate_routing_state(
+            state,
+            required_policyengine_manifests=("4.19.1",),
+        )
 
 
 def test_build_next_routing_state_preserves_existing_routes(fake_bundle_metadata):
@@ -252,6 +273,132 @@ def test_publish_routing_state_writes_only_active_snapshot(
     )
     assert active["routes"]["us"]["1.687.0"] == "policyengine-simulation-py4-19-1"
     assert active["bundles"]["4.19.1"]["us"]["dataset_aliases"] == {"alias": "default"}
+
+
+def test_build_legacy_seed_routing_state_copies_legacy_routes_and_manifests():
+    state = registry.build_legacy_seed_routing_state(
+        policyengine_versions={
+            "latest": "4.18.2",
+            "4.18.2": "policyengine-simulation-py4-18-2",
+            "4.13.1": "policyengine-simulation-py4-13-1",
+        },
+        us_versions={
+            "latest": "1.729.0",
+            "1.729.0": "policyengine-simulation-py4-18-2",
+            "1.715.2": "policyengine-simulation-py4-13-1",
+        },
+        uk_versions={
+            "latest": "2.89.2",
+            "2.89.2": "policyengine-simulation-py4-18-2",
+        },
+        app_release_bundles={
+            "4.18.2": {
+                "app_name": "policyengine-simulation-py4-18-2",
+                "policyengine_version": "4.18.2",
+                "us": {"model_version": "1.729.0"},
+                "uk": {"model_version": "2.89.2"},
+            }
+        },
+    )
+
+    assert state["latest"] == {
+        "policyengine": "4.18.2",
+        "us": "1.729.0",
+        "uk": "2.89.2",
+    }
+    assert state["routes"]["us"]["1.715.2"] == "policyengine-simulation-py4-13-1"
+    assert "4.18.2" in state["bundles"]
+    assert "4.13.1" not in state["bundles"]
+
+
+def test_build_legacy_seed_routing_state_infers_policyengine_routes_from_country_apps():
+    state = registry.build_legacy_seed_routing_state(
+        policyengine_versions={},
+        us_versions={
+            "latest": "1.729.0",
+            "1.729.0": "policyengine-simulation-py4-18-2",
+            "1.715.2": "policyengine-simulation-py4-13-1",
+        },
+        uk_versions={
+            "latest": "2.89.2",
+            "2.89.2": "policyengine-simulation-py4-18-2",
+        },
+    )
+
+    assert (
+        state["routes"]["policyengine"]["4.18.2"] == "policyengine-simulation-py4-18-2"
+    )
+    assert (
+        state["routes"]["policyengine"]["4.13.1"] == "policyengine-simulation-py4-13-1"
+    )
+    assert state["latest"]["policyengine"] == "4.18.2"
+
+
+def test_build_legacy_seed_routing_state_allows_country_only_legacy_routes():
+    state = registry.build_legacy_seed_routing_state(
+        policyengine_versions={},
+        us_versions={
+            "latest": "1.715.2",
+            "1.715.2": "policyengine-simulation-us1-715-2-uk2-88-20",
+        },
+        uk_versions={
+            "latest": "2.88.20",
+            "2.88.20": "policyengine-simulation-us1-715-2-uk2-88-20",
+        },
+    )
+
+    assert state["routes"]["policyengine"] == {}
+    assert "policyengine" not in state["latest"]
+    assert (
+        state["routes"]["us"]["1.715.2"]
+        == "policyengine-simulation-us1-715-2-uk2-88-20"
+    )
+
+
+def test_seed_active_routing_state_from_legacy_merges_existing_active(
+    patched_modal,
+    fake_bundle_metadata,
+):
+    patched_modal["main/simulation-api-policyengine-versions"] = FakeDict(
+        {
+            "latest": "4.18.2",
+            "4.18.2": "policyengine-simulation-py4-18-2",
+        }
+    )
+    patched_modal["main/simulation-api-us-versions"] = FakeDict(
+        {
+            "latest": "1.729.0",
+            "1.729.0": "policyengine-simulation-py4-18-2",
+        }
+    )
+    patched_modal["main/simulation-api-uk-versions"] = FakeDict(
+        {
+            "latest": "2.89.2",
+            "2.89.2": "policyengine-simulation-py4-18-2",
+        }
+    )
+    patched_modal["main/simulation-api-app-release-bundles"] = FakeDict()
+
+    current_state = registry.build_next_routing_state(
+        current_state=None,
+        app_name="policyengine-simulation-py4-19-1",
+        policyengine_version="4.19.1",
+        us_version="1.687.0",
+        uk_version="2.88.14",
+    )
+    patched_modal["main/simulation-api-routing-state"] = FakeDict(
+        {"active": current_state}
+    )
+
+    state = registry.seed_active_routing_state_from_legacy(environment="main")
+
+    assert (
+        state["routes"]["policyengine"]["4.18.2"] == "policyengine-simulation-py4-18-2"
+    )
+    assert (
+        state["routes"]["policyengine"]["4.19.1"] == "policyengine-simulation-py4-19-1"
+    )
+    assert state["latest"]["policyengine"] == "4.19.1"
 
 
 def test_main_publishes_routing_state(

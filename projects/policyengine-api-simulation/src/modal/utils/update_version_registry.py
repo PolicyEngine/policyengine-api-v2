@@ -5,13 +5,18 @@ from copy import deepcopy
 
 import modal
 from packaging.version import InvalidVersion, Version
-from typing import Any, TypedDict
+from typing import Iterable, TypedDict
 
 POLICYENGINE_VERSION_DICT_NAME = "simulation-api-policyengine-versions"
 US_VERSION_DICT_NAME = "simulation-api-us-versions"
 UK_VERSION_DICT_NAME = "simulation-api-uk-versions"
+APP_RELEASE_BUNDLES_DICT_NAME = "simulation-api-app-release-bundles"
 ROUTING_STATE_DICT_NAME = "simulation-api-routing-state"
 ROUTING_STATE_ACTIVE_KEY = "active"
+# The Modal Dict intentionally stores one "active" key whose value is the full
+# routing snapshot. Publishing replaces that single key after validation, so the
+# gateway does not observe half-updated latest/routes/bundles fields if CI exits
+# midway through deployment.
 
 
 class CountryBundleMetadata(TypedDict):
@@ -163,11 +168,20 @@ def _coerce_routing_state(value: object) -> RoutingState:
     return coerced
 
 
-def validate_routing_state(state: RoutingState) -> None:
+def validate_routing_state(
+    state: RoutingState,
+    *,
+    required_policyengine_manifests: Iterable[str] = (),
+) -> None:
     if state.get("schema_version") != 1:
         raise ValueError("Routing state schema_version must be 1")
 
-    for route_name in ("policyengine", "us", "uk"):
+    required_manifests = set(required_policyengine_manifests)
+    required_latest_routes = ["us", "uk"]
+    if state["routes"]["policyengine"] or required_manifests:
+        required_latest_routes.append("policyengine")
+
+    for route_name in required_latest_routes:
         latest = state["latest"].get(route_name)
         if not latest:
             raise ValueError(f"Routing state latest.{route_name} is missing")
@@ -179,10 +193,12 @@ def validate_routing_state(state: RoutingState) -> None:
     for policyengine_version, app_name in state["routes"]["policyengine"].items():
         manifest = state["bundles"].get(policyengine_version)
         if not isinstance(manifest, dict):
-            raise ValueError(
-                "Routing state policyengine route "
-                f"{policyengine_version!r} has no bundle manifest"
-            )
+            if policyengine_version in required_manifests:
+                raise ValueError(
+                    "Routing state policyengine route "
+                    f"{policyengine_version!r} has no bundle manifest"
+                )
+            continue
         if manifest.get("policyengine_version") != policyengine_version:
             raise ValueError(
                 "Routing state bundle manifest key does not match "
@@ -250,8 +266,233 @@ def build_next_routing_state(
             "uk": uk_version,
         }
 
+    validate_routing_state(
+        state,
+        required_policyengine_manifests=(policyengine_version,),
+    )
+    return state
+
+
+def _modal_dict_snapshot(
+    *,
+    name: str,
+    environment: str,
+    create_if_missing: bool = False,
+) -> dict:
+    try:
+        store = modal.Dict.from_name(
+            name,
+            environment_name=environment,
+            create_if_missing=create_if_missing,
+        )
+    except KeyError:
+        return {}
+    except Exception as exc:
+        if exc.__class__.__name__ == "NotFoundError":
+            return {}
+        raise
+    try:
+        return dict(store.items())
+    except Exception as exc:
+        if exc.__class__.__name__ == "NotFoundError":
+            return {}
+        raise
+
+
+def _version_routes(snapshot: dict) -> dict[str, str]:
+    return {
+        str(version): app_name
+        for version, app_name in snapshot.items()
+        if version != "latest"
+        and isinstance(version, str)
+        and isinstance(app_name, str)
+    }
+
+
+def _legacy_latest(snapshot: dict) -> str | None:
+    latest = snapshot.get("latest")
+    return latest if isinstance(latest, str) else None
+
+
+def _policyengine_version_from_app_name(app_name: str) -> str | None:
+    prefix = "policyengine-simulation-py"
+    if not app_name.startswith(prefix):
+        return None
+    suffix = app_name.removeprefix(prefix)
+    if not suffix:
+        return None
+    return suffix.replace("-", ".")
+
+
+def _infer_policyengine_routes(*route_maps: dict[str, str]) -> dict[str, str]:
+    routes: dict[str, str] = {}
+    for route_map in route_maps:
+        for app_name in route_map.values():
+            policyengine_version = _policyengine_version_from_app_name(app_name)
+            if policyengine_version is not None:
+                routes.setdefault(policyengine_version, app_name)
+    return routes
+
+
+def _newest_policyengine_route(routes: dict[str, str]) -> str | None:
+    newest: str | None = None
+    for version in routes:
+        if _is_newer_version(version, newest):
+            newest = version
+    return newest
+
+
+def _policyengine_route_for_latest_country_app(
+    *,
+    routes: dict[str, str],
+    country_snapshots: tuple[dict, ...],
+) -> str | None:
+    app_to_policyengine = {app_name: version for version, app_name in routes.items()}
+    inferred_versions: list[str] = []
+    for snapshot in country_snapshots:
+        latest = _legacy_latest(snapshot)
+        if latest is None:
+            continue
+        app_name = snapshot.get(latest)
+        if not isinstance(app_name, str):
+            continue
+        policyengine_version = app_to_policyengine.get(
+            app_name
+        ) or _policyengine_version_from_app_name(app_name)
+        if policyengine_version is not None:
+            inferred_versions.append(policyengine_version)
+
+    if not inferred_versions:
+        return None
+    if len(set(inferred_versions)) == 1:
+        return inferred_versions[0]
+    return _newest_policyengine_route(
+        {version: routes[version] for version in inferred_versions if version in routes}
+    )
+
+
+def _legacy_bundle_metadata(
+    *,
+    bundle_snapshot: dict,
+    policyengine_version: str,
+    app_name: str,
+) -> dict | None:
+    for key in (policyengine_version, app_name):
+        metadata = bundle_snapshot.get(key)
+        if isinstance(metadata, dict):
+            metadata = deepcopy(metadata)
+            metadata["policyengine_version"] = policyengine_version
+            metadata["app_name"] = app_name
+            return metadata
+    return None
+
+
+def build_legacy_seed_routing_state(
+    *,
+    policyengine_versions: dict,
+    us_versions: dict,
+    uk_versions: dict,
+    app_release_bundles: dict | None = None,
+) -> RoutingState:
+    state = _empty_routing_state()
+    state["generation"] = "legacy-seed"
+    state["routes"]["us"] = _version_routes(us_versions)
+    state["routes"]["uk"] = _version_routes(uk_versions)
+    state["routes"]["policyengine"] = {
+        **_infer_policyengine_routes(
+            state["routes"]["us"],
+            state["routes"]["uk"],
+        ),
+        **_version_routes(policyengine_versions),
+    }
+
+    for kind, snapshot in (
+        ("us", us_versions),
+        ("uk", uk_versions),
+    ):
+        latest = _legacy_latest(snapshot)
+        if latest is not None:
+            state["latest"][kind] = latest
+
+    policyengine_latest = _legacy_latest(
+        policyengine_versions
+    ) or _policyengine_route_for_latest_country_app(
+        routes=state["routes"]["policyengine"],
+        country_snapshots=(us_versions, uk_versions),
+    )
+    if policyengine_latest is None:
+        policyengine_latest = _newest_policyengine_route(
+            state["routes"]["policyengine"]
+        )
+    if policyengine_latest is not None:
+        state["latest"]["policyengine"] = policyengine_latest
+
+    bundle_snapshot = app_release_bundles or {}
+    for policyengine_version, app_name in state["routes"]["policyengine"].items():
+        metadata = _legacy_bundle_metadata(
+            bundle_snapshot=bundle_snapshot,
+            policyengine_version=policyengine_version,
+            app_name=app_name,
+        )
+        if metadata is not None:
+            state["bundles"][policyengine_version] = metadata
+
     validate_routing_state(state)
     return state
+
+
+def _merge_legacy_seed_into_current(
+    *,
+    current_state: object,
+    legacy_seed: RoutingState,
+) -> RoutingState:
+    current = _coerce_routing_state(current_state)
+    if not current["latest"] and not any(current["routes"].values()):
+        return legacy_seed
+
+    merged = deepcopy(legacy_seed)
+    merged["generation"] = current["generation"] or legacy_seed["generation"]
+
+    for kind in ("policyengine", "us", "uk"):
+        merged["routes"][kind].update(current["routes"][kind])
+        if kind in current["latest"]:
+            merged["latest"][kind] = current["latest"][kind]
+
+    merged["bundles"].update(current["bundles"])
+    validate_routing_state(merged)
+    return merged
+
+
+def seed_active_routing_state_from_legacy(*, environment: str) -> RoutingState:
+    store = modal.Dict.from_name(
+        ROUTING_STATE_DICT_NAME,
+        environment_name=environment,
+        create_if_missing=True,
+    )
+    legacy_seed = build_legacy_seed_routing_state(
+        policyengine_versions=_modal_dict_snapshot(
+            name=POLICYENGINE_VERSION_DICT_NAME,
+            environment=environment,
+        ),
+        us_versions=_modal_dict_snapshot(
+            name=US_VERSION_DICT_NAME,
+            environment=environment,
+        ),
+        uk_versions=_modal_dict_snapshot(
+            name=UK_VERSION_DICT_NAME,
+            environment=environment,
+        ),
+        app_release_bundles=_modal_dict_snapshot(
+            name=APP_RELEASE_BUNDLES_DICT_NAME,
+            environment=environment,
+        ),
+    )
+    next_state = _merge_legacy_seed_into_current(
+        current_state=store.get(ROUTING_STATE_ACTIVE_KEY),
+        legacy_seed=legacy_seed,
+    )
+    store[ROUTING_STATE_ACTIVE_KEY] = next_state
+    return next_state
 
 
 def publish_routing_state(
@@ -313,7 +554,31 @@ def main():
             "the currently recorded latest (use for intentional rollbacks)."
         ),
     )
+    parser.add_argument(
+        "--seed-active-from-legacy",
+        action="store_true",
+        help=(
+            "Create or merge simulation-api-routing-state[active] from the "
+            "legacy policyengine/us/uk Modal dicts without publishing a new app."
+        ),
+    )
     args = parser.parse_args()
+
+    if args.seed_active_from_legacy:
+        print(
+            "Seeding active routing state from legacy Modal dicts in "
+            f"environment: {args.environment}"
+        )
+        state = seed_active_routing_state_from_legacy(environment=args.environment)
+        print()
+        print(f"  {ROUTING_STATE_DICT_NAME}[{ROUTING_STATE_ACTIVE_KEY}]: updated")
+        print(f"  policyengine routes: {len(state['routes']['policyengine'])}")
+        print(f"  US routes: {len(state['routes']['us'])}")
+        print(f"  UK routes: {len(state['routes']['uk'])}")
+        print(f"  bundle manifests: {len(state['bundles'])}")
+        print()
+        print("Legacy routing state seed completed successfully.")
+        return
 
     required_args = {
         "--app-name": args.app_name,

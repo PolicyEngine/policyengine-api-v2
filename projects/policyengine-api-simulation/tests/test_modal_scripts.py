@@ -73,6 +73,23 @@ class TestModalExtractVersions:
             in workflow
         )
 
+    def test_deploy_workflow_threads_force_latest_to_script(self):
+        """Manual rollback flag should reach the deploy script."""
+        deploy_workflow = (
+            REPO_ROOT / ".github" / "workflows" / "modal-deploy.yml"
+        ).read_text(encoding="utf-8")
+        reusable_workflow = (
+            REPO_ROOT / ".github" / "workflows" / "modal-deploy.reusable.yml"
+        ).read_text(encoding="utf-8")
+
+        assert "force_latest:" in deploy_workflow
+        assert "force_latest: ${{ inputs.force_latest || false }}" in deploy_workflow
+        assert "force_latest:" in reusable_workflow
+        assert (
+            'modal-deploy-app.sh "${{ inputs.modal_environment }}" "${{ inputs.force_latest }}"'
+            in reusable_workflow
+        )
+
 
 class TestModalHealthCheck:
     """Tests for modal-health-check.sh"""
@@ -309,6 +326,38 @@ class TestModalDeployApp:
 
     script = SCRIPTS_DIR / "modal-deploy-app.sh"
 
+    def _run_with_fake_uv(self, tmp_path, *args):
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        log_path = tmp_path / "uv-calls.log"
+        uv_path = bin_dir / "uv"
+        uv_path.write_text(
+            '#!/bin/bash\nprintf \'%s\\n\' "$*" >> "$UV_FAKE_LOG"\n',
+            encoding="utf-8",
+        )
+        uv_path.chmod(0o755)
+
+        env = os.environ.copy()
+        env.update(
+            {
+                "PATH": f"{bin_dir}{os.pathsep}{env['PATH']}",
+                "UV_FAKE_LOG": str(log_path),
+                "POLICYENGINE_VERSION": "4.18.2",
+                "POLICYENGINE_CORE_VERSION": "3.27.1",
+                "POLICYENGINE_US_VERSION": "1.729.0",
+                "POLICYENGINE_UK_VERSION": "2.89.2",
+            }
+        )
+
+        result = subprocess.run(
+            ["bash", str(self.script), *args],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        calls = log_path.read_text(encoding="utf-8").splitlines()
+        return result, calls
+
     def test_script_exists(self):
         """Script file should exist."""
         assert self.script.exists(), f"Script not found at {self.script}"
@@ -330,6 +379,26 @@ class TestModalDeployApp:
             text=True,
         )
         assert result.returncode != 0, "Should fail without modal environment"
+
+    def test_defaults_to_not_forcing_latest(self, tmp_path):
+        result, calls = self._run_with_fake_uv(tmp_path, "main")
+
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.count("Force latest: false") == 1
+        registry_call = next(
+            call for call in calls if "update_version_registry" in call
+        )
+        assert "--force-latest" not in registry_call
+
+    def test_passes_force_latest_when_requested(self, tmp_path):
+        result, calls = self._run_with_fake_uv(tmp_path, "main", "true")
+
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.count("Force latest: true") == 1
+        registry_call = next(
+            call for call in calls if "update_version_registry" in call
+        )
+        assert registry_call.endswith("--force-latest")
 
 
 class TestModalGetUrl:

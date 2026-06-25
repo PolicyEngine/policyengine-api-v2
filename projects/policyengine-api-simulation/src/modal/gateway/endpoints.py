@@ -59,7 +59,6 @@ class RouteResolution:
     response_version: str
     policyengine_version: str | None
     bundle_manifest: dict
-    route_kind: str
 
 
 def _job_metadata_store():
@@ -322,7 +321,6 @@ def _resolve_policyengine_route(
         response_version=response_version or policyengine_version,
         policyengine_version=policyengine_version,
         bundle_manifest=_bundle_manifest(state, policyengine_version),
-        route_kind="policyengine",
     )
 
 
@@ -341,7 +339,6 @@ def _resolve_country_route(
         response_version=version,
         policyengine_version=policyengine_version,
         bundle_manifest=_bundle_manifest(state, policyengine_version),
-        route_kind=country,
     )
 
 
@@ -385,12 +382,21 @@ def _resolve_from_active_state(
 
     if version is None:
         latest_policyengine = _routing_state_latest(state, "policyengine")
-        if latest_policyengine is None:
-            raise ValueError("Routing state does not define latest policyengine.py")
-        return _resolve_policyengine_route(
-            state,
-            policyengine_version=latest_policyengine,
-        )
+        if latest_policyengine is not None:
+            return _resolve_policyengine_route(
+                state,
+                policyengine_version=latest_policyengine,
+            )
+        latest_country_version = _routing_state_latest(state, country)
+        if latest_country_version is not None:
+            country_resolution = _resolve_country_route(
+                state,
+                country=country,
+                version=latest_country_version,
+            )
+            if country_resolution is not None:
+                return country_resolution
+        raise ValueError("Routing state does not define a latest route")
 
     country_resolution = _resolve_country_route(
         state,
@@ -438,7 +444,6 @@ def _resolve_from_legacy_dicts(
             response_version=policyengine_version,
             policyengine_version=policyengine_version,
             bundle_manifest={},
-            route_kind="policyengine",
         )
 
     country_versions = modal.Dict.from_name(f"simulation-api-{country}-versions")
@@ -462,7 +467,6 @@ def _resolve_from_legacy_dicts(
                     response_version=version,
                     policyengine_version=version,
                     bundle_manifest={},
-                    route_kind="policyengine",
                 )
         raise ValueError(f"Unknown version {resolved_version} for country {country}")
 
@@ -471,7 +475,6 @@ def _resolve_from_legacy_dicts(
         response_version=resolved_version,
         policyengine_version=_policyengine_version_from_app_name(app_name),
         bundle_manifest={},
-        route_kind=country,
     )
 
 

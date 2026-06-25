@@ -154,6 +154,33 @@ class TestGetAppName:
         assert resolved_version == "1.500.0"
         assert app_name == "legacy-app"
 
+    def test__given_active_state_with_only_legacy_country_routes__then_no_version_uses_country_latest(
+        self, mock_modal
+    ):
+        from src.modal.gateway.endpoints import get_app_name
+
+        mock_modal["dicts"]["simulation-api-routing-state"] = {
+            "active": {
+                "schema_version": 1,
+                "generation": "legacy-seed",
+                "latest": {
+                    "us": "1.715.2",
+                    "uk": "2.88.20",
+                },
+                "routes": {
+                    "policyengine": {},
+                    "us": {"1.715.2": "policyengine-simulation-us1-715-2-uk2-88-20"},
+                    "uk": {"2.88.20": "policyengine-simulation-us1-715-2-uk2-88-20"},
+                },
+                "bundles": {},
+            }
+        }
+
+        app_name, resolved_version = get_app_name("us", None)
+
+        assert resolved_version == "1.715.2"
+        assert app_name == "policyengine-simulation-us1-715-2-uk2-88-20"
+
     def test__given_policyengine_version_field__then_routes_by_bundle(self, mock_modal):
         from src.modal.gateway.endpoints import resolve_route
 

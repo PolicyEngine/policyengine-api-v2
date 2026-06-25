@@ -11,6 +11,11 @@ on:
         required: false
         default: false
         type: boolean
+      force_latest:
+        description: 'Force latest pointers to this deployment, for intentional rollbacks'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: modal-deploy-main
@@ -53,6 +58,7 @@ jobs:
     with:
       environment: beta
       modal_environment: staging
+      force_latest: ${{ inputs.force_latest || false }}
     secrets: inherit
 
   deploy_prod:
@@ -63,6 +69,7 @@ jobs:
     with:
       environment: prod
       modal_environment: main
+      force_latest: ${{ inputs.force_latest || false }}
     secrets: inherit
 
   summary:

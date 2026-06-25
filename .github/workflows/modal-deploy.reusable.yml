@@ -11,6 +11,11 @@ on:
         required: true
         type: string
         description: 'The Modal environment name (e.g., staging, main)'
+      force_latest:
+        required: false
+        default: false
+        type: boolean
+        description: 'Force latest pointers to this deployment'
     outputs:
       simulation_api_url:
         description: 'The deployed simulation API URL'
@@ -94,7 +99,7 @@ jobs:
         POLICYENGINE_CORE_VERSION: ${{ steps.versions.outputs.policyengine_core_version }}
         POLICYENGINE_US_VERSION: ${{ steps.versions.outputs.us_version }}
         POLICYENGINE_UK_VERSION: ${{ steps.versions.outputs.uk_version }}
-      run: ../../.github/scripts/modal-deploy-app.sh "${{ inputs.modal_environment }}"
+      run: ../../.github/scripts/modal-deploy-app.sh "${{ inputs.modal_environment }}" "${{ inputs.force_latest }}"
 
     - name: Get deployed URL
       id: get-url
