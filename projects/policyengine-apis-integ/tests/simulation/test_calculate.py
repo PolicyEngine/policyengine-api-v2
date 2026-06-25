@@ -166,7 +166,6 @@ def test_calculate_us_state_region_model(
             },
             "subsample": 200,
             "time_period": "2026",
-            "data": "gs://policyengine-us-data/states/UT.h5",
         }
     )
 
