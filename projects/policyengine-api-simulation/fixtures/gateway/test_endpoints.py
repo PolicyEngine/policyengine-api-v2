@@ -17,6 +17,7 @@ TEST_APP_RELEASE_BUNDLE = {
             "enhanced_cps_2024": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
             "cps_2023": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.110.12",
             "pooled_3_year_cps_2023": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.110.12",
+            "states/UT": "hf://policyengine/policyengine-us-data/states/UT.h5@1.115.5",
         },
         "dataset_aliases": {
             "enhanced_cps": "enhanced_cps_2024",
