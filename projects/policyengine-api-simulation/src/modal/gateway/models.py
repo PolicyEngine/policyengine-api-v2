@@ -93,7 +93,6 @@ class GatewayRequestBase(BaseModel):
     reform: Optional[dict[str, Any]] = None
     baseline: Optional[dict[str, Any]] = None
     region: Optional[str] = None
-    subsample: Optional[int] = None
     title: Optional[str] = None
     include_cliffs: Optional[bool] = None
     model_version: Optional[str] = None

@@ -404,6 +404,65 @@ def test_run_simulation_impl_core_builds_and_serializes_macro_output(monkeypatch
     ]
 
 
+def test_run_simulation_impl_core_passes_region_scoping_to_simulations(monkeypatch):
+    dataset = object()
+    country_module = SimpleNamespace(model=SimpleNamespace(version="1.715.2"))
+    baseline_simulation = object()
+    reform_simulation = object()
+    scoping_strategy = object()
+    region_resolution = RegionResolution(
+        code="state/ut",
+        dataset_reference="dataset",
+        scoping_strategy=scoping_strategy,
+    )
+    build_calls = []
+
+    def fake_build_simulation(params, *, dataset, policy, scoping_strategy=None):
+        build_calls.append((params, dataset, policy, scoping_strategy))
+        return baseline_simulation if len(build_calls) == 1 else reform_simulation
+
+    class FakeSimulationOutputBuilder:
+        def __init__(self, **kwargs):
+            pass
+
+        def serialize(self):
+            return CURRENT_SINGLE_YEAR_MACRO_RESULT
+
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime._country_module",
+        lambda country: country_module,
+    )
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime._resolve_region",
+        lambda **kwargs: region_resolution,
+    )
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime._load_dataset",
+        lambda params, country_module, region_resolution: dataset,
+    )
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime._build_simulation",
+        fake_build_simulation,
+    )
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime.SimulationOutputBuilder",
+        FakeSimulationOutputBuilder,
+    )
+
+    result = _run_simulation_impl_core(
+        {
+            "country": "us",
+            "region": "state/ut",
+            "baseline": {},
+            "reform": {},
+        }
+    )
+
+    assert result == CURRENT_SINGLE_YEAR_MACRO_RESULT
+    assert build_calls[0][3] is scoping_strategy
+    assert build_calls[1][3] is scoping_strategy
+
+
 def test_resolve_region_uses_dedicated_region_dataset_with_requested_version(
     monkeypatch,
 ):
@@ -439,10 +498,6 @@ def test_resolve_region_uses_dedicated_region_dataset_with_requested_version(
 
 def test_resolve_region_maps_bundle_manifest_revision_to_data_version(monkeypatch):
     manifest_revision = "d47fb5475144260a75467d2f2e22b2d5d53d4d57"
-    monkeypatch.setattr(
-        "policyengine_api_simulation.simulation_runtime.resolve_bundle_region_dataset_uri",
-        lambda country, region_code, requested_data_version=None: None,
-    )
     monkeypatch.setattr(
         "policyengine_api_simulation.simulation_runtime.get_country_release_bundle",
         lambda country: SimpleNamespace(
@@ -552,6 +607,97 @@ def test_load_dataset_passes_bundle_default_name_to_country_loader_with_receipt(
     ]
 
 
+def test_resolve_region_scopes_us_state_from_national_populace_dataset():
+    bundle = get_country_release_bundle("us")
+    scoping_strategy = object()
+    state = SimpleNamespace(
+        dataset_path=None,
+        scoping_strategy=scoping_strategy,
+        parent_code="us",
+    )
+    national = SimpleNamespace(
+        dataset_path=bundle.default_dataset_uri,
+        scoping_strategy=None,
+        parent_code=None,
+    )
+    regions = {"state/ut": state, "us": national}
+    country_module = SimpleNamespace(
+        model=SimpleNamespace(get_region=lambda code: regions.get(code))
+    )
+
+    resolution = _resolve_region(
+        country_module=country_module,
+        country="us",
+        params={"region": "state/UT"},
+    )
+
+    assert resolution.code == "state/ut"
+    assert resolution.dataset_reference == bundle.default_dataset_uri
+    assert resolution.scoping_strategy is scoping_strategy
+
+
+def test_resolve_region_scopes_us_congressional_district_from_national_dataset():
+    bundle = get_country_release_bundle("us")
+    scoping_strategy = object()
+    district = SimpleNamespace(
+        dataset_path=None,
+        scoping_strategy=scoping_strategy,
+        parent_code="state/ut",
+    )
+    state = SimpleNamespace(
+        dataset_path=None,
+        scoping_strategy=object(),
+        parent_code="us",
+    )
+    national = SimpleNamespace(
+        dataset_path=bundle.default_dataset_uri,
+        scoping_strategy=None,
+        parent_code=None,
+    )
+    regions = {
+        "congressional_district/UT-01": district,
+        "state/ut": state,
+        "us": national,
+    }
+    country_module = SimpleNamespace(
+        model=SimpleNamespace(get_region=lambda code: regions.get(code))
+    )
+
+    resolution = _resolve_region(
+        country_module=country_module,
+        country="us",
+        params={"region": "congressional_district/ut-01"},
+    )
+
+    assert resolution.code == "congressional_district/UT-01"
+    assert resolution.dataset_reference == bundle.default_dataset_uri
+    assert resolution.scoping_strategy is scoping_strategy
+
+
+def test_resolve_region_rejects_unscoped_us_place_region():
+    place = SimpleNamespace(
+        dataset_path=None,
+        scoping_strategy=None,
+        parent_code="state/ut",
+    )
+    state = SimpleNamespace(
+        dataset_path=None,
+        scoping_strategy=object(),
+        parent_code="us",
+    )
+    regions = {"place/UT-67000": place, "state/ut": state}
+    country_module = SimpleNamespace(
+        model=SimpleNamespace(get_region=lambda code: regions.get(code))
+    )
+
+    with pytest.raises(ValueError, match="US place regions are not yet supported"):
+        _resolve_region(
+            country_module=country_module,
+            country="us",
+            params={"region": "place/ut-67000"},
+        )
+
+
 def test_resolve_region_scopes_us_place_from_parent_state_dataset(monkeypatch):
     monkeypatch.setattr(
         "policyengine_api_simulation.dataset_uri.with_hf_revision",
@@ -583,17 +729,13 @@ def test_resolve_region_scopes_us_place_from_parent_state_dataset(monkeypatch):
 
     assert resolution.code == "place/CA-57000"
     assert resolution.dataset_reference == (
-        "gs://policyengine-us-data/states/CA.h5@1.115.5"
+        "gs://policyengine-us-data/states/CA.h5@1.110.12"
     )
     assert resolution.scoping_strategy is scoping_strategy
 
 
 def test_resolve_region_maps_parent_manifest_revision_to_data_version(monkeypatch):
     manifest_revision = "d47fb5475144260a75467d2f2e22b2d5d53d4d57"
-    monkeypatch.setattr(
-        "policyengine_api_simulation.simulation_runtime.resolve_bundle_region_dataset_uri",
-        lambda country, region_code, requested_data_version=None: None,
-    )
     monkeypatch.setattr(
         "policyengine_api_simulation.simulation_runtime.get_country_release_bundle",
         lambda country: SimpleNamespace(

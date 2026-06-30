@@ -6,7 +6,6 @@ from policyengine_api_simulation.release_bundle import (
     BUNDLE_RECEIPT_FILENAME,
     get_country_release_bundle,
     resolve_bundle_dataset_name,
-    resolve_bundle_region_dataset_uri,
     resolve_bundle_dataset_uri,
     resolve_runtime_bundle_dataset_uri,
 )
@@ -75,35 +74,20 @@ def test_resolve_bundle_dataset_uri_maps_certified_defaults_to_manifest_uris():
     )
 
 
-def test_resolve_bundle_dataset_uri_maps_certified_us_state_datasets():
+def test_resolve_bundle_dataset_uri_does_not_certify_us_state_sidecars():
     bundle = get_country_release_bundle("us")
 
-    assert bundle.dataset_uris["states/UT"] == (
-        "hf://policyengine/policyengine-us-data/states/UT.h5@1.115.5"
-    )
-    assert resolve_bundle_dataset_uri("us", "states/UT") == (
-        "hf://policyengine/policyengine-us-data/states/UT.h5@1.115.5"
-    )
-
-
-def test_resolve_bundle_region_dataset_uri_maps_us_state_to_certified_dataset():
-    assert resolve_bundle_region_dataset_uri("us", "state/ut") == (
-        "gs://policyengine-us-data/states/UT.h5@1.115.5"
-    )
-
-
-def test_resolve_bundle_region_dataset_uri_applies_requested_version():
-    assert resolve_bundle_region_dataset_uri("us", "state/ut", "1.77.0") == (
-        "gs://policyengine-us-data/states/UT.h5@1.77.0"
-    )
+    assert "states/UT" not in bundle.dataset_uris
+    assert resolve_bundle_dataset_uri("us", "states/UT") == "states/UT"
 
 
 def test_resolve_bundle_dataset_uri_keeps_legacy_aliases_as_explicit_overrides():
     assert resolve_bundle_dataset_uri("us", "enhanced_cps") == (
         "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
     )
-    assert resolve_bundle_dataset_uri("uk", "enhanced_frs") == (
-        get_country_release_bundle("uk").dataset_uris["enhanced_frs_2023_24"]
+    assert (
+        resolve_bundle_dataset_uri("uk", "enhanced_frs")
+        == (get_country_release_bundle("uk").dataset_uris["enhanced_frs_2023_24"])
     )
 
 

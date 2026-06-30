@@ -30,13 +30,13 @@ on:
         description: 'The deployed policyengine-us package version'
         value: ${{ jobs.deploy.outputs.us_version }}
       us_data_version:
-        description: 'The bundled policyengine-us-data version'
+        description: 'The bundled US data release version'
         value: ${{ jobs.deploy.outputs.us_data_version }}
       uk_version:
         description: 'The deployed policyengine-uk package version'
         value: ${{ jobs.deploy.outputs.uk_version }}
       uk_data_version:
-        description: 'The bundled policyengine-uk-data version'
+        description: 'The bundled UK data release version'
         value: ${{ jobs.deploy.outputs.uk_data_version }}
 
 jobs:

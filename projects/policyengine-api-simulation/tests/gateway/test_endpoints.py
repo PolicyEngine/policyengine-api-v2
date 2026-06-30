@@ -398,7 +398,7 @@ class TestSubmitSimulationEndpoint:
             "us", "enhanced_cps_2024"
         )
 
-    def test__given_us_state_region_without_data__then_bundle_metadata_uses_state_dataset(
+    def test__given_us_state_region_without_data__then_keeps_contract_and_uses_default_dataset(
         self, mock_modal, client: TestClient
     ):
         mock_modal["dicts"]["simulation-api-us-versions"] = {
@@ -411,7 +411,7 @@ class TestSubmitSimulationEndpoint:
             json={
                 "country": "us",
                 "scope": "macro",
-                "region": "state/ut",
+                "region": "state/UT",
                 "reform": {},
             },
         )
@@ -420,8 +420,6 @@ class TestSubmitSimulationEndpoint:
         assert response.json()["policyengine_bundle"] == expected_bundle(
             "us",
             "1.500.0",
-            dataset="states/UT",
-            data_version="1.115.5",
         )
 
     def test__given_submission_with_logical_revision__then_bundle_dataset_uses_revision(
@@ -565,9 +563,9 @@ class TestSubmitSimulationEndpoint:
         bundle["policyengine_version"] = "4.13.1"
         bundle["uk"]["model_version"] = "2.88.20"
         bundle["uk"]["data_version"] = "1.55.10"
-        bundle["uk"][
-            "data_artifact_revision"
-        ] = "655dd07e4bb9c777b00dac044949611f1feb824f"
+        bundle["uk"]["data_artifact_revision"] = (
+            "655dd07e4bb9c777b00dac044949611f1feb824f"
+        )
         bundle["uk"]["default_dataset_uri"] = manifest_uri
         bundle["uk"]["dataset_uris"]["enhanced_frs_2023_24"] = manifest_uri
         state = deepcopy(TEST_ROUTING_STATE)

@@ -95,25 +95,6 @@ def _revision_from_dataset_uri(dataset_uri: str | None) -> str | None:
     return revision
 
 
-def _bundle_region_dataset_name(country: str, region: object) -> str | None:
-    if not isinstance(region, str) or not region.strip():
-        return None
-
-    country = country.lower()
-    raw = region.strip()
-    if raw.lower() == country:
-        return None
-
-    if country == "us":
-        if "/" not in raw and len(raw) == 2:
-            return f"states/{raw.upper()}"
-        prefix, separator, value = raw.partition("/")
-        if separator and prefix.lower() == "state" and value.strip():
-            return f"states/{value.strip().upper()}"
-
-    return None
-
-
 def _bundle_certified_hf_uri_roots(country_bundle: dict) -> set[str]:
     roots: set[str] = set()
     default_uri = country_bundle.get("default_dataset_uri")
@@ -135,37 +116,6 @@ def _is_bundle_certified_hf_uri(country_bundle: dict, dataset_uri: str) -> bool:
         return False
     return _without_revision(dataset_uri) in _bundle_certified_hf_uri_roots(
         country_bundle
-    )
-
-
-def _resolve_region_dataset_uri_from_app_bundle(
-    *,
-    app_bundle: dict,
-    country: str,
-    region: object,
-    requested_data_version: str | None = None,
-) -> str | None:
-    country_bundle = app_bundle.get(country.lower())
-    if not isinstance(country_bundle, dict):
-        return None
-
-    dataset_name = _bundle_region_dataset_name(country, region)
-    if dataset_name is None:
-        return None
-
-    dataset_uris = country_bundle.get("dataset_uris")
-    if not isinstance(dataset_uris, dict):
-        return None
-    dataset_uri = dataset_uris.get(dataset_name)
-    if not isinstance(dataset_uri, str):
-        return None
-
-    return runtime_dataset_uri(
-        dataset_uri,
-        default_revision=_country_bundle_data_version(country_bundle),
-        override_revision=requested_data_version,
-        artifact_revision=_country_bundle_data_artifact_revision(country_bundle),
-        validate_hf=False,
     )
 
 
@@ -550,21 +500,12 @@ def _build_policyengine_bundle(
     requested_data_version = (
         requested_data_version if isinstance(requested_data_version, str) else None
     )
-    resolved_dataset = None
-    if requested_dataset is None:
-        resolved_dataset = _resolve_region_dataset_uri_from_app_bundle(
-            app_bundle=app_bundle,
-            country=country,
-            region=payload.get("region"),
-            requested_data_version=requested_data_version,
-        )
-    if resolved_dataset is None:
-        resolved_dataset = _resolve_dataset_uri_from_app_bundle(
-            app_bundle=app_bundle,
-            country=country,
-            requested_data=requested_dataset,
-            requested_data_version=requested_data_version,
-        )
+    resolved_dataset = _resolve_dataset_uri_from_app_bundle(
+        app_bundle=app_bundle,
+        country=country,
+        requested_data=requested_dataset,
+        requested_data_version=requested_data_version,
+    )
     data_version = (
         requested_data_version
         if requested_data_version is not None
