@@ -618,6 +618,6 @@ class TestAllScriptsHaveShebang:
                 capture_output=True,
                 text=True,
             )
-            assert (
-                result.returncode == 0
-            ), f"{script.name} has syntax errors: {result.stderr}"
+            assert result.returncode == 0, (
+                f"{script.name} has syntax errors: {result.stderr}"
+            )

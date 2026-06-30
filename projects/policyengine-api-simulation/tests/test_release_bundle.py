@@ -91,8 +91,9 @@ def test_resolve_bundle_dataset_uri_keeps_legacy_aliases_as_explicit_overrides()
     assert resolve_bundle_dataset_uri("us", "enhanced_cps") == (
         "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
     )
-    assert resolve_bundle_dataset_uri("uk", "enhanced_frs") == (
-        get_country_release_bundle("uk").dataset_uris["enhanced_frs_2023_24"]
+    assert (
+        resolve_bundle_dataset_uri("uk", "enhanced_frs")
+        == (get_country_release_bundle("uk").dataset_uris["enhanced_frs_2023_24"])
     )
 
 

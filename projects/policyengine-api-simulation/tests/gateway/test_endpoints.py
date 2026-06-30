@@ -563,9 +563,9 @@ class TestSubmitSimulationEndpoint:
         bundle["policyengine_version"] = "4.13.1"
         bundle["uk"]["model_version"] = "2.88.20"
         bundle["uk"]["data_version"] = "1.55.10"
-        bundle["uk"][
-            "data_artifact_revision"
-        ] = "655dd07e4bb9c777b00dac044949611f1feb824f"
+        bundle["uk"]["data_artifact_revision"] = (
+            "655dd07e4bb9c777b00dac044949611f1feb824f"
+        )
         bundle["uk"]["default_dataset_uri"] = manifest_uri
         bundle["uk"]["dataset_uris"]["enhanced_frs_2023_24"] = manifest_uri
         state = deepcopy(TEST_ROUTING_STATE)
