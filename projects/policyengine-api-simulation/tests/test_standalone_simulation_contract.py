@@ -51,6 +51,10 @@ def test_standalone_simulation_openapi_keeps_legacy_schema_names():
         "telemetry"
         not in spec["components"]["schemas"]["SimulationOptions"]["properties"]
     )
+    assert (
+        "subsample"
+        not in spec["components"]["schemas"]["SimulationOptions"]["properties"]
+    )
 
 
 def test_standalone_simulation_route_returns_legacy_macro_contract(monkeypatch):

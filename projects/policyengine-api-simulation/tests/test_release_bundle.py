@@ -6,7 +6,6 @@ from policyengine_api_simulation.release_bundle import (
     BUNDLE_RECEIPT_FILENAME,
     get_country_release_bundle,
     resolve_bundle_dataset_name,
-    resolve_bundle_region_dataset_uri,
     resolve_bundle_dataset_uri,
     resolve_runtime_bundle_dataset_uri,
 )
@@ -80,11 +79,6 @@ def test_resolve_bundle_dataset_uri_does_not_certify_us_state_sidecars():
 
     assert "states/UT" not in bundle.dataset_uris
     assert resolve_bundle_dataset_uri("us", "states/UT") == "states/UT"
-
-
-def test_resolve_bundle_region_dataset_uri_does_not_map_us_states_to_sidecars():
-    assert resolve_bundle_region_dataset_uri("us", "state/ut") is None
-    assert resolve_bundle_region_dataset_uri("us", "state/ut", "1.77.0") is None
 
 
 def test_resolve_bundle_dataset_uri_keeps_legacy_aliases_as_explicit_overrides():

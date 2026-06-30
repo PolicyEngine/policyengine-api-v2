@@ -356,25 +356,6 @@ def resolve_bundle_dataset_uri(country: str, requested_data: str | None) -> str:
     return bundle.dataset_uris.get(dataset_name, dataset_name)
 
 
-def resolve_bundle_region_dataset_uri(
-    country: str,
-    region_code: str,
-    requested_data_version: str | None = None,
-) -> str | None:
-    """Resolve a certified regional dataset from policyengine.py metadata.
-
-    policyengine.py 4.18.6+ scopes US state and congressional district regions
-    from the certified national Populace dataset instead of certifying separate
-    regional H5 sidecars.
-    """
-
-    _normalise_country(country)
-    if not region_code.strip():
-        return None
-    del requested_data_version
-    return None
-
-
 def _receipt_path() -> Path:
     explicit = os.environ.get("POLICYENGINE_BUNDLE_RECEIPT")
     if explicit:

@@ -404,6 +404,65 @@ def test_run_simulation_impl_core_builds_and_serializes_macro_output(monkeypatch
     ]
 
 
+def test_run_simulation_impl_core_passes_region_scoping_to_simulations(monkeypatch):
+    dataset = object()
+    country_module = SimpleNamespace(model=SimpleNamespace(version="1.715.2"))
+    baseline_simulation = object()
+    reform_simulation = object()
+    scoping_strategy = object()
+    region_resolution = RegionResolution(
+        code="state/ut",
+        dataset_reference="dataset",
+        scoping_strategy=scoping_strategy,
+    )
+    build_calls = []
+
+    def fake_build_simulation(params, *, dataset, policy, scoping_strategy=None):
+        build_calls.append((params, dataset, policy, scoping_strategy))
+        return baseline_simulation if len(build_calls) == 1 else reform_simulation
+
+    class FakeSimulationOutputBuilder:
+        def __init__(self, **kwargs):
+            pass
+
+        def serialize(self):
+            return CURRENT_SINGLE_YEAR_MACRO_RESULT
+
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime._country_module",
+        lambda country: country_module,
+    )
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime._resolve_region",
+        lambda **kwargs: region_resolution,
+    )
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime._load_dataset",
+        lambda params, country_module, region_resolution: dataset,
+    )
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime._build_simulation",
+        fake_build_simulation,
+    )
+    monkeypatch.setattr(
+        "policyengine_api_simulation.simulation_runtime.SimulationOutputBuilder",
+        FakeSimulationOutputBuilder,
+    )
+
+    result = _run_simulation_impl_core(
+        {
+            "country": "us",
+            "region": "state/ut",
+            "baseline": {},
+            "reform": {},
+        }
+    )
+
+    assert result == CURRENT_SINGLE_YEAR_MACRO_RESULT
+    assert build_calls[0][3] is scoping_strategy
+    assert build_calls[1][3] is scoping_strategy
+
+
 def test_resolve_region_uses_dedicated_region_dataset_with_requested_version(
     monkeypatch,
 ):
@@ -439,10 +498,6 @@ def test_resolve_region_uses_dedicated_region_dataset_with_requested_version(
 
 def test_resolve_region_maps_bundle_manifest_revision_to_data_version(monkeypatch):
     manifest_revision = "d47fb5475144260a75467d2f2e22b2d5d53d4d57"
-    monkeypatch.setattr(
-        "policyengine_api_simulation.simulation_runtime.resolve_bundle_region_dataset_uri",
-        lambda country, region_code, requested_data_version=None: None,
-    )
     monkeypatch.setattr(
         "policyengine_api_simulation.simulation_runtime.get_country_release_bundle",
         lambda country: SimpleNamespace(
@@ -681,10 +736,6 @@ def test_resolve_region_scopes_us_place_from_parent_state_dataset(monkeypatch):
 
 def test_resolve_region_maps_parent_manifest_revision_to_data_version(monkeypatch):
     manifest_revision = "d47fb5475144260a75467d2f2e22b2d5d53d4d57"
-    monkeypatch.setattr(
-        "policyengine_api_simulation.simulation_runtime.resolve_bundle_region_dataset_uri",
-        lambda country, region_code, requested_data_version=None: None,
-    )
     monkeypatch.setattr(
         "policyengine_api_simulation.simulation_runtime.get_country_release_bundle",
         lambda country: SimpleNamespace(

@@ -19,7 +19,6 @@ from policyengine_api_simulation.dataset_uri import runtime_dataset_uri
 from policyengine_api_simulation.release_bundle import (
     get_country_release_bundle,
     resolve_bundle_dataset_name,
-    resolve_bundle_region_dataset_uri,
     resolve_runtime_bundle_dataset_uri,
 )
 from policyengine_api_simulation.simulation_output_builder import (
@@ -280,14 +279,6 @@ def _region_parent_dataset_reference(
             raise ValueError(f"Region hierarchy cycle at {parent_code}")
         visited.add(parent_code)
 
-        bundle_dataset_reference = resolve_bundle_region_dataset_uri(
-            country,
-            parent_code,
-            requested_data_version,
-        )
-        if bundle_dataset_reference is not None:
-            return bundle_dataset_reference
-
         parent_region = country_module.model.get_region(parent_code)
         parent_dataset_path = getattr(parent_region, "dataset_path", None)
         if isinstance(parent_dataset_path, str):
@@ -341,20 +332,14 @@ def _resolve_region(
     dataset_path = getattr(region, "dataset_path", None)
     requested_data_version = _requested_data_version(params)
     if isinstance(dataset_path, str):
-        dataset_reference = resolve_bundle_region_dataset_uri(
-            country,
-            region_code,
-            requested_data_version,
+        bundle = get_country_release_bundle(country)
+        dataset_reference = runtime_dataset_uri(
+            dataset_path,
+            default_revision=bundle.data_version,
+            override_revision=requested_data_version,
+            artifact_revision=bundle.data_artifact_revision,
+            validate_hf=False,
         )
-        if dataset_reference is None:
-            bundle = get_country_release_bundle(country)
-            dataset_reference = runtime_dataset_uri(
-                dataset_path,
-                default_revision=bundle.data_version,
-                override_revision=requested_data_version,
-                artifact_revision=bundle.data_artifact_revision,
-                validate_hf=False,
-            )
     else:
         dataset_reference = _region_parent_dataset_reference(
             country_module,
@@ -367,70 +352,6 @@ def _resolve_region(
         code=region_code,
         dataset_reference=dataset_reference,
         scoping_strategy=getattr(region, "scoping_strategy", None),
-    )
-
-
-def _microframe_like(frame, weights: str):
-    from microdf import MicroDataFrame
-
-    return MicroDataFrame(frame.copy(), weights=weights)
-
-
-def _person_group_column(person, entity: str) -> str:
-    prefixed = f"person_{entity}_id"
-    if prefixed in person.columns:
-        return prefixed
-    return f"{entity}_id"
-
-
-def _subsample_us_dataset(dataset, subsample: int | None):
-    if not subsample:
-        return dataset
-
-    from policyengine.tax_benefit_models.us.datasets import (
-        PolicyEngineUSDataset,
-        USYearData,
-    )
-
-    dataset.load()
-    data = dataset.data
-    household = data.household.head(int(subsample)).copy()
-    household_ids = set(household["household_id"])
-
-    person_household_col = _person_group_column(data.person, "household")
-    person = data.person[data.person[person_household_col].isin(household_ids)].copy()
-
-    def group_subset(entity: str):
-        person_col = _person_group_column(person, entity)
-        entity_id_col = f"{entity}_id"
-        ids = set(person[person_col])
-        frame = getattr(data, entity)
-        return frame[frame[entity_id_col].isin(ids)].copy()
-
-    subset_data = USYearData(
-        person=_microframe_like(person, "person_weight"),
-        marital_unit=_microframe_like(
-            group_subset("marital_unit"), "marital_unit_weight"
-        ),
-        family=_microframe_like(group_subset("family"), "family_weight"),
-        spm_unit=_microframe_like(group_subset("spm_unit"), "spm_unit_weight"),
-        tax_unit=_microframe_like(group_subset("tax_unit"), "tax_unit_weight"),
-        household=_microframe_like(household, "household_weight"),
-    )
-    subset_path = os.path.join(
-        os.environ.get("POLICYENGINE_DATA_FOLDER", "/tmp/policyengine-data"),
-        f"{dataset.id}_subsample_{subsample}.h5",
-    )
-    return PolicyEngineUSDataset(
-        id=f"{dataset.id}_subsample_{subsample}",
-        name=f"{dataset.name} subsample {subsample}",
-        description=dataset.description,
-        filepath=subset_path,
-        year=dataset.year,
-        is_output_dataset=dataset.is_output_dataset,
-        metadata=getattr(dataset, "metadata", {}),
-        metadata_filepath=getattr(dataset, "metadata_filepath", None),
-        data=subset_data,
     )
 
 
@@ -463,10 +384,7 @@ def _load_dataset(
             "POLICYENGINE_DATA_FOLDER", "/tmp/policyengine-data"
         ),
     )
-    dataset = next(iter(datasets.values()))
-    if country == "us":
-        return _subsample_us_dataset(dataset, params.get("subsample"))
-    return dataset
+    return next(iter(datasets.values()))
 
 
 def _build_simulation(
