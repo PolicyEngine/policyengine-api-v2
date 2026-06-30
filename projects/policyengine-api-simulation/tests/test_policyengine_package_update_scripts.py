@@ -128,7 +128,7 @@ def test_update_policyengine_package_opens_pr_for_existing_branch_without_open_p
     assert "--head auto/update-policyengine-4.1.0" in gh_calls
 
 
-def test_update_policyengine_package_updates_py_and_bundled_country_pins(
+def test_update_policyengine_package_updates_py_and_bundled_runtime_pins(
     fake_bin: Path, fake_repo: Path, tmp_path: Path
 ) -> None:
     git_log = tmp_path / "git.log"
@@ -149,6 +149,7 @@ def test_update_policyengine_package_updates_py_and_bundled_country_pins(
         encoding="utf-8"
     )
     assert "policyengine==4.1.0" in pyproject_text
+    assert "policyengine-core==999.999.999" in pyproject_text
     assert "policyengine-us==1.1.0" in pyproject_text
     assert "policyengine-uk==2.1.0" in pyproject_text
     uv_calls = uv_log.read_text(encoding="utf-8")

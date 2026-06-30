@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Check PyPI for a newer policyengine.py package, update the simulation project
-# pin, sync country package pins to that policyengine.py bundle, and open one
+# pin, sync runtime package pins to that policyengine.py bundle, and open one
 # bundle-level PR.
 #
 # Usage:
@@ -39,7 +39,8 @@ create_pr_body_file() {
     echo
     echo "Update policyengine.py from ${CURRENT} to ${LATEST} in the simulation API runtime."
     echo
-    echo "This also syncs country package pins to the versions bundled by policyengine.py ${LATEST}:"
+    echo "This also syncs runtime package pins to the versions bundled by policyengine.py ${LATEST}:"
+    echo "- policyengine-core: ${BUNDLED_CORE_VERSION:-resolved from bundle during update}"
     echo "- policyengine-us: ${BUNDLED_US_VERSION:-resolved from bundle during update}"
     echo "- policyengine-uk: ${BUNDLED_UK_VERSION:-resolved from bundle during update}"
     echo
@@ -160,26 +161,29 @@ BUNDLE_OUTPUT=$(
 )
 BUNDLED_US_VERSION=$(printf '%s\n' "$BUNDLE_OUTPUT" | awk -F= '$1 == "us_version" {print $2}')
 BUNDLED_UK_VERSION=$(printf '%s\n' "$BUNDLE_OUTPUT" | awk -F= '$1 == "uk_version" {print $2}')
+BUNDLED_CORE_VERSION=$(printf '%s\n' "$BUNDLE_OUTPUT" | awk -F= '$1 == "policyengine_core_version" {print $2}')
 
-if [[ -z "$BUNDLED_US_VERSION" || -z "$BUNDLED_UK_VERSION" ]]; then
-  echo "ERROR: Could not resolve bundled country package versions." >&2
+if [[ -z "$BUNDLED_CORE_VERSION" || -z "$BUNDLED_US_VERSION" || -z "$BUNDLED_UK_VERSION" ]]; then
+  echo "ERROR: Could not resolve bundled runtime package versions." >&2
   echo "$BUNDLE_OUTPUT" >&2
   exit 1
 fi
 
-echo "Bundled country pins:"
+echo "Bundled runtime pins:"
+echo "  policyengine-core==${BUNDLED_CORE_VERSION}"
 echo "  policyengine-us==${BUNDLED_US_VERSION}"
 echo "  policyengine-uk==${BUNDLED_UK_VERSION}"
 
-python3 - "$PYPROJECT" "$BUNDLED_US_VERSION" "$BUNDLED_UK_VERSION" <<'PY'
+python3 - "$PYPROJECT" "$BUNDLED_CORE_VERSION" "$BUNDLED_US_VERSION" "$BUNDLED_UK_VERSION" <<'PY'
 import re
 import sys
 from pathlib import Path
 
-pyproject_path, us_version, uk_version = sys.argv[1:]
+pyproject_path, core_version, us_version, uk_version = sys.argv[1:]
 pyproject = Path(pyproject_path)
 text = pyproject.read_text(encoding="utf-8")
 pins = {
+    "policyengine-core": core_version,
     "policyengine-us": us_version,
     "policyengine-uk": uk_version,
 }
