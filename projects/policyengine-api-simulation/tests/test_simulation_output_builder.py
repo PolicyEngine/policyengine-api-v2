@@ -552,6 +552,97 @@ def test_load_dataset_passes_bundle_default_name_to_country_loader_with_receipt(
     ]
 
 
+def test_resolve_region_scopes_us_state_from_national_populace_dataset():
+    bundle = get_country_release_bundle("us")
+    scoping_strategy = object()
+    state = SimpleNamespace(
+        dataset_path=None,
+        scoping_strategy=scoping_strategy,
+        parent_code="us",
+    )
+    national = SimpleNamespace(
+        dataset_path=bundle.default_dataset_uri,
+        scoping_strategy=None,
+        parent_code=None,
+    )
+    regions = {"state/ut": state, "us": national}
+    country_module = SimpleNamespace(
+        model=SimpleNamespace(get_region=lambda code: regions.get(code))
+    )
+
+    resolution = _resolve_region(
+        country_module=country_module,
+        country="us",
+        params={"region": "state/UT"},
+    )
+
+    assert resolution.code == "state/ut"
+    assert resolution.dataset_reference == bundle.default_dataset_uri
+    assert resolution.scoping_strategy is scoping_strategy
+
+
+def test_resolve_region_scopes_us_congressional_district_from_national_dataset():
+    bundle = get_country_release_bundle("us")
+    scoping_strategy = object()
+    district = SimpleNamespace(
+        dataset_path=None,
+        scoping_strategy=scoping_strategy,
+        parent_code="state/ut",
+    )
+    state = SimpleNamespace(
+        dataset_path=None,
+        scoping_strategy=object(),
+        parent_code="us",
+    )
+    national = SimpleNamespace(
+        dataset_path=bundle.default_dataset_uri,
+        scoping_strategy=None,
+        parent_code=None,
+    )
+    regions = {
+        "congressional_district/UT-01": district,
+        "state/ut": state,
+        "us": national,
+    }
+    country_module = SimpleNamespace(
+        model=SimpleNamespace(get_region=lambda code: regions.get(code))
+    )
+
+    resolution = _resolve_region(
+        country_module=country_module,
+        country="us",
+        params={"region": "congressional_district/ut-01"},
+    )
+
+    assert resolution.code == "congressional_district/UT-01"
+    assert resolution.dataset_reference == bundle.default_dataset_uri
+    assert resolution.scoping_strategy is scoping_strategy
+
+
+def test_resolve_region_rejects_unscoped_us_place_region():
+    place = SimpleNamespace(
+        dataset_path=None,
+        scoping_strategy=None,
+        parent_code="state/ut",
+    )
+    state = SimpleNamespace(
+        dataset_path=None,
+        scoping_strategy=object(),
+        parent_code="us",
+    )
+    regions = {"place/UT-67000": place, "state/ut": state}
+    country_module = SimpleNamespace(
+        model=SimpleNamespace(get_region=lambda code: regions.get(code))
+    )
+
+    with pytest.raises(ValueError, match="US place regions are not yet supported"):
+        _resolve_region(
+            country_module=country_module,
+            country="us",
+            params={"region": "place/ut-67000"},
+        )
+
+
 def test_resolve_region_scopes_us_place_from_parent_state_dataset(monkeypatch):
     monkeypatch.setattr(
         "policyengine_api_simulation.dataset_uri.with_hf_revision",
@@ -583,7 +674,7 @@ def test_resolve_region_scopes_us_place_from_parent_state_dataset(monkeypatch):
 
     assert resolution.code == "place/CA-57000"
     assert resolution.dataset_reference == (
-        "gs://policyengine-us-data/states/CA.h5@1.115.5"
+        "gs://policyengine-us-data/states/CA.h5@1.110.12"
     )
     assert resolution.scoping_strategy is scoping_strategy
 

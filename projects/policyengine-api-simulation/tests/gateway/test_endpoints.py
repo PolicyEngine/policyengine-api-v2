@@ -398,7 +398,7 @@ class TestSubmitSimulationEndpoint:
             "us", "enhanced_cps_2024"
         )
 
-    def test__given_us_state_region_without_data__then_bundle_metadata_uses_state_dataset(
+    def test__given_us_state_region_without_data__then_keeps_contract_and_uses_default_dataset(
         self, mock_modal, client: TestClient
     ):
         mock_modal["dicts"]["simulation-api-us-versions"] = {
@@ -411,7 +411,7 @@ class TestSubmitSimulationEndpoint:
             json={
                 "country": "us",
                 "scope": "macro",
-                "region": "state/ut",
+                "region": "state/UT",
                 "reform": {},
             },
         )
@@ -420,8 +420,6 @@ class TestSubmitSimulationEndpoint:
         assert response.json()["policyengine_bundle"] == expected_bundle(
             "us",
             "1.500.0",
-            dataset="states/UT",
-            data_version="1.115.5",
         )
 
     def test__given_submission_with_logical_revision__then_bundle_dataset_uses_revision(

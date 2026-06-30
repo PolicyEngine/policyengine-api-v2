@@ -361,27 +361,18 @@ def resolve_bundle_region_dataset_uri(
     region_code: str,
     requested_data_version: str | None = None,
 ) -> str | None:
-    """Resolve a certified regional dataset from policyengine.py metadata."""
+    """Resolve a certified regional dataset from policyengine.py metadata.
 
-    bundle = get_country_release_bundle(country)
-    region_code = region_code.lower()
-    dataset_name = None
-    if bundle.country == "us" and region_code.startswith("state/"):
-        state_code = region_code.removeprefix("state/").upper()
-        dataset_name = f"states/{state_code}"
-    if dataset_name is None:
-        return None
+    policyengine.py 4.18.6+ scopes US state and congressional district regions
+    from the certified national Populace dataset instead of certifying separate
+    regional H5 sidecars.
+    """
 
-    dataset_uri = bundle.dataset_uris.get(dataset_name)
-    if dataset_uri is None:
+    _normalise_country(country)
+    if not region_code.strip():
         return None
-    return runtime_dataset_uri(
-        dataset_uri,
-        default_revision=bundle.data_version,
-        override_revision=requested_data_version,
-        artifact_revision=bundle.data_artifact_revision,
-        validate_hf=False,
-    )
+    del requested_data_version
+    return None
 
 
 def _receipt_path() -> Path:

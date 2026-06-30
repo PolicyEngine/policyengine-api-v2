@@ -272,8 +272,14 @@ def _region_parent_dataset_reference(
     params: dict[str, Any],
 ) -> str:
     parent_code = getattr(region, "parent_code", None)
-    if parent_code:
-        requested_data_version = _requested_data_version(params)
+    requested_data_version = _requested_data_version(params)
+    visited: set[str] = set()
+
+    while isinstance(parent_code, str) and parent_code:
+        if parent_code in visited:
+            raise ValueError(f"Region hierarchy cycle at {parent_code}")
+        visited.add(parent_code)
+
         bundle_dataset_reference = resolve_bundle_region_dataset_uri(
             country,
             parent_code,
@@ -281,6 +287,7 @@ def _region_parent_dataset_reference(
         )
         if bundle_dataset_reference is not None:
             return bundle_dataset_reference
+
         parent_region = country_module.model.get_region(parent_code)
         parent_dataset_path = getattr(parent_region, "dataset_path", None)
         if isinstance(parent_dataset_path, str):
@@ -290,8 +297,24 @@ def _region_parent_dataset_reference(
                 default_revision=bundle.data_version,
                 override_revision=requested_data_version,
                 artifact_revision=bundle.data_artifact_revision,
+                validate_hf=False,
             )
+        parent_code = getattr(parent_region, "parent_code", None)
+
     return _resolve_dataset_reference(country, params)
+
+
+def _reject_unscoped_us_place_region(region_code: str, region) -> None:
+    if not region_code.startswith("place/"):
+        return
+    if getattr(region, "dataset_path", None) is not None:
+        return
+    if getattr(region, "scoping_strategy", None) is not None:
+        return
+    raise ValueError(
+        "US place regions are not yet supported for runtime simulation because "
+        "policyengine.py does not expose place-level dataset scoping."
+    )
 
 
 def _resolve_region(
@@ -312,6 +335,8 @@ def _resolve_region(
         region = _build_uk_weight_replacement_region(region_code)
     if region is None:
         raise ValueError(f"Unsupported {country.upper()} region: {region_code}")
+    if country == "us":
+        _reject_unscoped_us_place_region(region_code, region)
 
     dataset_path = getattr(region, "dataset_path", None)
     requested_data_version = _requested_data_version(params)
@@ -328,6 +353,7 @@ def _resolve_region(
                 default_revision=bundle.data_version,
                 override_revision=requested_data_version,
                 artifact_revision=bundle.data_artifact_revision,
+                validate_hf=False,
             )
     else:
         dataset_reference = _region_parent_dataset_reference(
