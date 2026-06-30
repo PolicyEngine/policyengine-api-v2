@@ -22,7 +22,7 @@ def fake_repo(tmp_path: Path) -> Path:
         "\n".join(
             [
                 "[project]",
-                'dependencies = ["policyengine==4.0.0", "policyengine-core==3.25.0", "policyengine-us==1.0.0", "policyengine-uk==2.0.0"]',
+                'dependencies = ["policyengine==4.0.0", "policyengine-core==0.0.0", "policyengine-us==1.0.0", "policyengine-uk==2.0.0"]',
             ]
         ),
         encoding="utf-8",
@@ -36,7 +36,7 @@ def fake_repo(tmp_path: Path) -> Path:
                 "",
                 "[[package]]",
                 'name = "policyengine-core"',
-                'version = "3.25.0"',
+                'version = "0.0.0"',
                 "",
                 "[[package]]",
                 'name = "policyengine-us"',
@@ -128,7 +128,7 @@ def install_fake_uv(
     fake_bin: Path,
     *,
     log: Path,
-    bundled_core_version: str = "3.26.1",
+    bundled_core_version: str = "999.999.999",
     bundled_us_version: str = "1.1.0",
     bundled_uk_version: str = "2.1.0",
 ) -> None:

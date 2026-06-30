@@ -149,7 +149,7 @@ def test_update_policyengine_package_updates_py_and_bundled_runtime_pins(
         encoding="utf-8"
     )
     assert "policyengine==4.1.0" in pyproject_text
-    assert "policyengine-core==3.26.1" in pyproject_text
+    assert "policyengine-core==999.999.999" in pyproject_text
     assert "policyengine-us==1.1.0" in pyproject_text
     assert "policyengine-uk==2.1.0" in pyproject_text
     uv_calls = uv_log.read_text(encoding="utf-8")
