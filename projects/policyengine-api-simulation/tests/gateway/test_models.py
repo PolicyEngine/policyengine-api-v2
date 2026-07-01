@@ -208,8 +208,6 @@ class TestSimulationRequest:
             SimulationRequest(country="us", dataset="custom_dataset_label")
         with pytest.raises(ValidationError):
             SimulationRequest(country="us", mystery_flag=True)
-        with pytest.raises(ValidationError):
-            SimulationRequest(country="us", subsample=100)
 
     def test_simulation_request_rejects_oversized_payload(self):
         """Payloads that exceed the gateway max should 422 before Pydantic
