@@ -361,10 +361,10 @@ def _is_default_bundle_dataset(
         requested_revision=requested_revision,
         requested_data_version=requested_data_version,
     )
-    return (
-        requested_without_revision == bundle.default_dataset
-        and revision in {None, bundle.data_version}
-    )
+    return requested_without_revision == bundle.default_dataset and revision in {
+        None,
+        bundle.data_version,
+    }
 
 
 def resolve_local_bundle_dataset_path(
