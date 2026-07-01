@@ -95,6 +95,23 @@ def _revision_from_dataset_uri(dataset_uri: str | None) -> str | None:
     return revision
 
 
+def _bundle_response_data_version(
+    *,
+    country_bundle: dict,
+    requested_dataset: str | None,
+    requested_data_version: str | None,
+    resolved_dataset: str | None,
+) -> str | None:
+    if requested_data_version is not None:
+        return requested_data_version
+    if _revision_from_dataset_uri(requested_dataset) is not None:
+        return _revision_from_dataset_uri(resolved_dataset)
+    data_version = country_bundle.get("data_version")
+    if isinstance(data_version, str):
+        return data_version
+    return _revision_from_dataset_uri(resolved_dataset)
+
+
 def _bundle_certified_hf_uri_roots(country_bundle: dict) -> set[str]:
     roots: set[str] = set()
     default_uri = country_bundle.get("default_dataset_uri")
@@ -506,11 +523,11 @@ def _build_policyengine_bundle(
         requested_data=requested_dataset,
         requested_data_version=requested_data_version,
     )
-    data_version = (
-        requested_data_version
-        if requested_data_version is not None
-        else _revision_from_dataset_uri(resolved_dataset)
-        or country_bundle.get("data_version")
+    data_version = _bundle_response_data_version(
+        country_bundle=country_bundle,
+        requested_dataset=requested_dataset,
+        requested_data_version=requested_data_version,
+        resolved_dataset=resolved_dataset,
     )
     model_version = country_bundle.get("model_version") or resolution.response_version
     policyengine_version = app_bundle.get(

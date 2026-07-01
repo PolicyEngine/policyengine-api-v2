@@ -212,7 +212,7 @@ class TestSubmitSimulationEndpoint:
             "country": "us",
             "scope": "macro",
             "reform": {},
-            "data": "gs://policyengine-us-data/enhanced_cps_2024.h5",
+            "data": "gs://external-bucket/custom/file.h5",
         }
 
         # When
@@ -358,7 +358,7 @@ class TestSubmitSimulationEndpoint:
             "country": "us",
             "scope": "macro",
             "reform": {},
-            "data": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
+            "data": "gs://external-bucket/custom/file.h5@custom-v1",
         }
 
         # When
@@ -371,8 +371,8 @@ class TestSubmitSimulationEndpoint:
         assert data["policyengine_bundle"] == expected_bundle(
             "us",
             "1.500.0",
-            dataset="hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
-            data_version="1.115.5",
+            dataset="gs://external-bucket/custom/file.h5@custom-v1",
+            data_version="custom-v1",
         )
 
     def test__given_submission_with_alias_data__then_bundle_dataset_uses_manifest_uri(
@@ -387,7 +387,7 @@ class TestSubmitSimulationEndpoint:
             "country": "us",
             "scope": "macro",
             "reform": {},
-            "data": "enhanced_cps_2024",
+            "data": "populace_us_2024",
         }
 
         response = client.post("/simulate/economy/comparison", json=request_body)
@@ -395,7 +395,7 @@ class TestSubmitSimulationEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["policyengine_bundle"]["dataset"] == resolve_test_dataset_uri(
-            "us", "enhanced_cps_2024"
+            "us", "populace_us_2024"
         )
 
     def test__given_us_state_region_without_data__then_keeps_contract_and_uses_default_dataset(
@@ -436,16 +436,16 @@ class TestSubmitSimulationEndpoint:
                 "country": "us",
                 "scope": "macro",
                 "reform": {},
-                "data": "enhanced_cps_2024@1.77.0",
+                "data": "populace_us_2024@custom-v1",
             },
         )
 
         assert response.status_code == 200
         bundle = response.json()["policyengine_bundle"]
         assert bundle["dataset"] == (
-            "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+            "hf://policyengine/populace-us/populace_us_2024.h5@custom-v1"
         )
-        assert bundle["data_version"] == "1.77.0"
+        assert bundle["data_version"] == "custom-v1"
 
     def test__given_submission_with_explicit_uri_revision__then_bundle_data_version_uses_revision(
         self, mock_modal, client: TestClient
@@ -461,16 +461,14 @@ class TestSubmitSimulationEndpoint:
                 "country": "us",
                 "scope": "macro",
                 "reform": {},
-                "data": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
+                "data": "gs://external-bucket/custom/file.h5@custom-v1",
             },
         )
 
         assert response.status_code == 200
         bundle = response.json()["policyengine_bundle"]
-        assert bundle["dataset"] == (
-            "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
-        )
-        assert bundle["data_version"] == "1.77.0"
+        assert bundle["dataset"] == "gs://external-bucket/custom/file.h5@custom-v1"
+        assert bundle["data_version"] == "custom-v1"
 
     def test__given_submission_with_conflicting_data_versions__then_returns_400(
         self, mock_modal, client: TestClient
@@ -486,8 +484,8 @@ class TestSubmitSimulationEndpoint:
                 "country": "us",
                 "scope": "macro",
                 "reform": {},
-                "data": "enhanced_cps_2024@1.77.0",
-                "data_version": "1.78.2",
+                "data": "populace_us_2024@custom-v1",
+                "data_version": "custom-v2",
             },
         )
 
@@ -536,7 +534,7 @@ class TestSubmitSimulationEndpoint:
             "country": "uk",
             "scope": "macro",
             "reform": {},
-            "data": "enhanced_frs",
+            "data": "populace_uk_2023",
         }
 
         response = client.post("/simulate/economy/comparison", json=request_body)
@@ -544,10 +542,10 @@ class TestSubmitSimulationEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["policyengine_bundle"]["dataset"] == resolve_test_dataset_uri(
-            "uk", "enhanced_frs"
+            "uk", "populace_uk_2023"
         )
 
-    def test__given_uk_submission_without_data_and_manifest_commit__then_resolves_gcs_default(
+    def test__given_uk_submission_without_data_and_manifest_commit__then_uses_populace_default(
         self,
         mock_modal,
         client: TestClient,
@@ -555,19 +553,17 @@ class TestSubmitSimulationEndpoint:
     ):
         app_name = "policyengine-simulation-py4-13-1"
         manifest_uri = (
-            "hf://policyengine/policyengine-uk-data-private/"
-            "enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f"
+            "hf://policyengine/populace-uk-private/"
+            "populace_uk_2023.h5@uk-manifest-commit"
         )
         bundle = deepcopy(TEST_APP_RELEASE_BUNDLE)
         bundle["app_name"] = app_name
         bundle["policyengine_version"] = "4.13.1"
         bundle["uk"]["model_version"] = "2.88.20"
-        bundle["uk"]["data_version"] = "1.55.10"
-        bundle["uk"]["data_artifact_revision"] = (
-            "655dd07e4bb9c777b00dac044949611f1feb824f"
-        )
+        bundle["uk"]["data_version"] = "populace-uk-2023-release"
+        bundle["uk"]["data_artifact_revision"] = "uk-manifest-commit"
         bundle["uk"]["default_dataset_uri"] = manifest_uri
-        bundle["uk"]["dataset_uris"]["enhanced_frs_2023_24"] = manifest_uri
+        bundle["uk"]["dataset_uris"]["populace_uk_2023"] = manifest_uri
         state = deepcopy(TEST_ROUTING_STATE)
         state["routes"]["policyengine"]["4.13.1"] = app_name
         state["routes"]["uk"]["2.88.20"] = app_name
@@ -595,9 +591,7 @@ class TestSubmitSimulationEndpoint:
         )
 
         assert response.status_code == 200
-        assert response.json()["policyengine_bundle"]["dataset"] == (
-            "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.55.10"
-        )
+        assert response.json()["policyengine_bundle"]["dataset"] == manifest_uri
 
     def test__given_submission_with_runtime_bundle__then_accepts_internal_provenance(
         self, mock_modal, client: TestClient
@@ -611,11 +605,11 @@ class TestSubmitSimulationEndpoint:
             "country": "us",
             "scope": "macro",
             "reform": {},
-            "data": "enhanced_cps_2024",
-            "data_version": "1.78.2",
+            "data": "populace_us_2024",
+            "data_version": "custom-v2",
             "_runtime_bundle": {
                 "model_version": "1.500.0",
-                "data_version": "1.78.2",
+                "data_version": "custom-v2",
             },
             "_metadata": {"process_id": "process-123"},
         }
@@ -627,10 +621,10 @@ class TestSubmitSimulationEndpoint:
         assert data["policyengine_bundle"] == expected_bundle(
             "us",
             "1.500.0",
-            dataset="enhanced_cps_2024",
-            data_version="1.78.2",
+            dataset="populace_us_2024",
+            data_version="custom-v2",
         )
-        assert mock_modal["func"].last_payload["data_version"] == "1.78.2"
+        assert mock_modal["func"].last_payload["data_version"] == "custom-v2"
         assert "_runtime_bundle" not in mock_modal["func"].last_payload
         assert "_metadata" not in mock_modal["func"].last_payload
 
@@ -675,7 +669,7 @@ class TestSubmitSimulationEndpoint:
                 "country": "us",
                 "scope": "macro",
                 "reform": {},
-                "data": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
+                "data": "gs://external-bucket/custom/file.h5@custom-v1",
             },
         )
 
@@ -691,8 +685,8 @@ class TestSubmitSimulationEndpoint:
         assert data["policyengine_bundle"] == expected_bundle(
             "us",
             "1.500.0",
-            dataset="hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
-            data_version="1.115.5",
+            dataset="gs://external-bucket/custom/file.h5@custom-v1",
+            data_version="custom-v1",
         )
 
     def test__given_submitted_job_with_telemetry__then_polling_echoes_run_id(

@@ -187,7 +187,7 @@ class TestSimulationRequest:
             "country": "us",
             "region": "enhanced_us",
             "reform": {"some.parameter": {"2024-01-01": True}},
-            "data": "enhanced_cps_2024",
+            "data": "custom_dataset_label",
             "scope": "macro",
         }
 
@@ -199,13 +199,13 @@ class TestSimulationRequest:
         dumped = request.model_dump(exclude_none=True)
         assert dumped["region"] == "enhanced_us"
         assert dumped["reform"] == {"some.parameter": {"2024-01-01": True}}
-        assert dumped["data"] == "enhanced_cps_2024"
+        assert dumped["data"] == "custom_dataset_label"
         assert dumped["scope"] == "macro"
 
     def test_simulation_request_rejects_unknown_fields(self):
         """Unknown fields should fail fast with ``extra="forbid"``."""
         with pytest.raises(ValidationError):
-            SimulationRequest(country="us", dataset="enhanced_cps_2024")
+            SimulationRequest(country="us", dataset="custom_dataset_label")
         with pytest.raises(ValidationError):
             SimulationRequest(country="us", mystery_flag=True)
         with pytest.raises(ValidationError):
@@ -279,7 +279,7 @@ class TestJobSubmitResponse:
                 "model_version": "1.459.0",
                 "policyengine_version": None,
                 "data_version": None,
-                "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
+                "dataset": "gs://external-bucket/custom/file.h5@custom-v1",
             },
         }
 
@@ -296,7 +296,7 @@ class TestJobSubmitResponse:
         assert response.policyengine_bundle.model_version == "1.459.0"
         assert response.policyengine_bundle.policyengine_version is None
         assert response.policyengine_bundle.dataset == (
-            "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5"
+            "gs://external-bucket/custom/file.h5@custom-v1"
         )
 
 
@@ -360,14 +360,14 @@ class TestJobStatusResponse:
                 "model_version": "1.459.0",
                 "policyengine_version": None,
                 "data_version": None,
-                "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5",
+                "dataset": "gs://external-bucket/custom/file.h5@custom-v1",
             },
         )
 
         assert response.resolved_app_name == "policyengine-simulation-py3-9-0"
         assert response.policyengine_bundle is not None
         assert response.policyengine_bundle.dataset == (
-            "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.115.5"
+            "gs://external-bucket/custom/file.h5@custom-v1"
         )
 
 

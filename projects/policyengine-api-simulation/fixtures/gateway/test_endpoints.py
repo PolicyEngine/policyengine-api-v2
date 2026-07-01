@@ -9,40 +9,28 @@ TEST_APP_RELEASE_BUNDLE = {
     "policyengine_version": "4.10.0",
     "us": {
         "model_version": "1.500.0",
-        "data_version": "1.110.12",
-        "data_artifact_revision": "1.110.12",
-        "default_dataset": "enhanced_cps_2024",
-        "default_dataset_uri": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
+        "data_version": "populace-us-2024-test",
+        "data_artifact_revision": "us-artifact-revision",
+        "default_dataset": "populace_us_2024",
+        "default_dataset_uri": "hf://policyengine/populace-us/populace_us_2024.h5@us-artifact-revision",
         "dataset_uris": {
-            "enhanced_cps_2024": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
-            "cps_2023": "hf://policyengine/policyengine-us-data/cps_2023.h5@1.110.12",
-            "pooled_3_year_cps_2023": "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.110.12",
-            "states/UT": "hf://policyengine/policyengine-us-data/states/UT.h5@1.115.5",
+            "populace_us_2024": "hf://policyengine/populace-us/populace_us_2024.h5@us-artifact-revision",
         },
         "dataset_aliases": {
-            "enhanced_cps": "enhanced_cps_2024",
-            "enhanced_cps_2024": "enhanced_cps_2024",
-            "cps": "cps_2023",
-            "cps_2023": "cps_2023",
-            "pooled_cps": "pooled_3_year_cps_2023",
-            "pooled_3_year_cps_2023": "pooled_3_year_cps_2023",
+            "populace_us_2024": "populace_us_2024",
         },
     },
     "uk": {
         "model_version": "2.66.0",
-        "data_version": "1.40.3",
-        "data_artifact_revision": "1.40.3",
-        "default_dataset": "enhanced_frs_2023_24",
-        "default_dataset_uri": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3",
+        "data_version": "populace-uk-2023-test",
+        "data_artifact_revision": "uk-artifact-revision",
+        "default_dataset": "populace_uk_2023",
+        "default_dataset_uri": "hf://policyengine/populace-uk-private/populace_uk_2023.h5@uk-artifact-revision",
         "dataset_uris": {
-            "enhanced_frs_2023_24": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3",
-            "frs_2023_24": "hf://policyengine/policyengine-uk-data-private/frs_2023_24.h5@1.40.3",
+            "populace_uk_2023": "hf://policyengine/populace-uk-private/populace_uk_2023.h5@uk-artifact-revision",
         },
         "dataset_aliases": {
-            "enhanced_frs": "enhanced_frs_2023_24",
-            "enhanced_frs_2023_24": "enhanced_frs_2023_24",
-            "frs": "frs_2023_24",
-            "frs_2023_24": "frs_2023_24",
+            "populace_uk_2023": "populace_uk_2023",
         },
     },
 }
@@ -102,14 +90,15 @@ def _runtime_dataset_uri(
     selected_revision = revision or existing_revision
 
     if dataset_without_revision.startswith("hf://policyengine/"):
-        if (
-            selected_revision == country_bundle.get("data_artifact_revision")
-            and revision is None
-        ):
-            selected_revision = country_bundle["data_version"]
         remainder = dataset_without_revision.removeprefix("hf://policyengine/")
         bucket, _, path = remainder.partition("/")
-        dataset_without_revision = f"gs://{bucket}/{path}"
+        if bucket.startswith("policyengine-") and "-data" in bucket:
+            if (
+                selected_revision == country_bundle.get("data_artifact_revision")
+                and revision is None
+            ):
+                selected_revision = country_bundle["data_version"]
+            dataset_without_revision = f"gs://{bucket}/{path}"
 
     if selected_revision is None and use_bundle_default:
         selected_revision = country_bundle["data_version"]
