@@ -21,9 +21,7 @@ BUDGET_WINDOW_YEARS = ["2026", "2027"]
 BUDGET_WINDOW_REFORM = {
     "gov.irs.credits.ctc.refundable.fully_refundable": {"2023-01-01.2100-12-31": True}
 }
-BUDGET_WINDOW_DATASET = "gs://policyengine-us-data/enhanced_cps_2024.h5"
-BUDGET_WINDOW_REGION = "us"
-BUDGET_WINDOW_SUBSAMPLE = 200
+BUDGET_WINDOW_REGION = "state/ut"
 BUDGET_WINDOW_MAX_PARALLEL = 2
 
 
@@ -152,8 +150,6 @@ def budget_window_request(us_model_version: str) -> BudgetWindowBatchRequest:
             "region": BUDGET_WINDOW_REGION,
             "scope": "macro",
             "reform": BUDGET_WINDOW_REFORM,
-            "subsample": BUDGET_WINDOW_SUBSAMPLE,
-            "data": BUDGET_WINDOW_DATASET,
             "start_year": BUDGET_WINDOW_YEARS[0],
             "window_size": len(BUDGET_WINDOW_YEARS),
             "max_parallel": BUDGET_WINDOW_MAX_PARALLEL,
