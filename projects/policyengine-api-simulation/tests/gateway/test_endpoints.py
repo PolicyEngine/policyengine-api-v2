@@ -375,7 +375,7 @@ class TestSubmitSimulationEndpoint:
             data_version="custom-v1",
         )
 
-    def test__given_submission_with_alias_data__then_bundle_dataset_uses_manifest_uri(
+    def test__given_submission_with_dataset_name__then_bundle_dataset_uses_manifest_uri(
         self, mock_modal, client: TestClient
     ):
         mock_modal["dicts"]["simulation-api-us-versions"] = {
@@ -396,6 +396,34 @@ class TestSubmitSimulationEndpoint:
         data = response.json()
         assert data["policyengine_bundle"]["dataset"] == resolve_test_dataset_uri(
             "us", "populace_us_2024"
+        )
+
+    def test__given_legacy_alias_in_bundle_snapshot__then_gateway_still_resolves_it(
+        self, mock_modal, client: TestClient
+    ):
+        mock_modal["dicts"]["simulation-api-us-versions"] = {
+            "latest": "1.500.0",
+            "1.500.0": "policyengine-simulation-py4-10-0",
+        }
+        state = deepcopy(TEST_ROUTING_STATE)
+        state["bundles"]["4.10.0"]["us"]["dataset_aliases"] = {
+            "legacy_populace_us": "populace_us_2024",
+        }
+        mock_modal["dicts"]["simulation-api-routing-state"] = {"active": state}
+
+        response = client.post(
+            "/simulate/economy/comparison",
+            json={
+                "country": "us",
+                "scope": "macro",
+                "reform": {},
+                "data": "legacy_populace_us",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["policyengine_bundle"]["dataset"] == (
+            resolve_test_dataset_uri("us", "populace_us_2024")
         )
 
     def test__given_us_state_region_without_data__then_keeps_contract_and_uses_default_dataset(
@@ -522,7 +550,7 @@ class TestSubmitSimulationEndpoint:
         assert response.json()["detail"] == "revision missing"
         assert mock_modal["func"].last_payload is None
 
-    def test__given_submission_with_uk_alias_data__then_bundle_dataset_is_versioned_uri(
+    def test__given_submission_with_uk_dataset_name__then_bundle_dataset_is_versioned_uri(
         self, mock_modal, client: TestClient
     ):
         mock_modal["dicts"]["simulation-api-uk-versions"] = {
@@ -628,7 +656,7 @@ class TestSubmitSimulationEndpoint:
         assert "_runtime_bundle" not in mock_modal["func"].last_payload
         assert "_metadata" not in mock_modal["func"].last_payload
 
-    def test__given_submission_with_unknown_alias_data__then_bundle_dataset_is_preserved(
+    def test__given_submission_with_unknown_dataset_name__then_bundle_dataset_is_preserved(
         self, mock_modal, client: TestClient
     ):
         mock_modal["dicts"]["simulation-api-us-versions"] = {

@@ -30,7 +30,6 @@ class CountryBundleMetadata(TypedDict):
     default_dataset_uri: str
     dataset_uris: dict[str, str]
     dataset_repo_types: dict[str, str]
-    dataset_aliases: dict[str, str]
 
 
 class BundleManifestMetadata(TypedDict):
@@ -79,10 +78,7 @@ def _is_newer_version(candidate: str, current: str | None) -> bool:
 
 
 def _country_bundle_metadata(country: str) -> CountryBundleMetadata:
-    from policyengine_api_simulation.release_bundle import (
-        DATASET_ALIASES,
-        get_country_release_bundle,
-    )
+    from policyengine_api_simulation.release_bundle import get_country_release_bundle
 
     bundle = get_country_release_bundle(country)
     return {
@@ -96,7 +92,6 @@ def _country_bundle_metadata(country: str) -> CountryBundleMetadata:
         "default_dataset_uri": bundle.default_dataset_uri,
         "dataset_uris": dict(bundle.dataset_uris),
         "dataset_repo_types": dict(bundle.dataset_repo_types),
-        "dataset_aliases": dict(DATASET_ALIASES.get(bundle.country, {})),
     }
 
 

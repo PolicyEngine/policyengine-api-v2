@@ -209,6 +209,8 @@ def _resolve_dataset_uri_from_app_bundle(
     if not isinstance(country_bundle, dict):
         return requested_data
 
+    # Older Modal snapshots may contain aliases. Newly published bundle snapshots
+    # resolve direct .py dataset names through dataset_uris instead.
     aliases = country_bundle.get("dataset_aliases")
     if not isinstance(aliases, dict):
         aliases = {}

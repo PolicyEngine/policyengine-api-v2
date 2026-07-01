@@ -25,15 +25,6 @@ os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
 SUPPORTED_COUNTRIES = frozenset({"us", "uk"})
 BUNDLE_RECEIPT_FILENAME = ".policyengine-bundle-receipt.json"
 
-DATASET_ALIASES: dict[str, dict[str, str]] = {
-    "us": {
-        "populace_us_2024": "populace_us_2024",
-    },
-    "uk": {
-        "populace_uk_2023": "populace_uk_2023",
-    },
-}
-
 
 @dataclass(frozen=True)
 class CountryReleaseBundle:
@@ -305,20 +296,15 @@ def resolve_bundle_dataset_name(country: str, requested_data: str | None) -> str
         return requested_data
 
     requested_without_revision, revision = _split_requested_revision(requested_data)
-    aliased = DATASET_ALIASES.get(bundle.country, {}).get(
-        requested_without_revision, requested_data
-    )
     if revision is not None:
-        if "://" in aliased:
-            return _with_hf_revision_unvalidated(aliased, revision)
-        uri = bundle.dataset_uris.get(aliased)
+        uri = bundle.dataset_uris.get(requested_without_revision)
         if uri is None:
             raise ValueError(
                 "Unknown dataset revision reference "
                 f"{requested_data!r} for country {bundle.country!r}"
             )
         return _with_hf_revision_unvalidated(uri, revision)
-    return aliased
+    return requested_without_revision
 
 
 def resolve_bundle_dataset_uri(country: str, requested_data: str | None) -> str:
@@ -375,11 +361,10 @@ def _is_default_bundle_dataset(
         requested_revision=requested_revision,
         requested_data_version=requested_data_version,
     )
-    aliased = DATASET_ALIASES.get(bundle.country, {}).get(
-        requested_without_revision,
-        requested_without_revision,
+    return (
+        requested_without_revision == bundle.default_dataset
+        and revision in {None, bundle.data_version}
     )
-    return aliased == bundle.default_dataset and revision in {None, bundle.data_version}
 
 
 def resolve_local_bundle_dataset_path(

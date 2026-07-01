@@ -84,7 +84,7 @@ def test_resolve_bundle_dataset_uri_does_not_certify_unknown_dataset_labels():
     )
 
 
-def test_resolve_bundle_dataset_uri_maps_populace_aliases_to_manifest_uri():
+def test_resolve_bundle_dataset_uri_maps_populace_dataset_names_to_manifest_uri():
     assert (
         resolve_bundle_dataset_uri("us", "populace_us_2024")
         == get_country_release_bundle("us").default_dataset_uri
@@ -137,7 +137,7 @@ def test_resolve_runtime_bundle_dataset_uri_maps_default_to_gcs_version():
     assert resolve_runtime_bundle_dataset_uri("us", None) == bundle.default_dataset_uri
 
 
-def test_resolve_runtime_bundle_dataset_uri_maps_alias_to_populace_uri():
+def test_resolve_runtime_bundle_dataset_uri_maps_dataset_name_to_populace_uri():
     bundle = get_country_release_bundle("uk")
 
     assert (

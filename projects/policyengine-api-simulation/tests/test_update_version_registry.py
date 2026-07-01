@@ -78,7 +78,6 @@ def fake_bundle_metadata(monkeypatch):
             "default_dataset_uri": f"hf://datasets/policyengine/{country}/default",
             "dataset_uris": {"default": f"hf://datasets/policyengine/{country}"},
             "dataset_repo_types": {"default": "dataset"},
-            "dataset_aliases": {"alias": "default"},
         }
 
     monkeypatch.setattr(
@@ -272,7 +271,7 @@ def test_publish_routing_state_writes_only_active_snapshot(
         active["routes"]["policyengine"]["4.19.1"] == "policyengine-simulation-py4-19-1"
     )
     assert active["routes"]["us"]["1.687.0"] == "policyengine-simulation-py4-19-1"
-    assert active["bundles"]["4.19.1"]["us"]["dataset_aliases"] == {"alias": "default"}
+    assert "dataset_aliases" not in active["bundles"]["4.19.1"]["us"]
 
 
 def test_build_legacy_seed_routing_state_copies_legacy_routes_and_manifests():

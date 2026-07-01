@@ -16,9 +16,6 @@ TEST_APP_RELEASE_BUNDLE = {
         "dataset_uris": {
             "populace_us_2024": "hf://policyengine/populace-us/populace_us_2024.h5@us-artifact-revision",
         },
-        "dataset_aliases": {
-            "populace_us_2024": "populace_us_2024",
-        },
     },
     "uk": {
         "model_version": "2.66.0",
@@ -28,9 +25,6 @@ TEST_APP_RELEASE_BUNDLE = {
         "default_dataset_uri": "hf://policyengine/populace-uk-private/populace_uk_2023.h5@uk-artifact-revision",
         "dataset_uris": {
             "populace_uk_2023": "hf://policyengine/populace-uk-private/populace_uk_2023.h5@uk-artifact-revision",
-        },
-        "dataset_aliases": {
-            "populace_uk_2023": "populace_uk_2023",
         },
     },
 }
@@ -129,7 +123,9 @@ def resolve_test_dataset_uri(
         )
 
     dataset_name, revision = _split_revision(dataset)
-    dataset_name = country_bundle["dataset_aliases"].get(dataset_name, dataset_name)
+    aliases = country_bundle.get("dataset_aliases")
+    if isinstance(aliases, dict):
+        dataset_name = aliases.get(dataset_name, dataset_name)
     dataset_uri = country_bundle["dataset_uris"].get(dataset_name, dataset_name)
     if revision is not None and dataset_uri == dataset_name:
         return dataset
