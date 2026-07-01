@@ -74,55 +74,50 @@ def test_resolve_bundle_dataset_uri_maps_certified_defaults_to_manifest_uris():
     )
 
 
-def test_resolve_bundle_dataset_uri_does_not_certify_us_state_sidecars():
+def test_resolve_bundle_dataset_uri_does_not_certify_unknown_dataset_labels():
     bundle = get_country_release_bundle("us")
 
-    assert "states/UT" not in bundle.dataset_uris
-    assert resolve_bundle_dataset_uri("us", "states/UT") == "states/UT"
+    assert "custom_dataset_label" not in bundle.dataset_uris
+    assert (
+        resolve_bundle_dataset_uri("us", "custom_dataset_label")
+        == "custom_dataset_label"
+    )
 
 
-def test_resolve_bundle_dataset_uri_keeps_legacy_aliases_as_explicit_overrides():
-    assert resolve_bundle_dataset_uri("us", "enhanced_cps") == (
-        "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
+def test_resolve_bundle_dataset_uri_maps_populace_aliases_to_manifest_uri():
+    assert (
+        resolve_bundle_dataset_uri("us", "populace_us_2024")
+        == get_country_release_bundle("us").default_dataset_uri
     )
     assert (
-        resolve_bundle_dataset_uri("uk", "enhanced_frs")
-        == (get_country_release_bundle("uk").dataset_uris["enhanced_frs_2023_24"])
+        resolve_bundle_dataset_uri("uk", "populace_uk_2023")
+        == get_country_release_bundle("uk").default_dataset_uri
     )
 
 
 def test_resolve_bundle_dataset_uri_preserves_explicit_dataset_uri_and_revision():
-    uri = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
+    uri = "hf://external/example-data/file.h5@custom-v1"
 
     assert resolve_bundle_dataset_name("us", uri) == uri
     assert resolve_bundle_dataset_uri("us", uri) == uri
 
 
 def test_resolve_bundle_dataset_uri_maps_explicit_logical_revision_to_hf_uri():
-    dataset = "enhanced_cps_2024@1.110.12"
+    dataset = "populace_us_2024@custom-v1"
 
     assert resolve_bundle_dataset_name("us", dataset).startswith(
-        "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
+        "hf://policyengine/populace-us/populace_us_2024.h5@custom-v1"
     )
     assert resolve_bundle_dataset_uri("us", dataset).startswith(
-        "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12"
+        "hf://policyengine/populace-us/populace_us_2024.h5@custom-v1"
     )
 
 
 def test_resolve_bundle_dataset_uri_preserves_explicit_gcs_uri():
-    uri = "gs://policyengine-us-data/enhanced_cps_2024.h5"
+    uri = "gs://external-bucket/custom/file.h5"
 
     assert resolve_bundle_dataset_name("us", uri) == uri
     assert resolve_bundle_dataset_uri("us", uri) == uri
-
-
-def test_resolve_bundle_dataset_uri_supports_legacy_us_aliases():
-    assert resolve_bundle_dataset_uri("us", "cps") == (
-        "hf://policyengine/policyengine-us-data/cps_2023.h5@1.110.12"
-    )
-    assert resolve_bundle_dataset_uri("us", "pooled_cps") == (
-        "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5@1.110.12"
-    )
 
 
 def test_resolve_bundle_dataset_uri_preserves_unmanaged_unknown_values():
@@ -142,23 +137,27 @@ def test_resolve_runtime_bundle_dataset_uri_maps_default_to_gcs_version():
     assert resolve_runtime_bundle_dataset_uri("us", None) == bundle.default_dataset_uri
 
 
-def test_resolve_runtime_bundle_dataset_uri_maps_alias_to_gcs_version():
+def test_resolve_runtime_bundle_dataset_uri_maps_alias_to_populace_uri():
     bundle = get_country_release_bundle("uk")
 
-    assert resolve_runtime_bundle_dataset_uri("uk", "enhanced_frs").startswith(
-        "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5@"
+    assert (
+        resolve_runtime_bundle_dataset_uri("uk", "populace_uk_2023")
+        == bundle.default_dataset_uri
     )
     assert bundle.default_dataset == "populace_uk_2023"
 
 
 def test_resolve_runtime_bundle_dataset_uri_applies_requested_version():
+    bundle_uri = get_country_release_bundle("us").default_dataset_uri
+    bundle_uri_without_revision = bundle_uri.rsplit("@", maxsplit=1)[0]
+
     assert (
         resolve_runtime_bundle_dataset_uri(
             "us",
-            "enhanced_cps_2024",
-            "1.77.0",
+            "populace_us_2024",
+            "custom-v1",
         )
-        == "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+        == f"{bundle_uri_without_revision}@custom-v1"
     )
 
 
@@ -166,9 +165,9 @@ def test_resolve_runtime_bundle_dataset_uri_preserves_explicit_hf_data_version()
     assert (
         resolve_runtime_bundle_dataset_uri(
             "us",
-            "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
+            "hf://external/example-data/file.h5@custom-v1",
         )
-        == "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+        == "hf://external/example-data/file.h5@custom-v1"
     )
 
 
@@ -176,9 +175,9 @@ def test_resolve_runtime_bundle_dataset_uri_preserves_explicit_gcs_data_version(
     assert (
         resolve_runtime_bundle_dataset_uri(
             "us",
-            "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
+            "gs://external-bucket/custom/file.h5@custom-v1",
         )
-        == "gs://policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+        == "gs://external-bucket/custom/file.h5@custom-v1"
     )
 
 
@@ -190,7 +189,7 @@ def test_resolve_runtime_bundle_dataset_uri_preserves_unmanaged_unknown_values()
 
 
 def test_resolve_runtime_bundle_dataset_uri_preserves_explicit_gcs_uri():
-    uri = "gs://policyengine-us-data/enhanced_cps_2024.h5"
+    uri = "gs://external-bucket/custom/file.h5"
 
     assert resolve_runtime_bundle_dataset_uri("us", uri) == uri
 
@@ -255,6 +254,7 @@ def test_resolve_runtime_bundle_dataset_uri_preserves_nondefault_override_with_r
     monkeypatch.setenv("POLICYENGINE_BUNDLE_RECEIPT", str(receipt_path))
     get_country_release_bundle.cache_clear()
 
-    assert resolve_runtime_bundle_dataset_uri("us", "cps") == (
-        "gs://policyengine-us-data/cps_2023.h5@1.110.12"
+    assert (
+        resolve_runtime_bundle_dataset_uri("us", "custom_dataset_label")
+        == "custom_dataset_label"
     )
