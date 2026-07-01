@@ -111,8 +111,6 @@ def test_calculate_default_model(
                     "2023-01-01.2100-12-31": True
                 }
             },
-            "subsample": 200,  # Reduce households to speed up test
-            "data": "gs://policyengine-us-data/enhanced_cps_2024.h5",
         }
     )
 
@@ -164,7 +162,6 @@ def test_calculate_us_state_region_model(
                     "2023-01-01.2100-12-31": True
                 }
             },
-            "subsample": 200,
             "time_period": "2026",
         }
     )
@@ -211,14 +208,14 @@ def test_calculate_specific_model(
         {
             "country": "us",
             "version": us_model_version,
+            "region": "state/ut",
             "scope": "macro",
             "reform": {
                 "gov.irs.credits.ctc.refundable.fully_refundable": {
                     "2023-01-01.2100-12-31": True
                 }
             },
-            "subsample": 200,
-            "data": "gs://policyengine-us-data/enhanced_cps_2024.h5",
+            "time_period": "2026",
         }
     )
 
@@ -263,7 +260,6 @@ def test_calculate_uk_model(
             "reform": {
                 "gov.hmrc.income_tax.rates.uk[0].rate": {"2023-01-01.2100-12-31": 0.21}
             },
-            # No subsample - UKMultiYearDataset lacks .name attribute required by subsample method
         }
     )
 

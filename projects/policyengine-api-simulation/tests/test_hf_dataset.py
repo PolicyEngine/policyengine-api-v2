@@ -31,13 +31,13 @@ class _FakeResponse:
 
 def test_parse_hf_dataset_uri_extracts_repo_path_and_revision():
     parsed = parse_hf_dataset_uri(
-        "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+        "hf://policyengine/populace-us/populace_us_2024.h5@custom-v1"
     )
 
     assert parsed is not None
-    assert parsed.repo_id == "policyengine/policyengine-us-data"
-    assert parsed.path == "enhanced_cps_2024.h5"
-    assert parsed.revision == "1.77.0"
+    assert parsed.repo_id == "policyengine/populace-us"
+    assert parsed.path == "populace_us_2024.h5"
+    assert parsed.revision == "custom-v1"
 
 
 def test_fetch_hf_dataset_revision_uses_dataset_revision_api(monkeypatch):
@@ -53,15 +53,15 @@ def test_fetch_hf_dataset_revision_uses_dataset_revision_api(monkeypatch):
     monkeypatch.setattr(hf_dataset, "urlopen", fake_urlopen)
 
     payload = hf_dataset._fetch_hf_dataset_revision(
-        "policyengine/policyengine-us-data",
-        "1.77.0",
+        "policyengine/populace-us",
+        "custom-v1",
         "hf-token",
     )
 
     assert payload == {"sha": "abc123", "siblings": []}
     assert seen["url"] == (
         "https://huggingface.co/api/datasets/"
-        "policyengine/policyengine-us-data/revision/1.77.0"
+        "policyengine/populace-us/revision/custom-v1"
     )
     assert seen["headers"]["Authorization"] == "Bearer hf-token"
     assert seen["timeout"] == hf_dataset.HF_REQUEST_TIMEOUT_SECONDS
@@ -79,7 +79,7 @@ def test_validate_hf_dataset_uri_rejects_revision_missing_artifact(monkeypatch):
         match="does not contain artifact",
     ):
         validate_hf_dataset_uri(
-            "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+            "hf://policyengine/populace-us/populace_us_2024.h5@custom-v1"
         )
 
 
@@ -94,11 +94,11 @@ def test_with_hf_revision_validates_and_preserves_requested_revision(monkeypatch
 
     assert (
         with_hf_revision(
-            "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.110.12",
-            "1.77.0",
+            "hf://policyengine/populace-us/populace_us_2024.h5@old",
+            "custom-v1",
         )
-        == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+        == "hf://policyengine/populace-us/populace_us_2024.h5@custom-v1"
     )
     assert calls == [
-        "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+        "hf://policyengine/populace-us/populace_us_2024.h5@custom-v1"
     ]

@@ -24,42 +24,6 @@ os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
 
 SUPPORTED_COUNTRIES = frozenset({"us", "uk"})
 BUNDLE_RECEIPT_FILENAME = ".policyengine-bundle-receipt.json"
-LEGACY_US_DATA_REVISION = "1.110.12"
-LEGACY_ENHANCED_CPS_URI = (
-    "hf://policyengine/policyengine-us-data/"
-    f"enhanced_cps_2024.h5@{LEGACY_US_DATA_REVISION}"
-)
-
-DATASET_ALIASES: dict[str, dict[str, str]] = {
-    "us": {
-        "enhanced_cps": LEGACY_ENHANCED_CPS_URI,
-        "enhanced_cps_2024": LEGACY_ENHANCED_CPS_URI,
-        "cps_small": "cps_small_2024",
-        "cps_small_2024": "cps_small_2024",
-        "cps": (
-            "hf://policyengine/policyengine-us-data/"
-            f"cps_2023.h5@{LEGACY_US_DATA_REVISION}"
-        ),
-        "cps_2023": (
-            "hf://policyengine/policyengine-us-data/"
-            f"cps_2023.h5@{LEGACY_US_DATA_REVISION}"
-        ),
-        "pooled_cps": (
-            "hf://policyengine/policyengine-us-data/"
-            f"pooled_3_year_cps_2023.h5@{LEGACY_US_DATA_REVISION}"
-        ),
-        "pooled_3_year_cps_2023": (
-            "hf://policyengine/policyengine-us-data/"
-            f"pooled_3_year_cps_2023.h5@{LEGACY_US_DATA_REVISION}"
-        ),
-    },
-    "uk": {
-        "enhanced_frs": "enhanced_frs_2023_24",
-        "enhanced_frs_2023_24": "enhanced_frs_2023_24",
-        "frs": "frs_2023_24",
-        "frs_2023_24": "frs_2023_24",
-    },
-}
 
 
 @dataclass(frozen=True)
@@ -332,20 +296,15 @@ def resolve_bundle_dataset_name(country: str, requested_data: str | None) -> str
         return requested_data
 
     requested_without_revision, revision = _split_requested_revision(requested_data)
-    aliased = DATASET_ALIASES.get(bundle.country, {}).get(
-        requested_without_revision, requested_data
-    )
     if revision is not None:
-        if "://" in aliased:
-            return _with_hf_revision_unvalidated(aliased, revision)
-        uri = bundle.dataset_uris.get(aliased)
+        uri = bundle.dataset_uris.get(requested_without_revision)
         if uri is None:
             raise ValueError(
                 "Unknown dataset revision reference "
                 f"{requested_data!r} for country {bundle.country!r}"
             )
         return _with_hf_revision_unvalidated(uri, revision)
-    return aliased
+    return requested_without_revision
 
 
 def resolve_bundle_dataset_uri(country: str, requested_data: str | None) -> str:
@@ -402,11 +361,10 @@ def _is_default_bundle_dataset(
         requested_revision=requested_revision,
         requested_data_version=requested_data_version,
     )
-    aliased = DATASET_ALIASES.get(bundle.country, {}).get(
-        requested_without_revision,
-        requested_without_revision,
-    )
-    return aliased == bundle.default_dataset and revision in {None, bundle.data_version}
+    return requested_without_revision == bundle.default_dataset and revision in {
+        None,
+        bundle.data_version,
+    }
 
 
 def resolve_local_bundle_dataset_path(

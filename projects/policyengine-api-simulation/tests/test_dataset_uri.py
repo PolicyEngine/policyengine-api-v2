@@ -5,12 +5,12 @@ import pytest
 from policyengine_api_simulation.dataset_uri import runtime_dataset_uri
 
 
-def test_runtime_dataset_uri_converts_policyengine_hf_to_gcs_without_hf_validation(
+def test_runtime_dataset_uri_preserves_populace_hf_artifact_without_hf_validation(
     monkeypatch,
 ):
     def reject_hf_validation(dataset_uri: str, revision: str) -> str:
         raise AssertionError(
-            f"HF validation should not run for PolicyEngine GCS data: {dataset_uri}@{revision}"
+            f"HF validation should not run for trusted bundle data: {dataset_uri}@{revision}"
         )
 
     monkeypatch.setattr(
@@ -20,35 +20,41 @@ def test_runtime_dataset_uri_converts_policyengine_hf_to_gcs_without_hf_validati
 
     assert (
         runtime_dataset_uri(
-            "hf://policyengine/policyengine-uk-data-private/"
-            "enhanced_frs_2023_24.h5@655dd07e4bb9c777b00dac044949611f1feb824f",
-            default_revision="1.55.10",
-            artifact_revision="655dd07e4bb9c777b00dac044949611f1feb824f",
+            "hf://policyengine/populace-uk-private/"
+            "populace_uk_2023.h5@uk-artifact-revision",
+            default_revision="populace-uk-2023-release",
+            artifact_revision="uk-artifact-revision",
+            validate_hf=False,
         )
-        == "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.55.10"
+        == (
+            "hf://policyengine/populace-uk-private/"
+            "populace_uk_2023.h5@uk-artifact-revision"
+        )
     )
 
 
-def test_runtime_dataset_uri_preserves_explicit_policyengine_hf_data_version():
+def test_runtime_dataset_uri_preserves_explicit_hf_data_version():
     assert (
         runtime_dataset_uri(
-            "hf://policyengine/policyengine-us-data/states/CA.h5@1.110.12",
-            default_revision="1.115.5",
-            artifact_revision="d47fb5475144260a75467d2f2e22b2d5d53d4d57",
+            "hf://external/example-data/file.h5@custom-v1",
+            default_revision="bundle-default",
+            artifact_revision="artifact-revision",
+            validate_hf=False,
         )
-        == "gs://policyengine-us-data/states/CA.h5@1.110.12"
+        == "hf://external/example-data/file.h5@custom-v1"
     )
 
 
-def test_runtime_dataset_uri_override_revision_wins_for_policyengine_hf_uri():
+def test_runtime_dataset_uri_override_revision_wins_for_hf_uri():
     assert (
         runtime_dataset_uri(
-            "hf://policyengine/policyengine-us-data/states/CA.h5@1.110.12",
-            default_revision="1.115.5",
-            override_revision="1.77.0",
-            artifact_revision="d47fb5475144260a75467d2f2e22b2d5d53d4d57",
+            "hf://external/example-data/file.h5@custom-v1",
+            default_revision="bundle-default",
+            override_revision="custom-v2",
+            artifact_revision="artifact-revision",
+            validate_hf=False,
         )
-        == "gs://policyengine-us-data/states/CA.h5@1.77.0"
+        == "hf://external/example-data/file.h5@custom-v2"
     )
 
 
@@ -73,6 +79,6 @@ def test_runtime_dataset_uri_still_validates_unmanaged_hf_revisions(monkeypatch)
 def test_runtime_dataset_uri_rejects_conflicting_gcs_revisions():
     with pytest.raises(ValueError, match="Conflicting dataset revisions"):
         runtime_dataset_uri(
-            "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5@commit",
-            default_revision="1.55.10",
+            "gs://external-bucket/custom/file.h5@custom-v1",
+            default_revision="custom-v2",
         )
