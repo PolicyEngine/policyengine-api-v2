@@ -2,31 +2,27 @@
 
 ## State
 
-- Authorized continuation from dcfe4fd89d97145882cb147a9aa2ffae2cd10ebf on max/spm-simulation-canonical-20260909.
-- Exact Fable review read: gate 20260909-170551-pr-abdf4629, round 001-4542bf03eca1. Findings are valid; dispatch BrokenPipeError means no gate agreement exists.
-- Existing untracked root PROGRESS.md and WORKER-CANONICAL-SPM-HANDOFF.md are preserved without edits. This committed progress file tracks this continuation.
-- Initial git fetch origin and gh repo view failed because GitHub DNS/API connectivity is unavailable in the shell. The authenticated GitHub connector independently confirms live main is 414c631d622f5f587eedd187296a80182a923db2, identical to local origin/main, and PR677 is still a canonical draft at the requested starting head. Issue #676 is open and appropriate. Git transport remains pending.
-- No browser, population job, publication, deployment, merge, .err or .lane.log reads.
+- Local implementation, regressions, installed qualification and reporting are complete. Implementation/test head: c431d138bdbad9be71c12b6994851879cf5d05aa; later commits contain evidence/reports only.
+- All four Fable findings and related capability/selection notes are dispositioned. Complete review read from gate 20260909-170551-pr-abdf4629, round 001-4542bf03eca1; dispatch BrokenPipeError means no durable gate agreement exists.
+- Remote delivery is blocked: Git/gh cannot reach GitHub from the shell; authenticated connector reads work, but the write tool requires approval while this session's policy is never. No remote mutation occurred. Existing canonical draft PR677 remains at dcfe4fd89d97145882cb147a9aa2ffae2cd10ebf.
+- Live main verified through authenticated GitHub reads at 414c631d622f5f587eedd187296a80182a923db2, identical to local origin/main; issue #676 verified appropriate. No destructive checkout or base integration.
+- Existing untracked root PROGRESS.md and WORKER-CANONICAL-SPM-HANDOFF.md preserved byte for byte. This committed progress file tracks only this continuation.
 
 ## Done
 
-- Inspected status, remotes, starting HEAD, and attempted upstream fetch before edits.
-- Read repository AGENTS.md and canonical testing/GitHub PR skills; read exact reviewer output.
-- Read installed PolicyEngine analysis, standards and API skills, parent PolicyEngine guidance and wrapper repository guidance. Repository-specific instructions and the user's bounded qualification scope govern this work.
-- Committed an isolated qualification harness that authenticates the existing c49c/76448/8c640/2dbc wheels and reuses the existing explicit development bootstrap without modifying it, the packages, or historical evidence.
-- Routing regressions before fixes: 13 gateway failures (historical routes, sibling ambiguity, malformed capability) and two partial-selection failures reproduced.
-- Archived starting source to /tmp/worker-fable-base for like-for-like installed-environment type diagnostics; no checkout or handoff edits.
-- Routing and runtime fixes committed, including adversarial follow-up for malformed seed schemas, future prefixed apps with absent routes, and unclassified sibling metadata. Latest full gateway suite: 149 passed; contract: 73 passed; entry: 66 passed; actual regenerated client: four passed.
-- Full executor suite: 454 passed, 22 explicitly gated native tests skipped, two integration cases deselected, one environment-dependent version-extraction failure. That exact test passed with UV_NO_SYNC=1 against the existing environment (no download or package mutation), completing 455 unit checks.
-- ./scripts/generate-clients.sh completed successfully; refreshed stale gateway OpenAPI golden and strengthened entry/gateway comparison to include SPM schemas.
-- Clean native runtime regressions: eight failures before repair, then 56 canonical/runtime checks passed with zero skips. Earlier /tmp launchers were superseded after discovering unrelated pre-existing /tmp/h2.py import shadowing; clean launchers use safe-path mode and explicit installed Python 3.13.
-- Clean artifact regressions reproduced receipt/column/cache-selection/storage identity failures. Artifact fixes and full native qualification are completing.
-- Installed uv pip check: 180 compatible distributions. Current source Pyright: entry/contract zero errors; executor 145 and gateway 78, exactly matching unchanged starting source diagnostics.
+- Inspected status/HEAD/remotes and attempted fetch before edits; read exact reviewer output, prior rollout evidence, repository testing/PR guidance and relevant installed PolicyEngine skills.
+- Committed failing regression steps, implementation steps, further adversarial route fixes and evidence throughout.
+- Fixed proven historical routing with fail-closed future/ambiguous capabilities, typed calculator year/scenario errors at annual/window boundaries, incomplete artifact recomputation with selection isolation, and precompute storage identity rejection.
+- Resolved malformed discovery/submission capabilities and partial geography defaults. Refreshed gateway OpenAPI golden, strengthened schema parity and regenerated actual clients.
+- Service/client checks: 747 passes total (gateway149, entry66, contract73, executor454 plus its one environment-dependent script test successfully retested without syncing, generated client4). Ordinary executor run deliberately skipped22 opt-in native cases and deselected2 integration cases.
+- Final combined authenticated native qualification: 34 passed, zero skips/failures, 288.39 seconds, two expected plugin-rewrite warnings. Authenticated all17,613 installed scientific package files against c49c/76448/8c640/2dbc wheels; model source unchanged. Indexed execution only: one household/four people. Source H5 unchanged.
+- Final190 tracked worker/test source files match implementation commit byte for byte. Summary and full source binding committed; raw3MB receipt and bulk logs retained locally.
+- Installed uv pip check: all180 distributions compatible. Ruff format/lint passes all16 changed Python files; diff whitespace passes. Pyright entry/contract zero diagnostics; executor145/gateway78 identical to unchanged starting source, zero new diagnostics.
+- Independent bounded cross-reviews found no additional actionable defects. Earlier temporary launcher results were discarded after unrelated pre-existing /tmp/h2.py import shadowing; clean safe-path launchers reproduced and passed the regressions. Unrelated file untouched.
+- Wrote FINAL-REPORT.md with exact commands/results/source binding/risks and PR-BODY.md beginning Fixes #676. No browser, population job, package/data publication, deployment, merge, external messaging, .err or .lane.log reads.
 
 ## Next
 
-- Add failing regressions and fix legacy route classification, typed runtime year/scenario errors, incomplete artifact recomputation, and precompute storage identity checks.
-- Disposition related ambiguity, malformed capability, and partial-selection notes.
-- Run focused and installed-environment qualifications, lint, type, and format checks; record source binding and exact evidence.
-- Commit coherent steps; push verified commits to existing canonical draft PR677 and update its body if connectivity permits.
-- Write FINAL-REPORT.md in this directory.
+- Provide Git network access or an approved GitHub write channel to deliver the already committed changes. Repository PR skill explicitly requires asking for access when canonical push is unavailable; do not create a fork fallback.
+- Once access is available, recheck live base and existing PR head, push this branch to PolicyEngine/policyengine-sim-api, apply PR-BODY.md and verify canonical draft/head/message. Do not merge.
+- Fresh durable Fable agreement, required CI and release/live rollout gates remain coordinator-owned; local test results are not deployment or publication approval.
