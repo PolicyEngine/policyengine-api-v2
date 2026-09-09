@@ -58,6 +58,9 @@ os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 os.environ["POLICYENGINE_SKIP_COUNTRY_IMPORTS"] = "1"
 os.environ["SPM_NATIVE_SMOKE_SOURCE"] = str(SOURCE)
 assert not os.environ.get("PYTHONPATH"), "No inherited source overlays allowed"
+assert Path("/tmp").resolve() not in {Path(path).resolve() for path in sys.path}, (
+    "Temporary-directory modules must not shadow installed dependencies"
+)
 for relative in (
     "projects/policyengine-simulation-executor/src",
     "projects/policyengine-simulation-entry/src",
