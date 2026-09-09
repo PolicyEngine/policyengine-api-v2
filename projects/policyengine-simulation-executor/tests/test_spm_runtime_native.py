@@ -122,3 +122,22 @@ def test_valid_worker_prevalidation_does_not_evaluate_amounts(forecast, monkeypa
     )
     assert provider.provenance()["years"] == {}
     calculate.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [{"as_of": "2020-01-01"}, {"county_vintage": "2010"}],
+)
+def test_other_invalid_settings_keep_the_settings_code(selection):
+    from policyengine_simulation_contract.spm import SPMInputError
+    from policyengine_simulation_executor.spm import normalize_runtime_spm
+
+    with pytest.raises(SPMInputError) as error:
+        normalize_runtime_spm(
+            {
+                "country": "us",
+                "time_period": "2024",
+                "spm": {"geography_kind": "national", **selection},
+            }
+        )
+    assert error.value.code == "SPM_SETTINGS_INVALID"

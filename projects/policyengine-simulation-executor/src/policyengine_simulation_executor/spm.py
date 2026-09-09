@@ -77,16 +77,27 @@ def normalize_runtime_spm(params):
     )
     if selection is not None:
         try:
+            from spm_calculator.policyengine_adapter import PolicyEngineSPMProvider
+
             forecast = _forecast(selection["forecast_content_sha256"])
             if selection["county_vintage"] != "2020":
                 raise ValueError("Unsupported county vintage: use 2020")
+            provider = PolicyEngineSPMProvider(
+                forecast,
+                **{
+                    key: value
+                    for key, value in selection.items()
+                    if key != "forecast_content_sha256"
+                },
+            )
             from policyengine_simulation_executor.simulation_runtime import _parse_year
 
             start = int(params.get("start_year") or _parse_year(params))
             for year in range(start, start + int(params.get("window_size", 1))):
-                forecast.entry(
-                    year, scenario=selection["scenario"], as_of=selection["as_of"]
-                )
+                # Use the country adapter's typed year contract. This temporary
+                # provider validates metadata without measuring any SPM amount
+                # or modifying the actual simulation's calculation receipts.
+                provider.year_metadata(year)
                 if selection["geography_kind"] == "metro":
                     try:
                         forecast.geography_factor(
@@ -105,6 +116,11 @@ def normalize_runtime_spm(params):
             detail = spm_error_detail(exc)
             if detail:
                 raise SPMInputError(detail.code, detail.message) from exc
+            # The installed provider constructor still exposes the forecast's
+            # plain scenario error; use the same narrow translation as the
+            # calculator's Frame and Axiom adapters, leaving other errors alone.
+            if str(exc).startswith("Unknown forecast scenario:"):
+                raise SPMInputError("SPM_SCENARIO_UNAVAILABLE", str(exc)) from exc
             raise SPMInputError("SPM_SETTINGS_INVALID", str(exc)) from exc
     return selection
 

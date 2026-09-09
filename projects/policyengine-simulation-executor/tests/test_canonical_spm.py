@@ -2,6 +2,7 @@
 
 import json
 import pickle
+import sys
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -241,11 +242,23 @@ def test_year_alias_is_validated_before_dataset_loading(monkeypatch):
         ),
     )
     monkeypatch.setattr(spm, "runtime_spm_capability", lambda: CAPABILITY)
-    entry = Mock(side_effect=ValueError("2040 is unavailable"))
-    monkeypatch.setattr(spm, "_forecast", lambda sha: SimpleNamespace(entry=entry))
-    with pytest.raises(SPMInputError, match="2040 is unavailable"):
+    year_metadata = Mock(
+        side_effect=SPMInputError("SPM_YEAR_UNAVAILABLE", "2040 is unavailable")
+    )
+    monkeypatch.setattr(spm, "_forecast", lambda sha: object())
+    monkeypatch.setitem(
+        sys.modules,
+        "spm_calculator.policyengine_adapter",
+        SimpleNamespace(
+            PolicyEngineSPMProvider=lambda *a, **k: SimpleNamespace(
+                year_metadata=year_metadata
+            )
+        ),
+    )
+    with pytest.raises(SPMInputError, match="2040 is unavailable") as error:
         spm.normalize_runtime_spm({"country": "us", "year": "2040", "spm": SELECTION})
-    assert entry.call_args.args == (2040,)
+    assert error.value.code == "SPM_YEAR_UNAVAILABLE"
+    assert year_metadata.call_args.args == (2040,)
 
 
 @pytest.mark.parametrize(
@@ -255,6 +268,7 @@ def test_year_alias_is_validated_before_dataset_loading(monkeypatch):
         "SPM_GEOGRAPHY_UNAVAILABLE",
         "SPM_COMPOSITION_REQUIRED",
         "SPM_YEAR_UNAVAILABLE",
+        "SPM_SCENARIO_UNAVAILABLE",
     ],
 )
 def test_actual_http_formula_error_contract(monkeypatch, code):
@@ -400,6 +414,7 @@ def test_identity_errors_do_not_degrade_to_an_unidentified_baseline(monkeypatch)
         "SPM_GEOGRAPHY_UNAVAILABLE",
         "SPM_COMPOSITION_REQUIRED",
         "SPM_YEAR_UNAVAILABLE",
+        "SPM_SCENARIO_UNAVAILABLE",
     ],
 )
 def test_gateway_poll_returns_structured_400(monkeypatch, code):
@@ -437,6 +452,7 @@ def test_gateway_submission_uses_registry_capability_before_spawn(monkeypatch):
         app_name="test-app",
         response_version="test-only",
         policyengine_version="test-only",
+        route_provenance=None,
     )
     monkeypatch.setattr(endpoints, "resolve_route", lambda *args: route)
     bundle = PolicyEngineBundle(
@@ -530,6 +546,7 @@ def test_budget_window_state_keeps_typed_failure_on_replay():
         "SPM_GEOGRAPHY_UNAVAILABLE",
         "SPM_COMPOSITION_REQUIRED",
         "SPM_YEAR_UNAVAILABLE",
+        "SPM_SCENARIO_UNAVAILABLE",
     ],
 )
 def test_country_error_is_transportable_without_country_package(monkeypatch, code):
@@ -559,6 +576,7 @@ def test_country_error_is_transportable_without_country_package(monkeypatch, cod
         "SPM_GEOGRAPHY_UNAVAILABLE",
         "SPM_COMPOSITION_REQUIRED",
         "SPM_YEAR_UNAVAILABLE",
+        "SPM_SCENARIO_UNAVAILABLE",
     ],
 )
 def test_optional_analysis_does_not_swallow_spm_input_errors(code):
@@ -606,7 +624,9 @@ def test_explicit_null_as_of_survives_entrypoint_and_budget_parent():
             "defaults": {**SELECTION, "as_of": "2026-01-01"},
         },
     )
-    selection = _resolve_request_spm(request, bundle)
+    selection = _resolve_request_spm(
+        request, bundle, SimpleNamespace(route_provenance=None)
+    )
     assert selection["as_of"] is None
     parent = _build_budget_window_parent_payload(
         request, resolved_version="test", resolved_app_name="test", bundle=bundle

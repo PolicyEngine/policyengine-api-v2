@@ -1,17 +1,12 @@
 WARN `--no-project` was provided, but no project was found
 warning: `--frozen` has no effect when used alongside `--no-project`
-RUN_EXPERIMENT EVENTS: []
-wrote /tmp/v/results/invented_result.json
-domain allocation: occupied_housing_unit=100 group_quarters_person=10
-whole-arm reference: occupied_housing_unit=1050/11 group_quarters_person=50/11
-refusal cases demonstrated: 12, unrefused: []
-FFFFFFFF.                                                                [100%]
+FFFFFFFF...                                                              [100%]
 =================================== FAILURES ===================================
 ________ test_worker_year_boundary_matches_real_provider[period0-2021] _________
 
 forecast = SPMForecast(_json=b'{"areas":{"1002":{"area_type":"state_nonmetro","name":"Alabama Nonmetro"},"10180":{"area_type":"ms...002', '56035': '56002', '56037': '56002', '56039': '56002', '56041': '56002', '56043': '56002', '56045': '56002'})})}))
 period = {'time_period': '2021'}, unavailable_year = 2021
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x13862c2b0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x138a20c30>
 
     @pytest.mark.parametrize(
         "period,unavailable_year",
@@ -53,7 +48,7 @@ ________ test_worker_year_boundary_matches_real_provider[period1-2036] _________
 
 forecast = SPMForecast(_json=b'{"areas":{"1002":{"area_type":"state_nonmetro","name":"Alabama Nonmetro"},"10180":{"area_type":"ms...002', '56035': '56002', '56037': '56002', '56039': '56002', '56041': '56002', '56043': '56002', '56045': '56002'})})}))
 period = {'time_period': '2036'}, unavailable_year = 2036
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x13862c050>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x138a20e90>
 
     @pytest.mark.parametrize(
         "period,unavailable_year",
@@ -95,7 +90,7 @@ ________ test_worker_year_boundary_matches_real_provider[period2-2040] _________
 
 forecast = SPMForecast(_json=b'{"areas":{"1002":{"area_type":"state_nonmetro","name":"Alabama Nonmetro"},"10180":{"area_type":"ms...002', '56035': '56002', '56037': '56002', '56039': '56002', '56041': '56002', '56043': '56002', '56045': '56002'})})}))
 period = {'year': '2040'}, unavailable_year = 2040
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x13a0a28d0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x13bd58290>
 
     @pytest.mark.parametrize(
         "period,unavailable_year",
@@ -137,7 +132,7 @@ ________ test_worker_year_boundary_matches_real_provider[period3-2021] _________
 
 forecast = SPMForecast(_json=b'{"areas":{"1002":{"area_type":"state_nonmetro","name":"Alabama Nonmetro"},"10180":{"area_type":"ms...002', '56035': '56002', '56037': '56002', '56039': '56002', '56041': '56002', '56043': '56002', '56045': '56002'})})}))
 period = {'start_year': '2021', 'window_size': 1}, unavailable_year = 2021
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x13a01b9b0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x13bdae7a0>
 
     @pytest.mark.parametrize(
         "period,unavailable_year",
@@ -179,7 +174,7 @@ ________ test_worker_year_boundary_matches_real_provider[period4-2036] _________
 
 forecast = SPMForecast(_json=b'{"areas":{"1002":{"area_type":"state_nonmetro","name":"Alabama Nonmetro"},"10180":{"area_type":"ms...002', '56035': '56002', '56037': '56002', '56039': '56002', '56041': '56002', '56043': '56002', '56045': '56002'})})}))
 period = {'start_year': '2036', 'window_size': 1}, unavailable_year = 2036
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x13a0b09e0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x13bdaf9b0>
 
     @pytest.mark.parametrize(
         "period,unavailable_year",
@@ -221,7 +216,7 @@ ________ test_worker_year_boundary_matches_real_provider[period5-2036] _________
 
 forecast = SPMForecast(_json=b'{"areas":{"1002":{"area_type":"state_nonmetro","name":"Alabama Nonmetro"},"10180":{"area_type":"ms...002', '56035': '56002', '56037': '56002', '56039': '56002', '56041': '56002', '56043': '56002', '56045': '56002'})})}))
 period = {'start_year': '2035', 'window_size': 2}, unavailable_year = 2036
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x13a03f650>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x13bd96650>
 
     @pytest.mark.parametrize(
         "period,unavailable_year",
@@ -263,7 +258,7 @@ ___ test_worker_scenario_boundary_matches_real_calculator_contract[period0] ____
 
 forecast = SPMForecast(_json=b'{"areas":{"1002":{"area_type":"state_nonmetro","name":"Alabama Nonmetro"},"10180":{"area_type":"ms...002', '56035': '56002', '56037': '56002', '56039': '56002', '56041': '56002', '56043': '56002', '56045': '56002'})})}))
 period = {'time_period': '2024'}
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x13a03ed50>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x13bd95d50>
 
     @pytest.mark.parametrize(
         "period",
@@ -283,15 +278,29 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x13a03ed50>
             export_build_spec(forecast, years=[2024], scenario=scenario)
         assert adapter_error.value.code == "SPM_SCENARIO_UNAVAILABLE"
         expected = spm_error_detail(adapter_error.value)
->       assert expected is not None
-E       assert None is not None
+        assert expected is not None
+        params = {
+            "country": "us",
+            "spm": {"geography_kind": "national", "scenario": scenario},
+            **period,
+        }
+        entrypoint, boundary = _worker_entrypoint(params, monkeypatch)
+        with pytest.raises(SPMInputError) as error:
+            entrypoint(params)
+>       assert error.value.to_dict() == expected.model_dump()
+E       AssertionError: assert {'code': 'SPM...ned-forecast'} == {'code': 'SPM...ned-forecast'}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Differing items:
+E         {'code': 'SPM_SETTINGS_INVALID'} != {'code': 'SPM_SCENARIO_UNAVAILABLE'}
+E         Use -v to get more diff
 
-projects/policyengine-simulation-executor/tests/test_spm_runtime_native.py:89: AssertionError
+projects/policyengine-simulation-executor/tests/test_spm_runtime_native.py:98: AssertionError
 ___ test_worker_scenario_boundary_matches_real_calculator_contract[period1] ____
 
 forecast = SPMForecast(_json=b'{"areas":{"1002":{"area_type":"state_nonmetro","name":"Alabama Nonmetro"},"10180":{"area_type":"ms...002', '56035': '56002', '56037': '56002', '56039': '56002', '56041': '56002', '56043': '56002', '56045': '56002'})})}))
 period = {'start_year': '2024', 'window_size': 2}
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x13a043c50>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x13bd834d0>
 
     @pytest.mark.parametrize(
         "period",
@@ -311,10 +320,24 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x13a043c50>
             export_build_spec(forecast, years=[2024], scenario=scenario)
         assert adapter_error.value.code == "SPM_SCENARIO_UNAVAILABLE"
         expected = spm_error_detail(adapter_error.value)
->       assert expected is not None
-E       assert None is not None
+        assert expected is not None
+        params = {
+            "country": "us",
+            "spm": {"geography_kind": "national", "scenario": scenario},
+            **period,
+        }
+        entrypoint, boundary = _worker_entrypoint(params, monkeypatch)
+        with pytest.raises(SPMInputError) as error:
+            entrypoint(params)
+>       assert error.value.to_dict() == expected.model_dump()
+E       AssertionError: assert {'code': 'SPM...ned-forecast'} == {'code': 'SPM...ned-forecast'}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Differing items:
+E         {'code': 'SPM_SETTINGS_INVALID'} != {'code': 'SPM_SCENARIO_UNAVAILABLE'}
+E         Use -v to get more diff
 
-projects/policyengine-simulation-executor/tests/test_spm_runtime_native.py:89: AssertionError
+projects/policyengine-simulation-executor/tests/test_spm_runtime_native.py:98: AssertionError
 =============================== warnings summary ===============================
 ../../rollout/year-boundary-qualification/venv/lib/python3.13/site-packages/_pytest/config/__init__.py:1290
   /Users/maxghenis/spm-rebuild-20260908/rollout/year-boundary-qualification/venv/lib/python3.13/site-packages/_pytest/config/__init__.py:1290: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; logfire
@@ -334,4 +357,4 @@ FAILED projects/policyengine-simulation-executor/tests/test_spm_runtime_native.p
 FAILED projects/policyengine-simulation-executor/tests/test_spm_runtime_native.py::test_worker_year_boundary_matches_real_provider[period5-2036]
 FAILED projects/policyengine-simulation-executor/tests/test_spm_runtime_native.py::test_worker_scenario_boundary_matches_real_calculator_contract[period0]
 FAILED projects/policyengine-simulation-executor/tests/test_spm_runtime_native.py::test_worker_scenario_boundary_matches_real_calculator_contract[period1]
-8 failed, 1 passed, 2 warnings in 1.21s
+8 failed, 3 passed, 2 warnings in 2.12s
