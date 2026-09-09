@@ -365,15 +365,15 @@ def _policyengine_version_for_app(
     for version in candidates:
         manifest = _bundle_manifest(state, version)
         country_bundle = manifest.get(country)
-        if (
-            isinstance(country_bundle, dict)
-            and country_bundle.get("model_version") == model_version
-        ):
-            matching.append(version)
-        elif not isinstance(country_bundle, dict) or not isinstance(
-            country_bundle.get("model_version"), str
-        ):
+        candidate_model = (
+            country_bundle.get("model_version")
+            if isinstance(country_bundle, dict)
+            else None
+        )
+        if not isinstance(candidate_model, str) or not candidate_model.strip():
             unclassified.append(version)
+        elif candidate_model == model_version:
+            matching.append(version)
     if len(matching) == 1 and not unclassified:
         return matching[0]
     if len(candidates) > 1:
@@ -431,13 +431,20 @@ def _resolve_country_route(
     policyengine_version = _policyengine_version_for_app(
         state, app_name, country=country, model_version=version
     )
+    if policyengine_version is None:
+        # The legacy seed producer infers these same wrapper routes. Missing
+        # registry metadata must not erase a known future app version.
+        policyengine_version = _policyengine_version_from_app_name(app_name)
     return RouteResolution(
         app_name=app_name,
         response_version=version,
         policyengine_version=policyengine_version,
         bundle_manifest=_bundle_manifest(state, policyengine_version),
         route_provenance=(
-            "legacy-seed" if state.get("generation") == "legacy-seed" else None
+            "legacy-seed"
+            if state.get("generation") == "legacy-seed"
+            and state.get("schema_version") == 1
+            else None
         ),
     )
 
