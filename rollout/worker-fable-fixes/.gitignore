@@ -1,6 +1,0 @@
-pytest-*/
-__pycache__/
-*.log
-native-wheel-receipt.json
-*-pyright.json
-*-pyrightconfig.json
