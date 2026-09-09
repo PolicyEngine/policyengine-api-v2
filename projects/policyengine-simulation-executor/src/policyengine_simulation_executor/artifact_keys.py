@@ -74,6 +74,7 @@ def dataset_key(
     data_build_fingerprint: Optional[str],
     model_version: str,
     policyengine_version: str,
+    spm: Optional[dict] = None,
 ) -> str:
     """Digest identifying one single-year dataset artifact.
 
@@ -86,7 +87,8 @@ def dataset_key(
     """
     return canonical_digest(
         {
-            "schema": DATASET_KEY_SCHEMA,
+            "schema": DATASET_KEY_SCHEMA if spm is None else "ds2-spm",
+            **({"spm": spm} if spm is not None else {}),
             "country": country.lower(),
             "dataset": dataset,
             "year": int(year),
@@ -108,6 +110,7 @@ def baseline_key(
     dataset_digest: str,
     model_version: str,
     policyengine_version: str,
+    spm: Optional[dict] = None,
     policy: str = CURRENT_LAW_POLICY,
 ) -> str:
     """Digest identifying one precomputed baseline simulation artifact.
@@ -119,7 +122,8 @@ def baseline_key(
     """
     return canonical_digest(
         {
-            "schema": BASELINE_KEY_SCHEMA,
+            "schema": BASELINE_KEY_SCHEMA if spm is None else "bl2-spm",
+            **({"spm": spm} if spm is not None else {}),
             "country": country.lower(),
             "region": region,
             "scope_key": scope_key,
@@ -206,11 +210,13 @@ class DatasetArtifactIdentity:
     data_build_fingerprint: Optional[str]
     model_version: str
     policyengine_version: str
+    spm: Optional[dict] = None
 
     @property
     def digest(self) -> str:
         return dataset_key(
             country=self.country,
+            spm=self.spm,
             dataset=self.dataset,
             year=self.year,
             data_version=self.data_version,
@@ -238,12 +244,14 @@ class BaselineArtifactIdentity:
     region: str
     scope_key: Optional[str]
     dataset: DatasetArtifactIdentity
+    spm: Optional[dict] = None
 
     @property
     def digest(self) -> str:
         return baseline_key(
             country=self.country,
             region=self.region,
+            spm=self.spm,
             scope_key=self.scope_key,
             dataset_digest=self.dataset.digest,
             model_version=self.dataset.model_version,
@@ -255,8 +263,14 @@ class BaselineArtifactIdentity:
         return baseline_simulation_id(self.digest)
 
     @property
+    def storage_id(self) -> str:
+        if self.spm is None:
+            return self.simulation_id
+        return f"{self.simulation_id}-spm-{canonical_digest(self.spm)}"
+
+    @property
     def store_path(self) -> str:
-        return baseline_artifact_path(self.country, self.digest, self.simulation_id)
+        return baseline_artifact_path(self.country, self.digest, self.storage_id)
 
 
 def _receipt_source_sha256(country: str, data_version: str) -> Optional[str]:
@@ -310,7 +324,11 @@ def collect_dataset_identity(country: str, year: int) -> DatasetArtifactIdentity
     stem = dataset_logical_name(
         resolve_dataset_reference(bundle.country, bundle.default_dataset)
     )
+    from policyengine_simulation_executor.spm import normalize_runtime_spm
+
+    selection = normalize_runtime_spm({"country": country, "time_period": year})
     return DatasetArtifactIdentity(
+        spm=selection,
         country=bundle.country,
         dataset=bundle.default_dataset,
         stem=stem,
@@ -330,8 +348,15 @@ def collect_baseline_identity(
     *,
     region: str,
     scope_key: Optional[str],
+    spm: Optional[dict] = None,
 ) -> BaselineArtifactIdentity:
+    from policyengine_simulation_executor.spm import normalize_runtime_spm
+
+    selection = normalize_runtime_spm(
+        {"country": country, "time_period": year, "spm": spm}
+    )
     return BaselineArtifactIdentity(
+        spm=selection,
         country=country.lower(),
         region=region,
         scope_key=scope_key,

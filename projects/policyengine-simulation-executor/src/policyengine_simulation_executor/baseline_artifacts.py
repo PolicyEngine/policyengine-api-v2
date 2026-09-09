@@ -102,7 +102,11 @@ def qualifying_baseline_identity(
         return None
 
     return artifact_keys.collect_baseline_identity(
-        country, year, region=region, scope_key=scope_key
+        country,
+        year,
+        region=region,
+        scope_key=scope_key,
+        **({"spm": params["spm"]} if params.get("spm") is not None else {}),
     )
 
 
@@ -130,7 +134,11 @@ def deterministic_baseline_id(
             scoping_strategy=scoping_strategy,
             year=year,
         )
-    except Exception:
+    except Exception as exc:
+        from policyengine_simulation_contract.spm import spm_error_detail
+
+        if spm_error_detail(exc):
+            raise
         logger.warning(
             "Could not collect baseline artifact identity for %s; "
             "using a random simulation id",
@@ -177,6 +185,13 @@ class ArtifactBaselineSimulation(Simulation):
             self._record_outcome(OUTCOME_MISS)
             return
 
+        from policyengine_simulation_executor.spm import simulation_spm_result
+
+        selection = getattr(self, "spm_config", None)
+        if selection is not None:
+            simulation_spm_result(
+                self, self, selection, expected_year=self.dataset.year
+            )
         missing = self._missing_output_columns()
         if not missing:
             self._record_outcome(OUTCOME_HIT)
@@ -197,8 +212,11 @@ class ArtifactBaselineSimulation(Simulation):
         # existing key and exposes no remove, so evict directly first.
         from policyengine.core.simulation import _cache
 
-        _cache._cache.pop(self.id, None)
-        _cache.add(self.id, self)
+        _cache._cache.pop(getattr(self, "storage_id", self.id), None)
+        _cache.add(
+            getattr(self, "storage_id", self.id),
+            self.model_copy(deep=False) if selection is not None else self,
+        )
 
     def _missing_output_columns(self) -> list[tuple[str, str]]:
         data = getattr(self.output_dataset, "data", None)

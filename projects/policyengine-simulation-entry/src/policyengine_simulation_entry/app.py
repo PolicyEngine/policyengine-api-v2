@@ -24,6 +24,7 @@ from policyengine_simulation_contract.gateway_models import (
     PingResponse,
     ReadinessResponse,
     SimulationRequest,
+    SimulationErrorResponse,
     VersionMap,
     VersionsResponse,
 )
@@ -50,7 +51,6 @@ from policyengine_simulation_entry.schemas import (
     RequestIdentifiers,
 )
 
-
 logger = logging.getLogger(__name__)
 BACKEND_RESPONSE_HEADER = {
     "X-PolicyEngine-Simulation-Backend": "old_gateway",
@@ -61,9 +61,13 @@ type ResponseIdentifier = Literal["job_id", "batch_job_id"]
 
 
 def _model_json(model: BaseModel) -> JsonObject:
-    return _json_object_adapter.validate_python(
-        model.model_dump(mode="json", by_alias=True, exclude_none=True)
-    )
+    payload = model.model_dump(mode="json", by_alias=True, exclude_none=True)
+    selection = getattr(model, "spm", None)
+    if selection is not None:
+        # An explicit null information date clears a bundle cutoff. Preserve
+        # that distinction while leaving omitted request fields omitted.
+        payload["spm"] = selection.model_dump(mode="json", exclude_unset=True)
+    return _json_object_adapter.validate_python(payload)
 
 
 def _response(result: BackendResponse) -> Response:
@@ -271,7 +275,10 @@ def create_app(
         response_model_exclude_none=True,
         responses={
             200: {"description": "Job submitted successfully"},
-            400: {"description": "Invalid request (unknown country/version)"},
+            400: {
+                "description": "Invalid request or SPM selection",
+                "model": SimulationErrorResponse,
+            },
         },
         dependencies=protected,
     )
@@ -299,7 +306,10 @@ def create_app(
         response_model_exclude_none=True,
         responses={
             200: {"description": "Budget-window batch submitted successfully"},
-            400: {"description": "Invalid request (unknown country/version/year)"},
+            400: {
+                "description": "Invalid request or SPM selection",
+                "model": SimulationErrorResponse,
+            },
         },
         dependencies=protected,
     )
@@ -332,6 +342,10 @@ def create_app(
         responses={
             200: {"description": "Job complete", "model": JobStatusResponse},
             202: {"description": "Job still running"},
+            400: {
+                "description": "SPM input or configuration error",
+                "model": JobStatusResponse,
+            },
             404: {"description": "Job not found"},
             500: {"description": "Job failed"},
         },
@@ -360,6 +374,10 @@ def create_app(
                 "model": BudgetWindowBatchStatusResponse,
             },
             202: {"description": "Batch submitted or running"},
+            400: {
+                "description": "SPM input or configuration error",
+                "model": BudgetWindowBatchStatusResponse,
+            },
             404: {"description": "Batch job not found"},
             500: {"description": "Batch failed"},
         },

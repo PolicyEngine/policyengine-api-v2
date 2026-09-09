@@ -5,7 +5,7 @@ from copy import deepcopy
 
 import modal
 from packaging.version import InvalidVersion, Version
-from typing import Iterable, TypedDict
+from typing import Iterable, TypedDict, NotRequired
 
 POLICYENGINE_VERSION_DICT_NAME = "simulation-api-policyengine-versions"
 US_VERSION_DICT_NAME = "simulation-api-us-versions"
@@ -38,6 +38,7 @@ class BundleManifestMetadata(TypedDict):
     policyengine_version: str
     us: CountryBundleMetadata
     uk: CountryBundleMetadata
+    spm: NotRequired[dict]
 
 
 class LatestVersions(TypedDict):
@@ -104,12 +105,18 @@ def build_bundle_manifest_metadata(
     app_name: str,
     policyengine_version: str,
 ) -> BundleManifestMetadata:
-    return {
+    from policyengine_simulation_executor.spm import runtime_spm_capability
+
+    capability = runtime_spm_capability()
+    metadata: BundleManifestMetadata = {
         "app_name": app_name,
         "policyengine_version": policyengine_version,
         "us": _country_bundle_metadata("us"),
         "uk": _country_bundle_metadata("uk"),
     }
+    if capability is not None:
+        metadata["spm"] = capability.model_dump(mode="json")
+    return metadata
 
 
 def _empty_routing_state() -> RoutingState:

@@ -416,6 +416,7 @@ class TestOperationalResponses:
         )
 
         assert response.model_dump(mode="json") == {
+            "spm_capabilities": {},
             "policyengine": {"latest": "4.10.0"},
             "us": {"latest": "1.500.0"},
             "uk": {"latest": "2.66.0"},
@@ -575,6 +576,7 @@ class TestBudgetWindowBatchSubmitResponse:
                 "model_version": "1.500.0",
                 "policyengine_version": None,
                 "data_version": None,
+                "spm": None,
                 "dataset": "default",
             },
             "run_id": "batch-run-123",
@@ -628,5 +630,6 @@ class TestBudgetWindowBatchStatusResponse:
             "job_id": "fc-2026",
             "status": "complete",
             "error": None,
+            "errors": None,
         }
         assert dumped["result"]["kind"] == "budgetWindow"

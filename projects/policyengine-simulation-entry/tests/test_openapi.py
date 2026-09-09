@@ -7,7 +7,6 @@ from typing import Literal, TypedDict, cast
 
 from policyengine_simulation_entry.app import create_app
 
-
 type HttpMethod = Literal["get", "post", "put", "patch", "delete"]
 
 
@@ -60,14 +59,54 @@ def operation_ids(spec: OpenAPIDocument) -> dict[tuple[str, str], str]:
 
 
 def normalized_compatibility_paths(spec: OpenAPIDocument) -> OpenAPIPathMap:
-    """Remove the two intentional Cloud Run-only OpenAPI additions."""
+    """Remove intentional Cloud Run and additive SPM error documentation."""
     paths = deepcopy(spec["paths"])
     paths.pop("/ready", None)
     for operations in paths.values():
         for method, operation in operations.items():
             if method.lower() in {"get", "post", "put", "patch", "delete"}:
                 operation.pop("security", None)
+    for path, description in {
+        "/simulate/economy/comparison": "Invalid request (unknown country/version)",
+        "/simulate/economy/budget-window": "Invalid request (unknown country/version/year)",
+    }.items():
+        paths[path]["post"]["responses"]["400"] = {"description": description}
+    for path in ("/jobs/{job_id}", "/budget-window-jobs/{batch_job_id}"):
+        paths[path]["get"]["responses"].pop("400", None)
     return paths
+
+
+def without_spm_extensions(schemas):
+    schemas = deepcopy(schemas)
+    for name in list(schemas):
+        if name.startswith("SPM") or name == "SimulationErrorResponse":
+            schemas.pop(name)
+            continue
+        for field in (
+            "spm",
+            "spm_config",
+            "spm_provenance",
+            "errors",
+            "spm_capabilities",
+        ):
+            schemas[name].get("properties", {}).pop(field, None)
+    return schemas
+
+
+def test_canonical_spm_extensions_are_public():
+    spec = create_app().openapi()
+    schemas = spec["components"]["schemas"]
+    assert schemas["SPMSelection"]["additionalProperties"] is False
+    assert all(
+        "default" not in field
+        for field in schemas["SPMSelection"]["properties"].values()
+    )
+    assert "spm" in schemas["SimulationRequest"]["properties"]
+    assert "spm" in schemas["BudgetWindowBatchRequest"]["properties"]
+    assert "spm_provenance" in schemas["SingleYearMacroOutput"]["properties"]
+    assert "spm_provenance" in schemas["BudgetWindowAnnualImpact"]["properties"]
+    for path in ("/jobs/{job_id}", "/budget-window-jobs/{batch_job_id}"):
+        assert "400" in spec["paths"][path]["get"]["responses"]
 
 
 def test_route_table_is_frozen():
@@ -110,7 +149,10 @@ def test_normalized_contract_matches_old_gateway():
     ) == normalized_compatibility_paths(gateway_spec)
     cloud_run_schemas = deepcopy(cloud_run_spec["components"]["schemas"])
     cloud_run_schemas.pop("ReadinessResponse")
-    assert cloud_run_schemas == gateway_spec["components"]["schemas"]
+    assert (
+        without_spm_extensions(cloud_run_schemas)
+        == gateway_spec["components"]["schemas"]
+    )
     gateway_operation_ids = operation_ids(gateway_spec)
     cloud_run_operation_ids = operation_ids(cloud_run_spec)
     assert {

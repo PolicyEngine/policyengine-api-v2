@@ -254,6 +254,7 @@ def build_batch_status_response(
         child_jobs=state.child_jobs,
         result=state.result,
         error=state.error,
+        errors=state.errors,
         resolved_app_name=state.resolved_app_name,
         policyengine_bundle=state.policyengine_bundle,
         run_id=state.run_id,

@@ -24,6 +24,11 @@ from policyengine_simulation_contract.budget_window_state import (
     put_batch_job_state,
 )
 from policyengine_simulation_gateway.auth import require_auth
+from policyengine_simulation_contract.spm import (
+    SPMCapability,
+    spm_error_detail,
+    resolve_spm_selection,
+)
 from policyengine_simulation_observability.errors import log_and_redact_exception
 from policyengine_simulation_contract.gateway_models import (
     BudgetWindowBatchRequest,
@@ -575,7 +580,23 @@ def _build_policyengine_bundle(
         ),
         data_version=str(data_version) if isinstance(data_version, str) else None,
         dataset=resolved_dataset,
+        spm=app_bundle.get("spm") if country.lower() == "us" else None,
     )
+
+
+def _resolve_request_spm(request, bundle):
+    selection = resolve_spm_selection(
+        request.country,
+        request.spm,
+        capability=bundle.spm,
+        policyengine_version=bundle.policyengine_version,
+        model_version=bundle.model_version,
+    )
+    if selection is not None:
+        from policyengine_simulation_contract.spm import SPMSelection
+
+        request.spm = SPMSelection.model_validate(selection)
+    return selection
 
 
 def _serialize_job_metadata(
@@ -602,6 +623,8 @@ def _build_budget_window_parent_payload(
         mode="json",
         exclude_none=True,
     )
+    if request.spm is not None:
+        payload["spm"] = request.spm.model_dump(mode="json")
     payload["version"] = resolved_version
     if request.telemetry is not None:
         payload["_telemetry"] = request.telemetry.model_dump(mode="json")
@@ -694,9 +717,18 @@ async def submit_simulation(request: SimulationRequest):
                 route,
                 payload,
             )
+        _resolve_request_spm(request, bundle)
     except (ValueError, HuggingFaceDatasetReferenceError) as exc:
+        detail = spm_error_detail(exc)
+        if detail:
+            return failed_job_response(
+                error=detail.message, errors=[detail.model_dump()]
+            )
         record_error(exc, handled=True, status_code=400, include_stack=False)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if request.spm is not None:
+        payload["spm"] = request.spm.model_dump(mode="json")
 
     logger.info(
         "Routing %s:%s to app %s (run_id=%s)",
@@ -766,7 +798,13 @@ async def submit_budget_window_batch(request: BudgetWindowBatchRequest):
                 route,
                 request.model_dump(mode="json"),
             )
+        _resolve_request_spm(request, bundle)
     except (ValueError, HuggingFaceDatasetReferenceError) as exc:
+        detail = spm_error_detail(exc)
+        if detail:
+            return failed_job_response(
+                error=detail.message, errors=[detail.model_dump()]
+            )
         record_error(exc, handled=True, status_code=400, include_stack=False)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     with segment(SegmentName.REQUEST_PARSE):
@@ -854,6 +892,13 @@ async def get_job_status(job_id: str):
         if _is_modal_job_not_found(exc):
             record_error(exc, handled=True, status_code=404, include_stack=False)
             raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+        detail = spm_error_detail(exc)
+        if detail:
+            return failed_job_response(
+                error=detail.message,
+                errors=[detail.model_dump()],
+                job_metadata=job_metadata,
+            )
         redacted = log_and_redact_exception(
             exc,
             scope="simulation_job_status",
@@ -922,13 +967,19 @@ async def get_budget_window_job_status(batch_job_id: str):
         # "submitted" status from the seed store (#448). We deliberately
         # overwrite the main job store entry as well as the seed so either
         # lookup path observes the terminal failed state.
-        redacted = log_and_redact_exception(
-            exc,
-            scope="budget_window_parent_call",
-            context={"batch_job_id": batch_job_id},
+        detail = spm_error_detail(exc)
+        message = (
+            detail.message
+            if detail
+            else log_and_redact_exception(
+                exc,
+                scope="budget_window_parent_call",
+                context={"batch_job_id": batch_job_id},
+            )
         )
         seed_state.status = "failed"
-        seed_state.error = redacted
+        seed_state.errors = [detail] if detail else None
+        seed_state.error = message
         with segment(SegmentName.BUDGET_WINDOW_STATE_WRITE):
             put_batch_job_state(seed_state)
             put_batch_job_seed(seed_state)
@@ -948,6 +999,11 @@ async def list_versions() -> VersionsResponse:
         state = _active_routing_state()
     if state:
         return VersionsResponse(
+            spm_capabilities={
+                name: SPMCapability.model_validate(bundle["spm"])
+                for name, bundle in state.get("bundles", {}).items()
+                if isinstance(bundle, dict) and bundle.get("spm") is not None
+            },
             policyengine=_version_map_from_state(state, "policyengine"),
             us=_version_map_from_state(state, "us"),
             uk=_version_map_from_state(state, "uk"),

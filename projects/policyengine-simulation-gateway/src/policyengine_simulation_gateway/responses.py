@@ -25,6 +25,11 @@ class ServerErrorResponse(JSONResponse):
 
 def batch_status_payload(response: BudgetWindowBatchStatusResponse) -> dict:
     payload = response.model_dump(mode="json")
+    if payload.get("errors") is None:
+        payload.pop("errors", None)
+    for child in payload.get("child_jobs", {}).values():
+        if child.get("errors") is None:
+            child.pop("errors", None)
     if response.policyengine_bundle is not None:
         payload["policyengine_bundle"] = response.policyengine_bundle.model_dump(
             mode="json",
@@ -38,7 +43,9 @@ def batch_status_response(response: BudgetWindowBatchStatusResponse):
     if response.status in {"submitted", "running"}:
         return AcceptedResponse(payload)
     if response.status == "failed":
-        return ServerErrorResponse(payload)
+        return JSONResponse(
+            status_code=400 if response.errors else 500, content=payload
+        )
     return response
 
 
@@ -54,13 +61,15 @@ def running_job_response(job_metadata: dict | None = None) -> AcceptedResponse:
 
 
 def failed_job_response(
-    *, error: str, job_metadata: dict | None = None
-) -> ServerErrorResponse:
-    return ServerErrorResponse(
-        {
+    *, error: str, job_metadata: dict | None = None, errors: list[dict] | None = None
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=400 if errors else 500,
+        content={
+            **({"errors": errors} if errors else {}),
             "status": "failed",
             "result": None,
             "error": error,
             **(job_metadata or {}),
-        }
+        },
     )
