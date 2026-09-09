@@ -1,5 +1,8 @@
 """Four-person worker and lazy-year smoke against new exact installed candidate wheels."""
 
+# Imports below authentication must run after the explicit development bootstrap.
+# ruff: noqa: E402
+
 import hashlib
 import importlib
 import importlib.metadata as metadata
