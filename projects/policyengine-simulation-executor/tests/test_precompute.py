@@ -390,9 +390,7 @@ class TestWriterReaderContract:
             year=2026,
         )
         assert writer_identity.simulation_id == reader_id
-        assert writer_identity.store_path.endswith(
-            f"/{writer_identity.simulation_id}.h5"
-        )
+        assert writer_identity.store_path.endswith(f"/{writer_identity.storage_id}.h5")
 
     def test_dataset_filename_matches_runtime_stem_lookup(self, monkeypatch):
         """Real-manifest coverage: the artifact filename equals the exact

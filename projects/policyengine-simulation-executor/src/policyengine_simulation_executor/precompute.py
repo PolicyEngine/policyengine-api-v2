@@ -310,6 +310,14 @@ def _prepare_cohort_baseline(bucket: str, expected: BaselinePlanEntry):
             f"({expected.simulation_id} != {baseline.id}); refusing to act "
             "under a mismatched key."
         )
+    planned_storage_id = Path(expected.path).stem
+    storage_id = getattr(baseline, "storage_id", baseline.id)
+    if storage_id != planned_storage_id:
+        raise RuntimeError(
+            "Planned and in-container baseline storage ids disagree "
+            f"({planned_storage_id} != {storage_id}); refusing to act "
+            "under a mismatched key."
+        )
 
     # The extras economic_impact_analysis applies unconditionally before
     # ensure(); the artifact must carry them or every request would fail

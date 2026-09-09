@@ -1,4 +1,5 @@
 from pathlib import Path
+from importlib import import_module
 import sys
 
 original = Path(
@@ -9,6 +10,6 @@ exec(
     compile(original.read_text().split("import pytest\n", 1)[0], str(original), "exec"),
     namespace,
 )
-import pytest
+pytest = import_module("pytest")
 
 raise SystemExit(pytest.main(sys.argv[1:]))

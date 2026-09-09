@@ -33,7 +33,8 @@ logger = logging.getLogger(__name__)
 
 # Artifact outcomes reported via the `baseline_artifact` observability
 # attribute. "hit": loaded (disk or in-process cache) and complete;
-# "incomplete": loaded but missing requested columns -> recomputed;
+# "incomplete": loaded but missing requested columns or a valid SPM receipt
+# -> recomputed;
 # "miss": no artifact -> computed (today's behavior).
 OUTCOME_HIT = "hit"
 OUTCOME_INCOMPLETE = "incomplete"
@@ -179,30 +180,45 @@ class ArtifactBaselineSimulation(Simulation):
             self._artifact_outcome = outcome
 
     def ensure(self) -> None:
+        # The wrapper restores selection metadata on load/cache hits. Keep the
+        # request's selection so an invalid cached entry cannot replace it.
+        selection = getattr(self, "spm_config", None)
+        requested_spm = getattr(self, "spm", None)
         self._computed_this_process = False
         super().ensure()
         if self._computed_this_process:
             self._record_outcome(OUTCOME_MISS)
             return
 
+        from policyengine_simulation_contract.spm import SPMInputError
+
         from policyengine_simulation_executor.spm import simulation_spm_result
 
-        selection = getattr(self, "spm_config", None)
-        if selection is not None:
-            simulation_spm_result(
-                self, self, selection, expected_year=self.dataset.year
-            )
+        # A tax-only artifact can legitimately have no receipt years. Check its
+        # columns first, then treat unusable cached receipts as another gap.
         missing = self._missing_output_columns()
-        if not missing:
+        receipt_error = None
+        if not missing and selection is not None:
+            try:
+                simulation_spm_result(
+                    self, self, selection, expected_year=self.dataset.year
+                )
+            except SPMInputError as exc:
+                receipt_error = str(exc)
+        if not missing and receipt_error is None:
             self._record_outcome(OUTCOME_HIT)
             return
 
         logger.warning(
-            "Baseline artifact %s is missing output columns %s; recomputing",
+            "Baseline artifact %s is incomplete (missing columns=%s, "
+            "SPM receipt=%s); recomputing",
             self.id,
             missing,
+            receipt_error,
         )
         self._record_outcome(OUTCOME_INCOMPLETE)
+        if selection is not None:
+            setattr(self, "spm", requested_spm)
         self.run()
         self.save()
         # Replace the in-process cache entry so this request's second
