@@ -90,6 +90,32 @@ def test_missing_wrapper_does_not_certify_unknown_routes(
     assert mock_modal["func"].calls == []
 
 
+@pytest.mark.parametrize("endpoint,extra", ENDPOINTS)
+def test_legacy_seed_cannot_erase_future_wrapper_from_app_name(
+    mock_modal, client, endpoint, extra
+):
+    legacy_route(mock_modal, "legacy-seed", "1.715.2")
+    state = mock_modal["dicts"]["simulation-api-routing-state"]["active"]
+    state["routes"]["us"]["1.715.2"] = "policyengine-simulation-py99-0-0"
+    response = client.post(endpoint, json={"country": "us", **extra})
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
+    assert mock_modal["func"].calls == []
+
+
+@pytest.mark.parametrize("schema_version", [None, 2])
+def test_legacy_seed_requires_supported_registry_schema(
+    mock_modal, client, schema_version
+):
+    legacy_route(mock_modal, "legacy-seed", "1.715.2")
+    state = mock_modal["dicts"]["simulation-api-routing-state"]["active"]
+    state["schema_version"] = schema_version
+    response = client.post("/simulate/economy/comparison", json={"country": "us"})
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
+    assert mock_modal["func"].calls == []
+
+
 def shared_app_state(mock_modal, *, sibling_model):
     state = deepcopy(TEST_ROUTING_STATE)
     original = state["bundles"]["4.10.0"]
@@ -149,11 +175,12 @@ def test_shared_app_with_ambiguous_country_model_requires_explicit_bundle(
 
 
 @pytest.mark.parametrize("endpoint,extra", ENDPOINTS)
+@pytest.mark.parametrize("sibling_model", [None, "", "   ", 42])
 def test_shared_app_with_missing_model_metadata_is_ambiguous(
-    mock_modal, client, endpoint, extra
+    mock_modal, client, endpoint, extra, sibling_model
 ):
     state = shared_app_state(mock_modal, sibling_model="1.824.7")
-    del state["bundles"]["4.10.0"]["us"]["model_version"]
+    state["bundles"]["4.10.0"]["us"]["model_version"] = sibling_model
     response = client.post(
         endpoint, json={"country": "us", "version": "1.824.7", **extra}
     )
