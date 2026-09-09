@@ -9,6 +9,7 @@ The gateway app (policyengine-simulation-gateway) routes requests to these versi
 
 import modal
 import os
+import shlex
 from pathlib import Path
 
 from policyengine_observability import operation, set_attribute
@@ -73,6 +74,25 @@ SIMULATION_BUNDLE_DATA_DIR = os.environ.get(
 SIMULATION_BUNDLE_RECEIPT = (
     f"{SIMULATION_BUNDLE_DATA_DIR}/.policyengine-bundle-receipt.json"
 )
+BUNDLE_CONSTRAINTS_PATH = "/opt/policyengine/bundle-constraints.txt"
+# Retain old bundle selections when a new method gets its own reviewed file.
+# These include live historical routes, the existing image-smoke fixture,
+# and the released 5.3.0 bundle, whose US model is unchanged from 5.2.0.
+BUNDLE_CONSTRAINT_FILES = {
+    version: "bundle-constraints.txt"
+    for version in (
+        "4.18.3",
+        "4.18.5",
+        "4.18.7",
+        "4.18.8",
+        "4.18.9",
+        "4.19.1",
+        "4.20.3",
+        "4.22.0",
+        "5.2.0",
+        "5.3.0",
+    )
+}
 VERSION_ENV = {
     "POLICYENGINE_VERSION": POLICYENGINE_VERSION,
     "POLICYENGINE_CORE_VERSION": POLICYENGINE_CORE_VERSION,
@@ -158,9 +178,21 @@ def _deploy_time_artifact_inputs() -> tuple[str, dict | None]:
 _ARTIFACT_BUCKET, _DEPLOY_MANIFEST = _deploy_time_artifact_inputs()
 
 
+def bundle_constraints_file(policyengine_version: str) -> str:
+    try:
+        return BUNDLE_CONSTRAINT_FILES[policyengine_version]
+    except KeyError:
+        raise ValueError(
+            f"Bundle {policyengine_version} needs a reviewed calculator constraint; "
+            "add its selection without changing historical bundle selections."
+        ) from None
+
+
 def bundle_install_command(policyengine_version: str) -> str:
+    bundle_constraints_file(policyengine_version)
     return " ".join(
         [
+            f"PIP_CONSTRAINT={shlex.quote(BUNDLE_CONSTRAINTS_PATH)}",
             "uvx",
             "--from",
             f"policyengine=={policyengine_version}",
@@ -207,6 +239,16 @@ def build_runtime_simulation_image() -> modal.Image:
             uv_project_dir=_UV_PROJECT_DIR,
             frozen=True,
             extra_options="--only-group modal-simulation-image",
+        )
+        # The bundle installer invokes pip, which does not consult uv.lock.
+        # Copy the constraint into a build layer so historical bundles cannot
+        # resolve a newer, incompatible SPM calculator during a rebuild.
+        .add_local_file(
+            str(Path(_UV_PROJECT_DIR) / bundle_constraints_file(POLICYENGINE_VERSION))
+            if modal.is_local()
+            else BUNDLE_CONSTRAINTS_PATH,
+            BUNDLE_CONSTRAINTS_PATH,
+            copy=True,
         )
         .run_commands(
             bundle_install_command(POLICYENGINE_VERSION),
