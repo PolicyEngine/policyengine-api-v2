@@ -76,23 +76,6 @@ def normalized_compatibility_paths(spec: OpenAPIDocument) -> OpenAPIPathMap:
     return paths
 
 
-def without_spm_extensions(schemas):
-    schemas = deepcopy(schemas)
-    for name in list(schemas):
-        if name.startswith("SPM") or name == "SimulationErrorResponse":
-            schemas.pop(name)
-            continue
-        for field in (
-            "spm",
-            "spm_config",
-            "spm_provenance",
-            "errors",
-            "spm_capabilities",
-        ):
-            schemas[name].get("properties", {}).pop(field, None)
-    return schemas
-
-
 def test_canonical_spm_extensions_are_public():
     spec = create_app().openapi()
     schemas = spec["components"]["schemas"]
@@ -149,10 +132,8 @@ def test_normalized_contract_matches_old_gateway():
     ) == normalized_compatibility_paths(gateway_spec)
     cloud_run_schemas = deepcopy(cloud_run_spec["components"]["schemas"])
     cloud_run_schemas.pop("ReadinessResponse")
-    assert (
-        without_spm_extensions(cloud_run_schemas)
-        == gateway_spec["components"]["schemas"]
-    )
+    cloud_run_schemas.pop("SimulationErrorResponse")
+    assert cloud_run_schemas == gateway_spec["components"]["schemas"]
     gateway_operation_ids = operation_ids(gateway_spec)
     cloud_run_operation_ids = operation_ids(cloud_run_spec)
     assert {
