@@ -35,6 +35,8 @@ def precompute_module(monkeypatch):
         "POLICYENGINE_UK_VERSION",
     ):
         monkeypatch.setenv(env, "0.0.0-test")
+    # Image construction requires a reviewed bundle's calculator selection.
+    monkeypatch.setenv("POLICYENGINE_VERSION", "5.2.0")
     # A developer following the local-deploy instructions may have the
     # digest exported; importing src.modal.app must not reach for GCS.
     monkeypatch.delenv("POLICYENGINE_MANIFEST_DIGEST", raising=False)

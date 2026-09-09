@@ -1,7 +1,12 @@
 import importlib
+import json
+import os
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
+
+import pytest
 
 from fixtures.fake_modal import install_fake_modal
 
@@ -22,8 +27,23 @@ def test_modal_image_uses_policyengine_bundle_install(monkeypatch):
     assert command_calls
     command = command_calls[0][1][0]
     assert command.startswith(
+        "PIP_CONSTRAINT=/opt/policyengine/bundle-constraints.txt "
         "uvx --from policyengine==4.19.1 policyengine bundle install 4.19.1"
     )
+    constraint_call = next(
+        call for call in app.simulation_image.calls if call[0] == "add_local_file"
+    )
+    assert constraint_call[2] == "/opt/policyengine/bundle-constraints.txt"
+    assert constraint_call[3] == {"copy": True}
+    assert app.simulation_image.calls.index(constraint_call) < (
+        app.simulation_image.calls.index(command_calls[0])
+    )
+    constraints = Path(constraint_call[1]).read_text()
+    assert "spm-calculator==0.3.1" in constraints.splitlines()
+    project = tomllib.loads(
+        (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
+    )
+    assert "spm-calculator==0.3.1" in project["project"]["dependencies"]
     # The bundle installs into uv_sync's venv so locked packages and
     # bundled models share one environment.
     assert "--venv /.uv/.venv" in command
@@ -74,6 +94,76 @@ def test_modal_image_uses_policyengine_bundle_install(monkeypatch):
             app.hf_secret,
             app.logfire_secret,
         ]
+
+
+@pytest.mark.parametrize(
+    "version",
+    [
+        "4.18.3",
+        "4.18.5",
+        "4.18.7",
+        "4.18.8",
+        "4.18.9",
+        "4.19.1",
+        "4.20.3",
+        "4.22.0",
+        "5.2.0",
+        "5.3.0",
+    ],
+)
+def test_bundle_command_passes_constraints_to_child_installer(
+    monkeypatch, tmp_path, version
+):
+    """Historical bundle rebuilds must inherit the same pip constraint."""
+    install_fake_modal(monkeypatch)
+    monkeypatch.setenv("POLICYENGINE_VERSION", version)
+    monkeypatch.setenv("POLICYENGINE_CORE_VERSION", "3.30.1")
+    monkeypatch.setenv("POLICYENGINE_US_VERSION", "1.764.6")
+    monkeypatch.setenv("POLICYENGINE_UK_VERSION", "2.90.2")
+    sys.modules.pop("src.modal.app", None)
+    app = importlib.import_module("src.modal.app")
+    constraint_path = tmp_path / "bundle-constraints.txt"
+    constraint_path.write_text("spm-calculator==0.3.1\n")
+    monkeypatch.setattr(app, "BUNDLE_CONSTRAINTS_PATH", str(constraint_path))
+    executable = tmp_path / "uvx"
+    executable.write_text(
+        f"#!{sys.executable}\n"
+        "import json, os, pathlib, sys\n"
+        "print(json.dumps({'args': sys.argv[1:], 'constraints': "
+        "pathlib.Path(os.environ['PIP_CONSTRAINT']).read_text()}))\n"
+    )
+    executable.chmod(0o755)
+    env = {**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}"}
+    result = subprocess.run(
+        ["/bin/sh", "-c", app.bundle_install_command(version)],
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    output = json.loads(result.stdout)
+    assert output["constraints"] == "spm-calculator==0.3.1\n"
+    assert output["args"][:6] == [
+        "--from",
+        f"policyengine=={version}",
+        "policyengine",
+        "bundle",
+        "install",
+        version,
+    ]
+
+
+def test_unreviewed_bundle_cannot_inherit_legacy_calculator_constraint(monkeypatch):
+    """A new bundle needs an explicit reviewed calculator selection."""
+    install_fake_modal(monkeypatch)
+    monkeypatch.setenv("POLICYENGINE_VERSION", "5.2.0")
+    monkeypatch.setenv("POLICYENGINE_CORE_VERSION", "3.30.1")
+    monkeypatch.setenv("POLICYENGINE_US_VERSION", "1.764.6")
+    monkeypatch.setenv("POLICYENGINE_UK_VERSION", "2.90.2")
+    sys.modules.pop("src.modal.app", None)
+    app = importlib.import_module("src.modal.app")
+    with pytest.raises(ValueError, match="reviewed calculator constraint"):
+        app.bundle_install_command("unreviewed-future-bundle")
 
 
 def _fake_manifest():
