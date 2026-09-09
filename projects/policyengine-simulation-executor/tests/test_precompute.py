@@ -768,6 +768,15 @@ class TestComputeBaselineImpl:
             precompute.compute_baseline_impl("bucket-x", self._entry("bl1-other"))
         assert cohort_stubs.uploads == []
 
+    def test_refuses_a_mismatched_planned_storage_id(self, cohort_stubs):
+        entry = self._entry()
+        entry.path = "baselines/us/bl-d/bl1-cohort-spm-planned.h5"
+        with pytest.raises(RuntimeError, match="storage ids disagree"):
+            precompute.compute_baseline_impl("bucket-x", entry)
+        assert cohort_stubs.configured == []
+        assert cohort_stubs.uploads == []
+        assert not (cohort_stubs.folder / "bl1-cohort.h5").exists()
+
     def test_refuses_a_plain_simulation(self, cohort_stubs):
         cohort_stubs.baseline = SimpleNamespace(id="bl1-cohort")
         with pytest.raises(RuntimeError, match="plain Simulation"):
