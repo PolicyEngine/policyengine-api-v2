@@ -50,3 +50,37 @@ def test_explicit_national_discards_default_metro_area():
     resolved = resolve({"geography_kind": "national"})
     assert resolved["geography_kind"] == "national"
     assert resolved["geography_id"] is None
+
+
+@pytest.mark.parametrize(
+    "provenance,wrapper,model,accepted",
+    [
+        ("legacy-country-dict", None, "1.500.0", True),
+        ("legacy-seed", None, "1.715.2", True),
+        ("legacy-seed", None, "1.764.6", True),
+        (None, None, "1.715.2", False),
+        ("unknown", None, "1.715.2", False),
+        ("legacy-seed", None, "1.764.7", False),
+        ("legacy-seed", None, "unknown", False),
+        ("legacy-country-dict", "5.3.1", "1.715.2", False),
+    ],
+)
+def test_legacy_allowance_requires_route_provenance_and_historical_model(
+    provenance, wrapper, model, accepted
+):
+    kwargs = dict(
+        capability=None,
+        policyengine_version=wrapper,
+        model_version=model,
+        route_provenance=provenance,
+    )
+    if accepted:
+        assert resolve_spm_selection("us", None, **kwargs) is None
+    else:
+        with pytest.raises(SPMInputError) as error:
+            resolve_spm_selection("us", None, **kwargs)
+        assert error.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
+    for selection in ({}, {"geography_kind": "national"}):
+        with pytest.raises(SPMInputError) as error:
+            resolve_spm_selection("us", selection, **kwargs)
+        assert error.value.code == "SPM_CONFIGURATION_UNAVAILABLE"

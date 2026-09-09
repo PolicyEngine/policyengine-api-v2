@@ -26,6 +26,7 @@ from policyengine_simulation_contract.budget_window_state import (
 from policyengine_simulation_gateway.auth import require_auth
 from policyengine_simulation_contract.spm import (
     SPMCapability,
+    SPMInputError,
     spm_error_detail,
     resolve_spm_selection,
 )
@@ -81,6 +82,7 @@ class RouteResolution:
     response_version: str
     policyengine_version: str | None
     bundle_manifest: dict
+    route_provenance: str | None = None
 
 
 def _job_metadata_store():
@@ -343,22 +345,51 @@ def _bundle_manifest(state: dict, policyengine_version: str | None) -> dict:
     return manifest if isinstance(manifest, dict) else {}
 
 
-def _policyengine_version_for_app(state: dict, app_name: str) -> str | None:
-    for policyengine_version, routed_app in _routing_state_routes(
-        state, "policyengine"
-    ).items():
-        if routed_app == app_name:
-            return (
-                policyengine_version if isinstance(policyengine_version, str) else None
-            )
-
-    for policyengine_version, manifest in _routing_state_bundles(state).items():
-        if isinstance(manifest, dict) and manifest.get("app_name") == app_name:
-            return (
-                policyengine_version if isinstance(policyengine_version, str) else None
-            )
-
-    return None
+def _policyengine_version_for_app(
+    state: dict, app_name: str, *, country: str, model_version: str
+) -> str | None:
+    candidates = {
+        version
+        for version, routed_app in _routing_state_routes(state, "policyengine").items()
+        if isinstance(version, str) and version != "latest" and routed_app == app_name
+    } | {
+        version
+        for version, manifest in _routing_state_bundles(state).items()
+        if isinstance(version, str)
+        and version != "latest"
+        and isinstance(manifest, dict)
+        and manifest.get("app_name") == app_name
+    }
+    matching = []
+    unclassified = []
+    for version in candidates:
+        manifest = _bundle_manifest(state, version)
+        country_bundle = manifest.get(country)
+        if (
+            isinstance(country_bundle, dict)
+            and country_bundle.get("model_version") == model_version
+        ):
+            matching.append(version)
+        elif not isinstance(country_bundle, dict) or not isinstance(
+            country_bundle.get("model_version"), str
+        ):
+            unclassified.append(version)
+    if len(matching) == 1 and not unclassified:
+        return matching[0]
+    if len(candidates) > 1:
+        raise ValueError(
+            f"Ambiguous bundle for {country} version {model_version}; pass "
+            "policyengine_version to select a bundle explicitly"
+        )
+    if not candidates:
+        return None
+    version = next(iter(candidates))
+    _validate_legacy_version_matches_bundle(
+        country=country,
+        requested_version=model_version,
+        manifest=_bundle_manifest(state, version),
+    )
+    return version
 
 
 def _policyengine_version_from_app_name(app_name: str) -> str | None:
@@ -397,12 +428,17 @@ def _resolve_country_route(
     app_name = _routing_state_routes(state, country).get(version)
     if not isinstance(app_name, str):
         return None
-    policyengine_version = _policyengine_version_for_app(state, app_name)
+    policyengine_version = _policyengine_version_for_app(
+        state, app_name, country=country, model_version=version
+    )
     return RouteResolution(
         app_name=app_name,
         response_version=version,
         policyengine_version=policyengine_version,
         bundle_manifest=_bundle_manifest(state, policyengine_version),
+        route_provenance=(
+            "legacy-seed" if state.get("generation") == "legacy-seed" else None
+        ),
     )
 
 
@@ -539,6 +575,7 @@ def _resolve_from_legacy_dicts(
         response_version=resolved_version,
         policyengine_version=_policyengine_version_from_app_name(app_name),
         bundle_manifest={},
+        route_provenance="legacy-country-dict",
     )
 
 
@@ -573,6 +610,15 @@ def _build_policyengine_bundle(
     policyengine_version = app_bundle.get(
         "policyengine_version", resolution.policyengine_version
     )
+    capability = app_bundle.get("spm") if country.lower() == "us" else None
+    if capability is not None:
+        try:
+            capability = SPMCapability.model_validate(capability)
+        except ValueError as exc:
+            raise SPMInputError(
+                "SPM_CONFIGURATION_UNAVAILABLE",
+                "This worker bundle has invalid canonical SPM capability metadata",
+            ) from exc
     return PolicyEngineBundle(
         model_version=str(model_version),
         policyengine_version=(
@@ -580,17 +626,18 @@ def _build_policyengine_bundle(
         ),
         data_version=str(data_version) if isinstance(data_version, str) else None,
         dataset=resolved_dataset,
-        spm=app_bundle.get("spm") if country.lower() == "us" else None,
+        spm=capability,
     )
 
 
-def _resolve_request_spm(request, bundle):
+def _resolve_request_spm(request, bundle, route):
     selection = resolve_spm_selection(
         request.country,
         request.spm,
         capability=bundle.spm,
         policyengine_version=bundle.policyengine_version,
         model_version=bundle.model_version,
+        route_provenance=route.route_provenance,
     )
     if selection is not None:
         from policyengine_simulation_contract.spm import SPMSelection
@@ -717,7 +764,7 @@ async def submit_simulation(request: SimulationRequest):
                 route,
                 payload,
             )
-        _resolve_request_spm(request, bundle)
+        _resolve_request_spm(request, bundle, route)
     except (ValueError, HuggingFaceDatasetReferenceError) as exc:
         detail = spm_error_detail(exc)
         if detail:
@@ -798,7 +845,7 @@ async def submit_budget_window_batch(request: BudgetWindowBatchRequest):
                 route,
                 request.model_dump(mode="json"),
             )
-        _resolve_request_spm(request, bundle)
+        _resolve_request_spm(request, bundle, route)
     except (ValueError, HuggingFaceDatasetReferenceError) as exc:
         detail = spm_error_detail(exc)
         if detail:
@@ -998,12 +1045,16 @@ async def list_versions() -> VersionsResponse:
     with segment(SegmentName.ROUTE_RESOLUTION):
         state = _active_routing_state()
     if state:
+        capabilities = {}
+        for name, bundle in _routing_state_bundles(state).items():
+            if not isinstance(bundle, dict) or bundle.get("spm") is None:
+                continue
+            try:
+                capabilities[name] = SPMCapability.model_validate(bundle["spm"])
+            except ValueError:
+                logger.warning("Omitting invalid SPM capability for bundle %s", name)
         return VersionsResponse(
-            spm_capabilities={
-                name: SPMCapability.model_validate(bundle["spm"])
-                for name, bundle in state.get("bundles", {}).items()
-                if isinstance(bundle, dict) and bundle.get("spm") is not None
-            },
+            spm_capabilities=capabilities,
             policyengine=_version_map_from_state(state, "policyengine"),
             us=_version_map_from_state(state, "us"),
             uk=_version_map_from_state(state, "uk"),

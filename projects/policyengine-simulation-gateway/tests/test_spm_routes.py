@@ -23,6 +23,7 @@ ENDPOINTS = [
 def legacy_route(mock_modal, source, model_version):
     app_name = "policyengine-simulation-us1-715-2-uk2-88-20"
     if source == "legacy-country-dict":
+        app_name = "legacy-app"
         del mock_modal["dicts"]["simulation-api-routing-state"]
         mock_modal["dicts"]["simulation-api-us-versions"] = {
             "latest": model_version,
@@ -63,9 +64,7 @@ def test_historical_route_rejects_any_explicit_spm(
     mock_modal, client, endpoint, extra, source, selection
 ):
     legacy_route(mock_modal, source, "1.715.2")
-    response = client.post(
-        endpoint, json={"country": "us", "spm": selection, **extra}
-    )
+    response = client.post(endpoint, json={"country": "us", "spm": selection, **extra})
     assert response.status_code == 400
     assert response.json()["errors"][0]["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
     assert mock_modal["func"].calls == []
@@ -120,6 +119,16 @@ def test_shared_app_resolves_unique_country_model_bundle(
     assert mock_modal["func"].last_payload["spm"]["scenario"] == "ce_trend"
 
 
+def test_latest_route_alias_does_not_create_ambiguous_bundle(mock_modal, client):
+    state = shared_app_state(mock_modal, sibling_model="1.824.7")
+    state["routes"]["policyengine"]["latest"] = state["routes"]["policyengine"]["5.3.0"]
+    response = client.post(
+        "/simulate/economy/comparison", json={"country": "us", "version": "1.824.7"}
+    )
+    assert response.status_code == 200
+    assert response.json()["policyengine_bundle"]["policyengine_version"] == "5.3.0"
+
+
 @pytest.mark.parametrize("endpoint,extra", ENDPOINTS)
 def test_shared_app_with_ambiguous_country_model_requires_explicit_bundle(
     mock_modal, client, endpoint, extra
@@ -139,13 +148,34 @@ def test_shared_app_with_ambiguous_country_model_requires_explicit_bundle(
     assert mock_modal["func"].last_payload["spm"]["scenario"] == "ce_trend"
 
 
-def test_versions_omits_malformed_capability_and_submission_rejects_it(
-    mock_modal, client
+@pytest.mark.parametrize("endpoint,extra", ENDPOINTS)
+def test_shared_app_with_missing_model_metadata_is_ambiguous(
+    mock_modal, client, endpoint, extra
 ):
     state = shared_app_state(mock_modal, sibling_model="1.824.7")
-    state["bundles"]["4.10.0"]["spm"] = {
-        "contract_version": "canonical-spm-v1", "defaults": {"scenario": "ce_trend"}
-    }
+    del state["bundles"]["4.10.0"]["us"]["model_version"]
+    response = client.post(
+        endpoint, json={"country": "us", "version": "1.824.7", **extra}
+    )
+    assert response.status_code == 400
+    assert "policyengine_version" in response.json()["detail"]
+    assert mock_modal["func"].calls == []
+
+
+@pytest.mark.parametrize(
+    "invalid_capability",
+    [
+        {"contract_version": "canonical-spm-v1", "defaults": {"scenario": "ce_trend"}},
+        {**CAPABILITY, "contract_version": "unknown-contract"},
+        {**CAPABILITY, "undeclared": True},
+        {"defaults": {**CAPABILITY["defaults"], "geography_kind": "metro"}},
+    ],
+)
+def test_versions_omits_malformed_capability_and_submission_rejects_it(
+    mock_modal, client, invalid_capability
+):
+    state = shared_app_state(mock_modal, sibling_model="1.824.7")
+    state["bundles"]["4.10.0"]["spm"] = invalid_capability
     response = client.get("/versions")
     assert response.status_code == 200
     assert set(response.json()["spm_capabilities"]) == {"5.3.0"}
@@ -154,4 +184,5 @@ def test_versions_omits_malformed_capability_and_submission_rejects_it(
         json={"country": "us", "policyengine_version": "4.10.0"},
     )
     assert rejected.status_code == 400
+    assert rejected.json()["errors"][0]["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
     assert mock_modal["func"].calls == []

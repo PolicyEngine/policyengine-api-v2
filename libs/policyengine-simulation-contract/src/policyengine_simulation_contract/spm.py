@@ -62,6 +62,10 @@ class SPMSelection(BaseModel):
 
     @model_validator(mode="after")
     def validate_location(self):
+        # Request options inherit bundle defaults. Validate coupled options
+        # once both are explicit (including after defaults are resolved).
+        if not {"geography_kind", "geography_id"} <= self.model_fields_set:
+            return self
         if self.geography_kind == "metro":
             if not self.geography_id or not self.geography_id.strip():
                 raise ValueError("An SPM area selection requires geography_id")
@@ -93,6 +97,7 @@ SPM_ERROR_CODES = frozenset(
         "SPM_GEOGRAPHY_UNAVAILABLE",
         "SPM_COMPOSITION_REQUIRED",
         "SPM_YEAR_UNAVAILABLE",
+        "SPM_SCENARIO_UNAVAILABLE",
         "SPM_CONFIGURATION_UNAVAILABLE",
         "SPM_SETTINGS_INVALID",
     }
@@ -158,7 +163,13 @@ class SPMComparisonProvenance(BaseModel):
 
 
 def resolve_spm_selection(
-    country, selection, *, capability, policyengine_version, model_version
+    country,
+    selection,
+    *,
+    capability,
+    policyengine_version,
+    model_version,
+    route_provenance=None,
 ):
     """Resolve only certified metadata; unrecognized future bundles fail closed."""
     if country.lower() != "us":
@@ -178,6 +189,17 @@ def resolve_spm_selection(
         )
         historical = historical or (
             policyengine_version in {"5.2.0", "5.3.0"} and model_version == "1.764.6"
+        )
+        # Country-only routes seeded from the original registry may have no
+        # wrapper version. Require both their actual route provenance and a
+        # pre-canonical US model; absence of capability alone proves nothing.
+        model_parts = str(model_version or "").split(".")
+        historical = historical or (
+            policyengine_version is None
+            and route_provenance in {"legacy-country-dict", "legacy-seed"}
+            and len(model_parts) == 3
+            and all(re.fullmatch(r"[0-9]+", p) for p in model_parts)
+            and tuple(map(int, model_parts)) <= (1, 764, 6)
         )
         if selection is None and historical:
             return None
