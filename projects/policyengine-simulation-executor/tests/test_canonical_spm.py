@@ -250,7 +250,12 @@ def test_year_alias_is_validated_before_dataset_loading(monkeypatch):
 
 @pytest.mark.parametrize(
     "code",
-    ["SPM_GEOGRAPHY_REQUIRED", "SPM_GEOGRAPHY_UNAVAILABLE", "SPM_COMPOSITION_REQUIRED"],
+    [
+        "SPM_GEOGRAPHY_REQUIRED",
+        "SPM_GEOGRAPHY_UNAVAILABLE",
+        "SPM_COMPOSITION_REQUIRED",
+        "SPM_YEAR_UNAVAILABLE",
+    ],
 )
 def test_actual_http_formula_error_contract(monkeypatch, code):
     error = SPMInputError(code, "Explicit input is required")
@@ -390,7 +395,12 @@ def test_identity_errors_do_not_degrade_to_an_unidentified_baseline(monkeypatch)
 
 @pytest.mark.parametrize(
     "code",
-    ["SPM_GEOGRAPHY_REQUIRED", "SPM_GEOGRAPHY_UNAVAILABLE", "SPM_COMPOSITION_REQUIRED"],
+    [
+        "SPM_GEOGRAPHY_REQUIRED",
+        "SPM_GEOGRAPHY_UNAVAILABLE",
+        "SPM_COMPOSITION_REQUIRED",
+        "SPM_YEAR_UNAVAILABLE",
+    ],
 )
 def test_gateway_poll_returns_structured_400(monkeypatch, code):
     from policyengine_simulation_gateway import endpoints
@@ -515,7 +525,12 @@ def test_budget_window_state_keeps_typed_failure_on_replay():
 
 @pytest.mark.parametrize(
     "code",
-    ["SPM_GEOGRAPHY_REQUIRED", "SPM_GEOGRAPHY_UNAVAILABLE", "SPM_COMPOSITION_REQUIRED"],
+    [
+        "SPM_GEOGRAPHY_REQUIRED",
+        "SPM_GEOGRAPHY_UNAVAILABLE",
+        "SPM_COMPOSITION_REQUIRED",
+        "SPM_YEAR_UNAVAILABLE",
+    ],
 )
 def test_country_error_is_transportable_without_country_package(monkeypatch, code):
     from contextlib import nullcontext
@@ -539,7 +554,12 @@ def test_country_error_is_transportable_without_country_package(monkeypatch, cod
 
 @pytest.mark.parametrize(
     "code",
-    ["SPM_GEOGRAPHY_REQUIRED", "SPM_GEOGRAPHY_UNAVAILABLE", "SPM_COMPOSITION_REQUIRED"],
+    [
+        "SPM_GEOGRAPHY_REQUIRED",
+        "SPM_GEOGRAPHY_UNAVAILABLE",
+        "SPM_COMPOSITION_REQUIRED",
+        "SPM_YEAR_UNAVAILABLE",
+    ],
 )
 def test_optional_analysis_does_not_swallow_spm_input_errors(code):
     from policyengine_simulation_executor.simulation_output_common import (
