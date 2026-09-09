@@ -1,0 +1,54 @@
+{
+  "executor": {
+    "current": {
+      "filesAnalyzed": 43,
+      "errorCount": 145,
+      "warningCount": 0,
+      "informationCount": 0,
+      "timeInSec": 2.096
+    },
+    "base": {
+      "filesAnalyzed": 43,
+      "errorCount": 145,
+      "warningCount": 0,
+      "informationCount": 0,
+      "timeInSec": 1.352
+    },
+    "new_diagnostics": []
+  },
+  "gateway": {
+    "current": {
+      "filesAnalyzed": 8,
+      "errorCount": 78,
+      "warningCount": 0,
+      "informationCount": 0,
+      "timeInSec": 0.997
+    },
+    "base": {
+      "filesAnalyzed": 8,
+      "errorCount": 78,
+      "warningCount": 0,
+      "informationCount": 0,
+      "timeInSec": 0.684
+    },
+    "new_diagnostics": []
+  },
+  "contract": {
+    "current": {
+      "filesAnalyzed": 8,
+      "errorCount": 0,
+      "warningCount": 0,
+      "informationCount": 0,
+      "timeInSec": 0.741
+    }
+  },
+  "entry": {
+    "current": {
+      "filesAnalyzed": 7,
+      "errorCount": 0,
+      "warningCount": 0,
+      "informationCount": 0,
+      "timeInSec": 0.767
+    }
+  }
+}
