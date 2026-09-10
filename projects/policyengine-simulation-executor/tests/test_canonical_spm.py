@@ -597,8 +597,11 @@ def test_optional_analysis_does_not_swallow_spm_input_errors(code):
     )
 
 
-def test_explicit_null_as_of_survives_entrypoint_and_budget_parent():
-    from policyengine_simulation_entry.app import _model_json
+@pytest.mark.parametrize(
+    "date_fields,expected_as_of",
+    [({"as_of": None}, None), ({}, "2026-01-01")],
+)
+def test_as_of_presence_survives_budget_parent(date_fields, expected_as_of):
     from policyengine_simulation_gateway.endpoints import (
         _resolve_request_spm,
         _build_budget_window_parent_payload,
@@ -610,12 +613,8 @@ def test_explicit_null_as_of_survives_entrypoint_and_budget_parent():
         region="us",
         start_year="2026",
         window_size=2,
-        spm={"geography_kind": "national", "as_of": None},
+        spm={"geography_kind": "national", **date_fields},
     )
-    entry_payload = _model_json(request)
-    assert "as_of" in entry_payload["spm"]
-    assert "forecast_content_sha256" not in entry_payload["spm"]
-    request = BudgetWindowBatchRequest.model_validate(entry_payload)
     bundle = PolicyEngineBundle(
         model_version="test",
         policyengine_version="test",
@@ -627,7 +626,7 @@ def test_explicit_null_as_of_survives_entrypoint_and_budget_parent():
     selection = _resolve_request_spm(
         request, bundle, SimpleNamespace(route_provenance=None)
     )
-    assert selection["as_of"] is None
+    assert selection["as_of"] == expected_as_of
     parent = _build_budget_window_parent_payload(
         request, resolved_version="test", resolved_app_name="test", bundle=bundle
     )

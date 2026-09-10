@@ -358,3 +358,30 @@ def test_upstream_error_status_and_body_are_preserved(client, backend, status_co
     assert result.json() == {"detail": "upstream response"}
     assert result.headers[REQUEST_ID_HEADER] == "request-upstream-error"
     assert "x-request-id" not in result.headers
+
+
+@pytest.mark.parametrize(
+    "path,extra",
+    [
+        ("/simulate/economy/comparison", {}),
+        (
+            "/simulate/economy/budget-window",
+            {"region": "us", "start_year": "2026", "window_size": 2},
+        ),
+    ],
+)
+@pytest.mark.parametrize("date_fields", [{"as_of": None}, {}])
+def test_submission_preserves_spm_field_presence(
+    client, backend, path, extra, date_fields
+):
+    selection = {"geography_kind": "national", **date_fields}
+
+    result = client.post(path, json={"country": "us", "spm": selection, **extra})
+
+    assert result.status_code == 200
+    forwarded = backend.requests[-1]
+    assert forwarded.method == "POST"
+    assert forwarded.path == path
+    # Explicit null clears the downstream bundle cutoff; an omitted date inherits it.
+    # Other omitted fields must remain absent so bundle defaults can fill them.
+    assert forwarded.json_body["spm"] == selection
