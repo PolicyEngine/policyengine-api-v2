@@ -68,8 +68,9 @@ def test_worker_baseline_reform_national_local_cache_and_receipts(
     replay.ensure()
     assert replay.spm_provenance() == baseline.spm_provenance()
     # A shared caller id cannot reuse national output for county selection.
+    local_params = {**params, "spm": {"geography_kind": "county"}}
     local = _build_simulation(
-        {**params, "spm": {"geography_kind": "county"}},
+        local_params,
         dataset=native_dataset,
         policy=None,
         region_code="us",
@@ -78,6 +79,21 @@ def test_worker_baseline_reform_national_local_cache_and_receipts(
     assert local.storage_id != baseline.storage_id
     local.ensure()
     assert local.spm_provenance()["geography_kind"] == "county"
+
+    # The precompute guard compares the planner's storage id against this
+    # wrapper property and refuses to publish on a mismatch, so agreement is
+    # what makes any canonical artifact publishable. Hermetic CI can only
+    # check our side against the wrapper's expression transcribed into
+    # test_artifact_keys; this is the same claim against the real wrapper.
+    from policyengine_simulation_executor.artifact_keys import canonical_digest
+    from policyengine_simulation_executor.spm import normalize_runtime_spm
+
+    for simulation, request in ((baseline, params), (local, local_params)):
+        resolved = normalize_runtime_spm(request)
+        assert simulation.spm_config == resolved
+        assert simulation.storage_id == (
+            f"{simulation.id}-spm-{canonical_digest(resolved)}"
+        )
 
 
 def test_native_state_only_worker_requires_geography_and_explicit_national_works(
