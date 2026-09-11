@@ -6,8 +6,9 @@ Base: `main` = `414c631d622f5f587eedd187296a80182a923db2`
 
 ## State
 
-All nine review findings are addressed. Suites green locally; pushing to
-the PR branch next.
+All nine review findings are addressed, and an adversarial re-audit of the
+eight already-closed ones found three claims that only held because nothing
+tested them; those are closed too (`fd869e7`). Suites green locally.
 
 ## Findings checklist
 
@@ -67,6 +68,22 @@ the PR branch next.
   prevalidation are memoized on the installed image and on the resolved
   selection plus year range. Neither cache keeps exceptions, so fail-closed
   is unchanged, and the executor suite clears both around every test.
+
+## Re-audit pass (`fd869e7`)
+
+- The skipped `test_spm_arm_matches_the_installed_wrapper` claimed it would
+  self-activate on a canonical pin. It would have raised instead: that
+  wrapper's `spm_config` refuses a non-US model version. It now supplies
+  the model version and the bundle the property re-resolves through.
+- The precompute write-path test restated the identity's expression by
+  hand, so three mutations of the real `storage_id` left the precompute
+  suite green. It now builds a real `BaselineArtifactIdentity`; all three
+  fail it.
+- The scheduler's typed branches ran only at `max_parallel=1`, so the early
+  return and the state write were both unpinned. Two cases now cover them.
+- Agreement with the real wrapper is recorded, not just transcribed: eight
+  selection shapes resolve to the same config and storage id through the
+  qualification lane's 5.3.0 wheel and through this repo.
 
 ## Not changed, deliberately
 
