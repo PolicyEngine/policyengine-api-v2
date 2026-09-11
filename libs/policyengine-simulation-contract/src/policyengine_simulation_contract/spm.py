@@ -8,6 +8,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    SerializationInfo,
     SerializerFunctionWrapHandler,
     field_validator,
     model_serializer,
@@ -44,11 +45,33 @@ class SPMSelection(BaseModel):
     as_of: Optional[str] = None
 
     @model_serializer(mode="wrap")
-    def serialize_selection(self, handler: SerializerFunctionWrapHandler):
-        """Preserve inherited options through ordinary and nested JSON."""
+    def serialize_selection(
+        self, handler: SerializerFunctionWrapHandler, info: SerializationInfo
+    ):
+        """Preserve inherited options through ordinary and nested JSON.
+
+        Presence is the contract: an omitted option inherits the bundle
+        default, so an option explicitly selected as null has to stay on the
+        wire. ``exclude_none`` would otherwise turn a completed result's
+        resolved selection back into a partial request, and the poll routes
+        apply it to every body via ``response_model_exclude_none``.
+        """
+        dumped = handler(self)
+        if info.exclude_none:
+            excluded = info.exclude or frozenset()
+            dumped = {
+                name: dumped.get(name)
+                for name in type(self).model_fields
+                if name in dumped
+                or (
+                    name in self.model_fields_set
+                    and name not in excluded
+                    and getattr(self, name) is None
+                )
+            }
         return {
             name: value
-            for name, value in handler(self).items()
+            for name, value in dumped.items()
             if name in self.model_fields_set
         }
 

@@ -653,6 +653,19 @@ def _resolve_request_spm(request, bundle, route):
     return selection
 
 
+def _bundle_payload(bundle: PolicyEngineBundle, **dump_kwargs) -> dict:
+    """Dump a bundle, omitting ``spm`` when the route has no capability.
+
+    The 202 and 500 job bodies splat this dict in directly, bypassing the
+    routes' ``response_model_exclude_none``. Every other optional bundle
+    field was already emitted as an explicit null before canonical SPM, so
+    only the new key is dropped: a legacy no-SPM body stays byte-identical.
+    """
+    return bundle.model_dump(
+        exclude=None if bundle.spm is not None else {"spm"}, **dump_kwargs
+    )
+
+
 def _serialize_job_metadata(
     resolved_app_name: str,
     bundle: PolicyEngineBundle,
@@ -660,7 +673,7 @@ def _serialize_job_metadata(
 ) -> dict:
     return {
         "resolved_app_name": resolved_app_name,
-        "policyengine_bundle": bundle.model_dump(),
+        "policyengine_bundle": _bundle_payload(bundle),
         "run_id": run_id,
     }
 
@@ -685,7 +698,7 @@ def _build_budget_window_parent_payload(
     payload["_metadata"] = {
         "resolved_version": resolved_version,
         "resolved_app_name": resolved_app_name,
-        "policyengine_bundle": bundle.model_dump(mode="json"),
+        "policyengine_bundle": _bundle_payload(bundle, mode="json"),
     }
     return payload
 
