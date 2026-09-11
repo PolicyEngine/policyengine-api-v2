@@ -261,6 +261,192 @@ def test_year_alias_is_validated_before_dataset_loading(monkeypatch):
     assert year_metadata.call_args.args == (2040,)
 
 
+class TestResolutionIsNotRepeatedWork:
+    """One request resolves its selection about six times; pay once.
+
+    ``_run_simulation_impl_core`` normalizes, ``_build_simulation``
+    normalizes again, and the baseline and dataset identity collectors
+    normalize once each. Every one of those re-read the installed
+    capability and built a throwaway ``PolicyEngineSPMProvider`` to
+    prevalidate the years. The installed image cannot change under a
+    running container, and the prevalidation reads nothing but the
+    selection and the year range, so both are now memoized -- these cases
+    fix what that must and must not change.
+    """
+
+    @staticmethod
+    def _stub_bundle(monkeypatch):
+        from policyengine_simulation_executor import release_bundle
+
+        monkeypatch.setattr(
+            release_bundle,
+            "get_country_release_bundle",
+            lambda country: SimpleNamespace(
+                policyengine_version="test", model_version="test"
+            ),
+        )
+
+    @staticmethod
+    def _stub_provider(monkeypatch, capability=CAPABILITY):
+        """Count the two pieces of work a resolution repeats."""
+        import policyengine_simulation_executor.spm as spm
+
+        year_metadata = Mock(return_value={})
+        constructions = Mock(
+            side_effect=lambda *a, **k: SimpleNamespace(year_metadata=year_metadata)
+        )
+        monkeypatch.setattr(spm, "runtime_spm_capability", lambda: capability)
+        monkeypatch.setattr(spm, "_forecast", lambda sha: object())
+        monkeypatch.setitem(
+            sys.modules,
+            "spm_calculator.policyengine_adapter",
+            SimpleNamespace(PolicyEngineSPMProvider=constructions),
+        )
+        return SimpleNamespace(
+            constructions=constructions, year_metadata=year_metadata, spm=spm
+        )
+
+    def test_one_selection_and_year_range_prevalidates_once(self, monkeypatch):
+        self._stub_bundle(monkeypatch)
+        stubs = self._stub_provider(monkeypatch)
+        request = {"country": "us", "time_period": "2026", "spm": SELECTION}
+
+        resolutions = [stubs.spm.normalize_runtime_spm(request) for _ in range(6)]
+
+        assert resolutions == [SELECTION] * 6
+        assert stubs.constructions.call_count == 1
+        assert stubs.year_metadata.call_count == 1
+
+        # The key is the selection and the range, so neither can be served
+        # the other's answer.
+        stubs.spm.normalize_runtime_spm({**request, "time_period": "2027"})
+        assert stubs.constructions.call_count == 2
+        stubs.spm.normalize_runtime_spm(
+            {**request, "spm": {**SELECTION, "scenario": "zero_real"}}
+        )
+        assert stubs.constructions.call_count == 3
+        stubs.spm.normalize_runtime_spm({**request, "window_size": 2})
+        assert stubs.constructions.call_count == 4
+        # One year each for the three single-year ranges, two for the window.
+        assert stubs.year_metadata.call_count == 5
+
+        stubs.spm.reset_spm_runtime_caches()
+        stubs.spm.normalize_runtime_spm(request)
+        assert stubs.constructions.call_count == 5
+
+    def test_a_rejected_selection_is_rejected_every_time(self, monkeypatch):
+        """Fail-closed cannot be weakened by a cache: exceptions are not kept."""
+        self._stub_bundle(monkeypatch)
+        stubs = self._stub_provider(monkeypatch)
+        stubs.year_metadata.side_effect = SPMInputError(
+            "SPM_YEAR_UNAVAILABLE", "2040 is unavailable"
+        )
+        request = {"country": "us", "time_period": "2040", "spm": SELECTION}
+
+        for _ in range(3):
+            with pytest.raises(SPMInputError) as error:
+                stubs.spm.normalize_runtime_spm(request)
+            assert error.value.code == "SPM_YEAR_UNAVAILABLE"
+        assert stubs.constructions.call_count == 3
+
+    def test_an_unusable_year_does_not_mask_the_selection(self, monkeypatch):
+        """The order the memo had to preserve.
+
+        The year range used to be parsed between the provider's construction
+        and its first use, so a selection the provider itself rejects was
+        reported as such even when the year was unusable. The memo is keyed
+        on the range, so the range has to be parsed first; an empty range
+        keeps the old order for the one request where it differs.
+        """
+        self._stub_bundle(monkeypatch)
+        stubs = self._stub_provider(monkeypatch)
+        stubs.constructions.side_effect = ValueError(
+            "Unknown forecast scenario: made-up"
+        )
+        unusable = {"country": "us", "time_period": "2026-01", "spm": SELECTION}
+
+        with pytest.raises(SPMInputError) as error:
+            stubs.spm.normalize_runtime_spm(unusable)
+        assert error.value.code == "SPM_SCENARIO_UNAVAILABLE"
+        assert stubs.year_metadata.call_count == 0
+
+        with pytest.raises(SPMInputError) as error:
+            stubs.spm.normalize_runtime_spm({**unusable, "time_period": "2026"})
+        assert error.value.code == "SPM_SCENARIO_UNAVAILABLE"
+
+    def test_an_unusable_year_alone_is_a_settings_error(self, monkeypatch):
+        self._stub_bundle(monkeypatch)
+        stubs = self._stub_provider(monkeypatch)
+
+        with pytest.raises(SPMInputError) as error:
+            stubs.spm.normalize_runtime_spm(
+                {"country": "us", "time_period": "2026-01", "spm": SELECTION}
+            )
+        assert error.value.code == "SPM_SETTINGS_INVALID"
+        assert stubs.constructions.call_count == 1
+        assert stubs.year_metadata.call_count == 0
+
+    def test_collecting_a_baseline_identity_prevalidates_once(self, monkeypatch):
+        """The repeat the review counted, through the real collectors.
+
+        ``collect_baseline_identity`` normalizes the request's selection and
+        then ``collect_dataset_identity`` normalizes the bundle's default for
+        the same year. When both resolve to the same selection that is one
+        prevalidation for the pair, and repeating the collection -- as a
+        request does -- adds none.
+        """
+        from fixtures.identity_stubs import install_identity_stubs
+
+        install_identity_stubs(monkeypatch)
+        stubs = self._stub_provider(monkeypatch)
+
+        first = artifact_keys.collect_baseline_identity(
+            "us", 2026, region="us", scope_key=None, spm={"geography_kind": "national"}
+        )
+        assert first.spm == SELECTION
+        assert stubs.constructions.call_count == 1
+
+        second = artifact_keys.collect_baseline_identity(
+            "us", 2026, region="us", scope_key=None, spm={"geography_kind": "national"}
+        )
+        assert second.storage_id == first.storage_id
+        assert stubs.constructions.call_count == 1
+
+        # A request that differs from the bundle default still resolves both.
+        county = artifact_keys.collect_baseline_identity(
+            "us", 2026, region="us", scope_key=None, spm={"geography_kind": "county"}
+        )
+        assert county.storage_id != first.storage_id
+        assert stubs.constructions.call_count == 2
+
+    def test_the_installed_capability_is_read_once(self, monkeypatch):
+        import policyengine.bundle
+        import policyengine_simulation_executor.spm as spm
+
+        reads = Mock(return_value={"measurements": {}})
+        monkeypatch.setattr(policyengine.bundle, "get_current_bundle", reads)
+
+        assert [spm.runtime_spm_capability() for _ in range(4)] == [None] * 4
+        assert reads.call_count == 1
+
+        spm.reset_spm_runtime_caches()
+        assert spm.runtime_spm_capability() is None
+        assert reads.call_count == 2
+
+    def test_an_unavailable_capability_is_rederived_every_time(self, monkeypatch):
+        import policyengine.bundle
+        import policyengine_simulation_executor.spm as spm
+
+        reads = Mock(side_effect=ValueError("bundle configuration unavailable"))
+        monkeypatch.setattr(policyengine.bundle, "get_current_bundle", reads)
+
+        for _ in range(3):
+            with pytest.raises(SPMInputError) as error:
+                spm.runtime_spm_capability()
+            assert error.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
+        assert reads.call_count == 3
+
+
 @pytest.mark.parametrize(
     "code",
     [

@@ -1,5 +1,6 @@
 """Certified SPM runtime selection, independent of caller-supplied metadata."""
 
+import json
 from functools import lru_cache
 
 from policyengine_simulation_contract.spm import (
@@ -19,7 +20,23 @@ def _forecast(expected_sha256):
     return load_forecast(expected_sha256=expected_sha256)
 
 
+@lru_cache(maxsize=1)
 def runtime_spm_capability():
+    """The installed image's certified SPM capability, or None.
+
+    Memoized for the life of the process because every input is a property
+    of the installed image -- the bundle configuration, the wrapper's model
+    fields, the country model's methods and the pinned forecast -- none of
+    which a running container can change. One national request resolves the
+    selection about six times (the worker entrypoint, ``_build_simulation``,
+    and the dataset and baseline identity collectors), and each resolution
+    called this.
+
+    ``lru_cache`` does not memoize exceptions, so every fail-closed path
+    still re-derives and re-raises: the cache can only ever skip work that
+    already succeeded. Tests that stub the installed environment must call
+    :func:`reset_spm_runtime_caches` (the executor suite does, automatically).
+    """
     from policyengine.bundle import get_current_bundle
     from policyengine.core import Simulation
 
@@ -60,6 +77,78 @@ def runtime_spm_capability():
         raise SPMInputError("SPM_CONFIGURATION_UNAVAILABLE", str(exc)) from exc
 
 
+@lru_cache(maxsize=64)
+def _prevalidate_selection(selection_json: str, start_year: int, window_size: int):
+    """Prove a resolved selection can be measured, before anything expensive.
+
+    Keyed on the resolved selection and the year range, which is everything
+    it reads: the provider is constructed from the selection alone and asked
+    only for per-year metadata. The same request resolves the same selection
+    several times over (see :func:`runtime_spm_capability`), and the review
+    of this change counted about six provider constructions per national
+    request; memoizing collapses them to one per distinct selection and
+    range.
+
+    Only successful validations are memoized -- ``lru_cache`` re-runs after
+    an exception -- so a rejected selection is rejected again, with the same
+    typed error, every time it is asked for.
+    """
+    from spm_calculator.policyengine_adapter import PolicyEngineSPMProvider
+
+    selection = json.loads(selection_json)
+    forecast = _forecast(selection["forecast_content_sha256"])
+    if selection["county_vintage"] != "2020":
+        raise ValueError("Unsupported county vintage: use 2020")
+    provider = PolicyEngineSPMProvider(
+        forecast,
+        **{
+            key: value
+            for key, value in selection.items()
+            if key != "forecast_content_sha256"
+        },
+    )
+    for year in range(start_year, start_year + window_size):
+        # Use the country adapter's typed year contract. This temporary
+        # provider validates metadata without measuring any SPM amount
+        # or modifying the actual simulation's calculation receipts.
+        provider.year_metadata(year)
+        if selection["geography_kind"] == "metro":
+            try:
+                forecast.geography_factor(
+                    year,
+                    "renter",
+                    kind="metro",
+                    geoid=selection["geography_id"],
+                    scenario=selection["scenario"],
+                    as_of=selection["as_of"],
+                )
+            except ValueError as exc:
+                raise SPMInputError("SPM_GEOGRAPHY_UNAVAILABLE", str(exc)) from None
+
+
+# Bound at import, so clearing still works while a test has replaced one of
+# these module attributes with a stub.
+_MEMO_CLEARERS = (
+    runtime_spm_capability.cache_clear,
+    _prevalidate_selection.cache_clear,
+)
+
+
+def reset_spm_runtime_caches():
+    """Forget what was memoized from the installed environment.
+
+    Production never needs this: a container's image is fixed for the life
+    of the process. Tests that stub the installed bundle, wrapper or
+    provider do, and the executor suite calls it around every test.
+
+    ``_forecast`` is deliberately not cleared. It is keyed by the content
+    hash of what it loads, so it cannot go stale, and a test that stubs it
+    replaces the module attribute rather than filling the cache.
+    """
+    for clear in _MEMO_CLEARERS:
+        clear()
+
+
 def normalize_runtime_spm(params):
     """Resolve before dataset loading, artifact lookup, or child submission."""
     from policyengine_simulation_executor.release_bundle import (
@@ -76,42 +165,21 @@ def normalize_runtime_spm(params):
         model_version=bundle.model_version,
     )
     if selection is not None:
+        canonical = json.dumps(selection, sort_keys=True, separators=(",", ":"))
         try:
-            from spm_calculator.policyengine_adapter import PolicyEngineSPMProvider
-
-            forecast = _forecast(selection["forecast_content_sha256"])
-            if selection["county_vintage"] != "2020":
-                raise ValueError("Unsupported county vintage: use 2020")
-            provider = PolicyEngineSPMProvider(
-                forecast,
-                **{
-                    key: value
-                    for key, value in selection.items()
-                    if key != "forecast_content_sha256"
-                },
-            )
             from policyengine_simulation_executor.simulation_runtime import _parse_year
 
-            start = int(params.get("start_year") or _parse_year(params))
-            for year in range(start, start + int(params.get("window_size", 1))):
-                # Use the country adapter's typed year contract. This temporary
-                # provider validates metadata without measuring any SPM amount
-                # or modifying the actual simulation's calculation receipts.
-                provider.year_metadata(year)
-                if selection["geography_kind"] == "metro":
-                    try:
-                        forecast.geography_factor(
-                            year,
-                            "renter",
-                            kind="metro",
-                            geoid=selection["geography_id"],
-                            scenario=selection["scenario"],
-                            as_of=selection["as_of"],
-                        )
-                    except ValueError as exc:
-                        raise SPMInputError(
-                            "SPM_GEOGRAPHY_UNAVAILABLE", str(exc)
-                        ) from None
+            try:
+                start = int(params.get("start_year") or _parse_year(params))
+                window = int(params.get("window_size", 1))
+            except ValueError:
+                # Keep the order the range's old parse position gave it: the
+                # selection was checked before the range, so an unusable year
+                # never masked an unknown scenario. An empty range asks for
+                # no year and reports the selection's own defect first.
+                _prevalidate_selection(canonical, 0, 0)
+                raise
+            _prevalidate_selection(canonical, start, window)
         except ValueError as exc:
             detail = spm_error_detail(exc)
             if detail:
