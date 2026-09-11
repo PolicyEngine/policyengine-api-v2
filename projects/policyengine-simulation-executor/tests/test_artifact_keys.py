@@ -12,6 +12,10 @@ churn (or, worse, a writer/reader mismatch).
 import pytest
 
 from fixtures.identity_stubs import install_identity_stubs
+from fixtures.wrapper_spm import (
+    installed_wrapper_has_storage_id,
+    wrapper_storage_id as _wrapper_storage_id,
+)
 from policyengine_simulation_executor import artifact_keys as ak
 
 
@@ -185,46 +189,11 @@ _SPM_SELECTION = {
     "county_vintage": "2020",
     "as_of": None,
 }
+_INSTALLED_WRAPPER_HAS_STORAGE_ID = installed_wrapper_has_storage_id()
 _SPM_STORAGE_GOLDEN = (
     "bl1-21f52b30719e20bb-spm-"
     "7396bf5f4876c42bb6cba0f9533478098edc0861cc3657bd0d60f88dbb26ac39"
 )
-
-
-def _installed_wrapper_has_storage_id() -> bool:
-    from policyengine.core import Simulation
-
-    return hasattr(Simulation, "storage_id")
-
-
-_INSTALLED_WRAPPER_HAS_STORAGE_ID = _installed_wrapper_has_storage_id()
-
-
-def _wrapper_storage_id(simulation_id: str, spm_config: dict | None) -> str:
-    """The canonical wrapper's own ``storage_id``, transcribed verbatim.
-
-    ``policyengine/core/simulation.py`` in the SPM-capable wrapper::
-
-        @property
-        def storage_id(self) -> str:
-            config = self.spm_config
-            if config is None:
-                return self.id
-            encoded = json.dumps(
-                config, sort_keys=True, separators=(",", ":")
-            ).encode()
-            return f"{self.id}-spm-{hashlib.sha256(encoded).hexdigest()}"
-
-    Read from ``policyengine-5.3.0-py3-none-any.whl`` sha256
-    ``8c640d96…2735f1``, the build the native qualification lane installs.
-    """
-    import hashlib
-    import json
-
-    if spm_config is None:
-        return simulation_id
-    encoded = json.dumps(spm_config, sort_keys=True, separators=(",", ":")).encode()
-    return f"{simulation_id}-spm-{hashlib.sha256(encoded).hexdigest()}"
 
 
 class TestWrapperStorageIdAgreement:
@@ -242,9 +211,9 @@ class TestWrapperStorageIdAgreement:
     be imported in hermetic CI and these tests cannot prove agreement with
     one. What they do prove:
 
-    * the no-selection arm agrees with the **installed** wrapper, through the
-      exact expression ``precompute`` uses — that is the configuration
-      deployed today, asserted against the real object;
+    * the no-selection arm agrees through the exact accessor ``precompute``
+      uses, against the real installed object — the same answer on either
+      wrapper, which is the point: that arm must not move;
     * the SPM arm agrees with the canonical wrapper's expression as read from
       the wheel above, so our side cannot drift from the contract without a
       reviewable diff, and the digest cannot be quietly reformatted;
@@ -318,12 +287,16 @@ class TestWrapperStorageIdAgreement:
         assert built.storage_id == built.simulation_id
         assert built.store_path.endswith(f"/{built.simulation_id}.h5")
 
-    def test_legacy_arm_matches_the_installed_wrapper(self, identity):
-        """The deployed-today arm, against the real ``Simulation`` object.
+    def test_legacy_arm_matches_the_wrapper_accessor(self, identity):
+        """The no-selection arm, through the accessor precompute uses.
 
-        ``precompute`` reads ``getattr(baseline, "storage_id", baseline.id)``;
-        with no selection that has to be the planned id on any wrapper,
-        canonical or not.
+        ``precompute`` reads ``getattr(baseline, "storage_id", baseline.id)``.
+        With no selection that has to be the planned id on *any* wrapper:
+        pre-canonical, because the attribute is absent and the fallback is
+        the id; canonical, because its property short-circuits to the id
+        when there is no config. The assertion is the same either way, so
+        this pins the accessor's contract rather than telling the two
+        wrappers apart.
         """
         from policyengine.core import Simulation
 
