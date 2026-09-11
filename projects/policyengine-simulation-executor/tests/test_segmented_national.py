@@ -5,7 +5,9 @@ from types import SimpleNamespace
 import pytest
 
 from src.modal import segmented_national as sn
+from policyengine_simulation_contract.spm import SPMInputError
 from policyengine_simulation_executor import simulation_runtime as sr
+from policyengine_simulation_executor import spm as executor_spm
 from policyengine_simulation_executor.national_partition import (
     US_NATIONAL_REGION_GROUPS,
 )
@@ -364,6 +366,9 @@ class TestDispatchRunSimulation:
 
         monkeypatch.setattr(sn, "run_segmented_national_impl", fake_segmented)
         monkeypatch.setattr(
+            executor_spm, "normalize_runtime_spm", lambda params: None
+        )
+        monkeypatch.setattr(
             sr,
             "run_simulation_impl",
             lambda params: pytest.fail("monolithic path must not run"),
@@ -389,8 +394,174 @@ class TestDispatchRunSimulation:
             lambda *a, **k: pytest.fail("segmented path must not run"),
         )
         monkeypatch.setattr(
+            executor_spm, "normalize_runtime_spm", lambda params: None
+        )
+        monkeypatch.setattr(
             sr, "run_simulation_impl", lambda params: {"monolithic": True}
         )
         assert sn.dispatch_run_simulation(params, app_name="app-x") == {
             "monolithic": True
         }
+
+
+SPM_SELECTION = {
+    "forecast_content_sha256": "a" * 64,
+    "scenario": "ce_trend",
+    "geography_kind": "national",
+    "geography_id": None,
+    "county_vintage": "2020",
+    "as_of": None,
+}
+
+
+def _spm_receipt(label, *, selection=SPM_SELECTION, year="2026"):
+    return {
+        "forecast_id": label,
+        "forecast_sha256": selection["forecast_content_sha256"],
+        "scenario": selection["scenario"],
+        "geography_kind": selection["geography_kind"],
+        "runtime_versions": {"policyengine-us": "test-only"},
+        "years": {year: {"status": "forecast"}},
+        "geographies": [],
+        "composition_method": "classified-inputs",
+        "storage_method": "formula",
+    }
+
+
+def _spm_child(index, *, selection=SPM_SELECTION, year="2026"):
+    """One child's result carrying that segment's own SPM receipts."""
+    return {
+        "child": index,
+        "spm_config": dict(selection),
+        "spm_provenance": {
+            "baseline": [
+                _spm_receipt(f"baseline-{index}", selection=selection, year=year)
+            ],
+            "reform": [_spm_receipt(f"reform-{index}", selection=selection, year=year)],
+        },
+    }
+
+
+def _spm_child_missing(index, field):
+    """A child whose transported selection lost a resolved option."""
+    child = _spm_child(index)
+    del child["spm_config"][field]
+    return child
+
+
+@pytest.fixture
+def stub_reduce(monkeypatch):
+    """The microdata reduce itself is covered by
+    test_segmented_national_reduce; these tests pin the SPM merge."""
+    monkeypatch.setattr(
+        sn, "build_national_output", lambda children, **kwargs: {"budget": {}}
+    )
+
+
+class TestSegmentedNationalSPM:
+    def test__child_receipts_combine_into_one_national_receipt(
+        self, bare_country, stub_reduce
+    ):
+        fake = FakeModal([FakeCall(_spm_child(i)) for i in range(20)])
+        runner = _runner(fake, params={**NATIONAL, "spm": SPM_SELECTION})
+
+        output = runner.run()
+
+        # The resolved selection rides to every child unchanged and comes
+        # back on the parent as the one national selection.
+        assert all(p["spm"] == SPM_SELECTION for p in fake.spawned_payloads)
+        assert output["spm_config"] == SPM_SELECTION
+        # Every executed segment's receipts survive, baseline and reform
+        # concatenated in group order: a national SPM result must account
+        # for all 20 segments, not just the first.
+        provenance = output["spm_provenance"]
+        assert [r["forecast_id"] for r in provenance["baseline"]] == [
+            f"baseline-{i}" for i in range(20)
+        ]
+        assert [r["forecast_id"] for r in provenance["reform"]] == [
+            f"reform-{i}" for i in range(20)
+        ]
+        assert output["budget"] == {}
+
+    @pytest.mark.parametrize(
+        "rogue,reason",
+        [
+            (
+                _spm_child(7, selection={**SPM_SELECTION, "scenario": "zero_real"}),
+                "selection differs from the request",
+            ),
+            (_spm_child(7, year="2025"), "does not cover the requested year"),
+            (_spm_child_missing(7, "county_vintage"), "complete resolved"),
+        ],
+    )
+    def test__child_receipt_disagreeing_with_the_request_is_typed(
+        self, bare_country, stub_reduce, rogue, reason
+    ):
+        # One segment computed something other than what was requested:
+        # fail with the public typed code, never publish a mixed national
+        # result whose receipt does not describe every segment.
+        calls = [FakeCall(_spm_child(i)) for i in range(20)]
+        calls[7] = FakeCall(rogue)
+        runner = _runner(FakeModal(calls), params={**NATIONAL, "spm": SPM_SELECTION})
+
+        with pytest.raises(SPMInputError, match=reason) as error:
+            runner.run()
+        assert error.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
+
+    def test__unrequested_child_receipt_is_typed(self, bare_country, stub_reduce):
+        # A historical request must not inherit a child's stray receipt.
+        calls = [FakeCall({"child": i}) for i in range(20)]
+        calls[3] = FakeCall(_spm_child(3))
+        runner = _runner(FakeModal(calls))
+
+        with pytest.raises(SPMInputError, match="Unexpected SPM receipt"):
+            runner.run()
+
+    def test__a_run_without_spm_adds_no_receipt_keys(self, bare_country, stub_reduce):
+        runner = _runner(FakeModal([FakeCall({"child": i}) for i in range(20)]))
+        assert runner.run() == {"budget": {}}
+
+
+class TestDispatchResolvesSPM:
+    def test__selection_is_resolved_before_the_fan_out(self, monkeypatch):
+        # Children and the parent's receipt check must both see the
+        # worker-resolved selection, not the caller's partial one.
+        monkeypatch.setattr(
+            executor_spm, "normalize_runtime_spm", lambda params: SPM_SELECTION
+        )
+        seen = {}
+
+        def fake_segmented(params, *, app_name):
+            seen["params"] = params
+            return {"segmented": True}
+
+        monkeypatch.setattr(sn, "run_segmented_national_impl", fake_segmented)
+
+        result = sn.dispatch_run_simulation(
+            {**NATIONAL, "spm": {"geography_kind": "national"}}, app_name="app-x"
+        )
+
+        assert result == {"segmented": True}
+        assert seen["params"]["spm"] == SPM_SELECTION
+
+    def test__typed_spm_error_spawns_nothing(self, monkeypatch):
+        # Resolution failures are cheap only if they happen before 20
+        # children are spawned.
+        def unavailable(params):
+            raise SPMInputError("SPM_GEOGRAPHY_REQUIRED", "County required")
+
+        monkeypatch.setattr(executor_spm, "normalize_runtime_spm", unavailable)
+        monkeypatch.setattr(
+            sn,
+            "run_segmented_national_impl",
+            lambda *a, **k: pytest.fail("segmented path must not run"),
+        )
+        monkeypatch.setattr(
+            sr,
+            "run_simulation_impl",
+            lambda params: pytest.fail("monolithic path must not run"),
+        )
+
+        with pytest.raises(SPMInputError) as error:
+            sn.dispatch_run_simulation(dict(NATIONAL), app_name="app-x")
+        assert error.value.code == "SPM_GEOGRAPHY_REQUIRED"
