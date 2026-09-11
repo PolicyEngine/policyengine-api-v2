@@ -152,7 +152,7 @@ def build_manifest(plan: PrecomputePlan) -> ArtifactManifest:
         ManifestArtifact(
             type="baseline",
             path=entry.path,
-            filename=baseline_artifact_filename(entry.simulation_id),
+            filename=entry.path.rsplit("/", maxsplit=1)[-1],
             year=entry.year,
             digest=entry.digest,
         )
@@ -310,6 +310,14 @@ def _prepare_cohort_baseline(bucket: str, expected: BaselinePlanEntry):
             f"({expected.simulation_id} != {baseline.id}); refusing to act "
             "under a mismatched key."
         )
+    planned_storage_id = Path(expected.path).stem
+    storage_id = getattr(baseline, "storage_id", baseline.id)
+    if storage_id != planned_storage_id:
+        raise RuntimeError(
+            "Planned and in-container baseline storage ids disagree "
+            f"({planned_storage_id} != {storage_id}); refusing to act "
+            "under a mismatched key."
+        )
 
     # The extras economic_impact_analysis applies unconditionally before
     # ensure(); the artifact must carry them or every request would fail
@@ -341,7 +349,9 @@ def compute_baseline_impl(
     baseline.ensure()
     compute_seconds = time.monotonic() - started
 
-    artifact_file = data_folder / baseline_artifact_filename(baseline.id)
+    artifact_file = data_folder / baseline_artifact_filename(
+        getattr(baseline, "storage_id", baseline.id)
+    )
     if not artifact_file.exists():
         raise RuntimeError(f"ensure() left no artifact at {artifact_file}")
     uploaded = store.upload_file(expected.path, artifact_file)
@@ -373,7 +383,9 @@ def verify_determinism_impl(
     from policyengine_simulation_executor.baseline_artifacts import OUTCOME_HIT
 
     store, data_folder, baseline = _prepare_cohort_baseline(bucket, expected)
-    artifact_file = data_folder / baseline_artifact_filename(baseline.id)
+    artifact_file = data_folder / baseline_artifact_filename(
+        getattr(baseline, "storage_id", baseline.id)
+    )
     if not artifact_file.exists():
         store.download_file(expected.path, artifact_file)
     baseline.ensure()
@@ -383,7 +395,9 @@ def verify_determinism_impl(
             f"(outcome={baseline.artifact_outcome})"
         )
 
+    selection = getattr(baseline, "spm_config", None)
     fresh = Simulation(
+        **({"spm": selection} if selection is not None else {}),
         dataset=baseline.dataset,
         tax_benefit_model_version=baseline.tax_benefit_model_version,
         policy=None,

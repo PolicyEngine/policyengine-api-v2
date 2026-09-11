@@ -16,6 +16,7 @@ import pytest
 from pydantic import ValidationError
 
 from fixtures.identity_stubs import install_identity_stubs
+from fixtures.wrapper_spm import wrapper_storage_id
 from policyengine_simulation_executor import precompute
 from policyengine_simulation_executor.artifact_keys import canonical_digest
 from policyengine_simulation_executor.precompute_models import (
@@ -390,9 +391,7 @@ class TestWriterReaderContract:
             year=2026,
         )
         assert writer_identity.simulation_id == reader_id
-        assert writer_identity.store_path.endswith(
-            f"/{writer_identity.simulation_id}.h5"
-        )
+        assert writer_identity.store_path.endswith(f"/{writer_identity.storage_id}.h5")
 
     def test_dataset_filename_matches_runtime_stem_lookup(self, monkeypatch):
         """Real-manifest coverage: the artifact filename equals the exact
@@ -669,8 +668,34 @@ class TestComputeBaselineImpl:
             def ensure(self):
                 self._artifact_outcome = "miss"
 
+        class SPMStubBaseline(ArtifactBaselineSimulation):
+            """A baseline that names its artifact the way the wrapper does.
+
+            The canonical wrapper derives ``storage_id`` from the resolved
+            selection and saves under it; ``compute_baseline_impl`` plans a
+            path from the identity's own derivation and refuses to act when
+            the two disagree. Only a stub that computes its side
+            independently can show the guard passing rather than aborting.
+            """
+
+            @property
+            def spm_config(self):
+                return state.spm
+
+            @property
+            def storage_id(self):
+                return wrapper_storage_id(self.id, self.spm_config)
+
+            def ensure(self):
+                self._artifact_outcome = "miss"
+                (tmp_path / f"{self.storage_id}.h5").write_bytes(b"artifact-bytes")
+
+        state.spm = None
         state.baseline = StubBaseline.model_construct(id="bl1-cohort")
         state.make_silent = lambda: SilentBaseline.model_construct(id="bl1-cohort")
+        state.make_spm = lambda sim_id="bl1-cohort": SPMStubBaseline.model_construct(
+            id=sim_id
+        )
 
         class FakeStore:
             def __init__(self, bucket):
@@ -766,6 +791,116 @@ class TestComputeBaselineImpl:
     def test_refuses_to_act_under_a_mismatched_id(self, cohort_stubs):
         with pytest.raises(RuntimeError, match="refusing to act"):
             precompute.compute_baseline_impl("bucket-x", self._entry("bl1-other"))
+        assert cohort_stubs.uploads == []
+
+    def test_refuses_a_mismatched_planned_storage_id(self, cohort_stubs):
+        entry = self._entry()
+        entry.path = "baselines/us/bl-d/bl1-cohort-spm-planned.h5"
+        with pytest.raises(RuntimeError, match="storage ids disagree"):
+            precompute.compute_baseline_impl("bucket-x", entry)
+        assert cohort_stubs.configured == []
+        assert cohort_stubs.uploads == []
+        assert not (cohort_stubs.folder / "bl1-cohort.h5").exists()
+
+    @staticmethod
+    def _planned_identity(selection):
+        """A real ``BaselineArtifactIdentity``, not a restated expression.
+
+        The plan the deploy publishes comes from this object's properties,
+        so keying the test off them is what makes the write path a
+        writer==reader check: reformat or truncate ``storage_id``'s digest
+        and the container -- which derives its own the wrapper's way -- no
+        longer names the planned file.
+        """
+        from policyengine_simulation_executor.artifact_keys import (
+            BaselineArtifactIdentity,
+            DatasetArtifactIdentity,
+        )
+
+        return BaselineArtifactIdentity(
+            spm=selection,
+            country="us",
+            region="state/ca+state/wv",
+            scope_key="scoping",
+            dataset=DatasetArtifactIdentity(
+                spm=selection,
+                country="us",
+                dataset="populace_cps",
+                stem="populace",
+                year=2026,
+                data_version="1.2.3",
+                data_artifact_revision="rev-abc",
+                source_sha256=None,
+                data_build_fingerprint=None,
+                model_version="9.9.9",
+                policyengine_version="4.22.0",
+            ),
+        )
+
+    def test_publishes_a_selection_scoped_artifact_under_the_planned_path(
+        self, cohort_stubs
+    ):
+        """The canonical write path, end to end through the guard.
+
+        Nothing else in hermetic CI runs ``compute_baseline_impl`` with a
+        selection: the identity's storage id was only ever compared to
+        itself, and the one case that reached the guard covered the abort.
+        Here the plan is the planner's own ``BaselineArtifactIdentity`` and
+        the container names its artifact the wrapper's way, so the guard
+        passing at all is the claim -- if the two derivations differed, no
+        canonical artifact could be published and the deploy would be
+        blocked.
+        """
+        selection = {
+            "forecast_content_sha256": "a" * 64,
+            "scenario": "ce_trend",
+            "geography_kind": "national",
+            "geography_id": None,
+            "county_vintage": "2020",
+            "as_of": None,
+        }
+        planned = self._planned_identity(selection)
+        cohort_stubs.spm = selection
+        cohort_stubs.baseline = cohort_stubs.make_spm(planned.simulation_id)
+
+        entry = self._entry(planned.simulation_id)
+        entry.digest = planned.digest
+        entry.path = planned.store_path
+
+        result = precompute.compute_baseline_impl("bucket-x", entry)
+
+        assert cohort_stubs.uploads == [
+            (
+                planned.store_path,
+                str(cohort_stubs.folder / f"{planned.storage_id}.h5"),
+            )
+        ]
+        assert result.simulation_id == planned.simulation_id
+        assert result.uploaded is True
+        assert result.size_bytes == len(b"artifact-bytes")
+        # The digest the container computed is the one the planner planned.
+        assert planned.storage_id == wrapper_storage_id(
+            planned.simulation_id, selection
+        )
+        # A selection-free plan for the same cohort is a different artifact.
+        assert planned.storage_id != planned.simulation_id
+
+    def test_refuses_a_selection_scoped_plan_the_container_does_not_share(
+        self, cohort_stubs
+    ):
+        """The abort the review worried about, under a real selection: a
+        container that resolved a different selection names a different
+        artifact, and nothing is published."""
+        cohort_stubs.spm = {"scenario": "zero_real"}
+        cohort_stubs.baseline = cohort_stubs.make_spm()
+        entry = self._entry()
+        entry.path = (
+            f"baselines/us/bl-d/bl1-cohort-spm-"
+            f"{canonical_digest({'scenario': 'ce_trend'})}.h5"
+        )
+        with pytest.raises(RuntimeError, match="storage ids disagree"):
+            precompute.compute_baseline_impl("bucket-x", entry)
+        assert cohort_stubs.configured == []
         assert cohort_stubs.uploads == []
 
     def test_refuses_a_plain_simulation(self, cohort_stubs):

@@ -9,9 +9,15 @@ any change into a conscious, reviewable diff instead of silent cache
 churn (or, worse, a writer/reader mismatch).
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 from fixtures.identity_stubs import install_identity_stubs
+from fixtures.wrapper_spm import (
+    installed_wrapper_has_storage_id,
+    wrapper_storage_id as _wrapper_storage_id,
+)
 from policyengine_simulation_executor import artifact_keys as ak
 
 
@@ -175,3 +181,179 @@ class TestIdentityCollection:
         assert identity.store_path == (
             f"baselines/us/{_BASELINE_GOLDEN}/bl1-f9cac05d94509895.h5"
         )
+
+
+_SPM_SELECTION = {
+    "forecast_content_sha256": "a" * 64,
+    "scenario": "ce_trend",
+    "geography_kind": "national",
+    "geography_id": None,
+    "county_vintage": "2020",
+    "as_of": None,
+}
+_INSTALLED_WRAPPER_HAS_STORAGE_ID = installed_wrapper_has_storage_id()
+_SPM_STORAGE_GOLDEN = (
+    "bl1-21f52b30719e20bb-spm-"
+    "7396bf5f4876c42bb6cba0f9533478098edc0861cc3657bd0d60f88dbb26ac39"
+)
+
+
+class TestWrapperStorageIdAgreement:
+    """The planner's storage id against the wrapper that names the file.
+
+    Precompute plans a store path from ``BaselineArtifactIdentity.storage_id``
+    and the in-container worker refuses to publish when the wrapper's own
+    ``Simulation.storage_id`` disagrees. The wrapper's value also names the
+    saved ``.h5``, so the two derivations are not merely compared — they are
+    the same identifier reached down two independent code paths, and a
+    disagreement blocks every canonical publish.
+
+    The ``policyengine`` this project pins is pre-canonical: it has neither
+    an ``spm`` field nor a ``storage_id``, so an SPM-capable wrapper cannot
+    be imported in hermetic CI and these tests cannot prove agreement with
+    one. What they do prove:
+
+    * the no-selection arm agrees through the exact accessor ``precompute``
+      uses, against the real installed object — the same answer on either
+      wrapper, which is the point: that arm must not move;
+    * the SPM arm agrees with the canonical wrapper's expression as read from
+      the wheel above, so our side cannot drift from the contract without a
+      reviewable diff, and the digest cannot be quietly reformatted;
+    * ``test_spm_arm_matches_the_installed_wrapper`` stops skipping and
+      asserts real equality the moment an SPM-capable wrapper is pinned. It
+      supplies the two things that wrapper's ``spm_config`` needs and this
+      project cannot assume — a US model version, and a bundle pinning this
+      selection — because ``spm_config`` refuses a non-US model and
+      re-resolves the selection through ``get_current_bundle`` rather than
+      reading it off the object.
+
+    Agreement with the real wrapper was checked out of band on 2026-09-11 by
+    running the executor environment with that wheel's ``policyengine``
+    shadowing the pinned one, then resolving seven selection shapes (unset,
+    empty, national, county, metro, a moved ``as_of``, and a non-ASCII
+    scenario) through both the wheel's ``resolve_spm_selection`` and this
+    repo's, and comparing the resolved configs and the storage ids. All
+    seven agreed on both. That is a recorded observation, not coverage —
+    only the native lane re-runs anything like it.
+
+    The wheel's sha256 is load-bearing, not decoration: two builds both
+    named ``policyengine-5.3.0-py3-none-any.whl`` are available locally, and
+    the other one (``962882ea…``) has no ``storage_id`` at all.
+    """
+
+    @pytest.fixture
+    def identity(self, stub_identity_sources):
+        """Build the identity directly from an already-resolved selection.
+
+        ``collect_baseline_identity`` resolves the selection through the
+        installed bundle first; that resolution is the contract suite's
+        subject. What is under test here is only what the identity then
+        does with the resolved dict.
+        """
+
+        def _identity(spm=None):
+            return ak.BaselineArtifactIdentity(
+                spm=spm,
+                country="us",
+                region="national",
+                scope_key=_BASELINE_KWARGS["scope_key"],
+                dataset=ak.collect_dataset_identity("us", 2026),
+            )
+
+        return _identity
+
+    @pytest.mark.parametrize(
+        "selection",
+        [
+            None,
+            _SPM_SELECTION,
+            {**_SPM_SELECTION, "geography_kind": "county"},
+            {**_SPM_SELECTION, "geography_kind": "metro", "geography_id": "35620"},
+            {**_SPM_SELECTION, "as_of": "2025-01-01"},
+            # Non-ASCII is the one input where our explicit ensure_ascii=True
+            # could diverge from the wrapper's json.dumps defaults.
+            {**_SPM_SELECTION, "scenario": "ce_trend_ü"},
+        ],
+    )
+    def test_storage_id_matches_the_wrapper_expression(self, identity, selection):
+        built = identity(selection)
+        assert built.storage_id == _wrapper_storage_id(built.simulation_id, selection)
+
+    def test_spm_storage_id_golden(self, identity):
+        """Freeze the string. Changing it rotates every canonical artifact."""
+        built = identity(_SPM_SELECTION)
+        assert built.storage_id == _SPM_STORAGE_GOLDEN
+        assert built.store_path.endswith(f"/{_SPM_STORAGE_GOLDEN}.h5")
+
+    @pytest.mark.parametrize("field", sorted(_SPM_SELECTION))
+    def test_every_selection_field_rotates_the_storage_id(self, identity, field):
+        perturbed = {**_SPM_SELECTION, field: "other"}
+        assert identity(perturbed).storage_id != _SPM_STORAGE_GOLDEN
+
+    def test_storage_id_ignores_selection_key_order(self, identity):
+        reversed_selection = dict(reversed(list(_SPM_SELECTION.items())))
+        assert identity(reversed_selection).storage_id == _SPM_STORAGE_GOLDEN
+
+    def test_no_selection_keeps_the_plain_simulation_id(self, identity):
+        built = identity(None)
+        assert built.storage_id == built.simulation_id
+        assert built.store_path.endswith(f"/{built.simulation_id}.h5")
+
+    def test_legacy_arm_matches_the_wrapper_accessor(self, identity):
+        """The no-selection arm, through the accessor precompute uses.
+
+        ``precompute`` reads ``getattr(baseline, "storage_id", baseline.id)``.
+        With no resolved selection that has to be the planned id on *any*
+        wrapper: pre-canonical, because the attribute is absent and the
+        fallback is the id; canonical, because the property short-circuits
+        to the id when ``spm_config`` is None. The assertion is the same
+        either way, so this pins the accessor's contract rather than telling
+        the two wrappers apart.
+
+        "No resolved selection" is the condition, not "the caller sent no
+        selection". On a canonical bundle the wrapper resolves an unset
+        ``spm`` into the bundle's defaults and returns a suffixed id — and
+        so does this project, through the same rule in
+        ``resolve_spm_selection``, which is why they still agree. A plain id
+        is what a bundle with no SPM measurement produces.
+        """
+        from policyengine.core import Simulation
+
+        built = identity(None)
+        wrapper = Simulation.model_construct(id=built.simulation_id)
+        assert getattr(wrapper, "storage_id", wrapper.id) == built.storage_id
+
+    @pytest.mark.skipif(
+        not _INSTALLED_WRAPPER_HAS_STORAGE_ID,
+        reason=(
+            "The pinned policyengine is pre-canonical and has no storage_id; "
+            "this asserts real equality as soon as an SPM-capable wrapper is "
+            "pinned, replacing the transcribed expression above."
+        ),
+    )
+    def test_spm_arm_matches_the_installed_wrapper(self, identity, monkeypatch):
+        """Real equality against the wrapper, once one can be imported.
+
+        The canonical ``spm_config`` reads the model version's country and
+        re-resolves the selection through the installed bundle, so a bare
+        ``model_construct(id=..., spm=...)`` raises "SPM selection is only
+        supported by the US model" instead of comparing anything. Both are
+        supplied here so this activates on a pin rather than erroring.
+        """
+        import policyengine.bundle
+        from policyengine.core import Simulation
+
+        built = identity(_SPM_SELECTION)
+        # Only after the planner has read the real installed bundle: this
+        # stub is for the wrapper's re-resolution, not for ours.
+        monkeypatch.setattr(
+            policyengine.bundle,
+            "get_current_bundle",
+            lambda: {"measurements": {"spm": _SPM_SELECTION}},
+        )
+        wrapper = Simulation.model_construct(
+            id=built.simulation_id,
+            spm=_SPM_SELECTION,
+            tax_benefit_model_version=SimpleNamespace(country_code="us"),
+        )
+        assert wrapper.storage_id == built.storage_id

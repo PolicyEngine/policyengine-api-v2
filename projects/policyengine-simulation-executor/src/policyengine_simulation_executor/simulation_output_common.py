@@ -98,6 +98,10 @@ def _poverty_module_function(name: str):
 def _try_compute_output(label: str, fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
-    except Exception:
+    except Exception as exc:
+        from policyengine_simulation_contract.spm import spm_error_detail
+
+        if spm_error_detail(exc) is not None:
+            raise
         logger.warning("Unable to calculate %s", label, exc_info=True)
         return None

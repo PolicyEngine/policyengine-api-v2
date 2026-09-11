@@ -370,6 +370,20 @@
             ],
             "title": "Status"
           },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SPMErrorDetail"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errors"
+          },
           "error": {
             "anyOf": [
               {
@@ -392,6 +406,26 @@
       },
       "BudgetWindowAnnualImpact": {
         "properties": {
+          "spm_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SPMSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spm_provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SPMComparisonProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "year": {
             "type": "string",
             "title": "Year"
@@ -434,6 +468,16 @@
           "country": {
             "type": "string",
             "title": "Country"
+          },
+          "spm": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SPMSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "version": {
             "anyOf": [
@@ -695,6 +739,20 @@
                 "type": "null"
               }
             ]
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SPMErrorDetail"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errors"
           },
           "error": {
             "anyOf": [
@@ -1262,6 +1320,20 @@
               }
             ]
           },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SPMErrorDetail"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errors"
+          },
           "error": {
             "anyOf": [
               {
@@ -1635,6 +1707,16 @@
               }
             ],
             "title": "Dataset"
+          },
+          "spm": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SPMCapability"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -1721,11 +1803,229 @@
         ],
         "title": "RacePovertyOutput"
       },
+      "SPMCapability": {
+        "properties": {
+          "contract_version": {
+            "type": "string",
+            "const": "canonical-spm-v1",
+            "title": "Contract Version",
+            "default": "canonical-spm-v1"
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/SPMSelection"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "defaults"
+        ],
+        "title": "SPMCapability"
+      },
+      "SPMComparisonProvenance": {
+        "properties": {
+          "baseline": {
+            "items": {
+              "$ref": "#/components/schemas/SPMProvenance"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Baseline"
+          },
+          "reform": {
+            "items": {
+              "$ref": "#/components/schemas/SPMProvenance"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Reform"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "baseline",
+          "reform"
+        ],
+        "title": "SPMComparisonProvenance",
+        "description": "One receipt per executed regional segment, separately for each policy."
+      },
+      "SPMErrorDetail": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "SPMErrorDetail"
+      },
+      "SPMProvenance": {
+        "properties": {
+          "forecast_id": {
+            "type": "string",
+            "title": "Forecast Id"
+          },
+          "forecast_sha256": {
+            "type": "string",
+            "title": "Forecast Sha256"
+          },
+          "scenario": {
+            "type": "string",
+            "title": "Scenario"
+          },
+          "geography_kind": {
+            "type": "string",
+            "title": "Geography Kind"
+          },
+          "runtime_versions": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Runtime Versions"
+          },
+          "years": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Years"
+          },
+          "geographies": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Geographies"
+          },
+          "composition_method": {
+            "type": "string",
+            "title": "Composition Method"
+          },
+          "storage_method": {
+            "type": "string",
+            "title": "Storage Method"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "forecast_id",
+          "forecast_sha256",
+          "scenario",
+          "geography_kind",
+          "runtime_versions",
+          "years",
+          "geographies",
+          "composition_method",
+          "storage_method"
+        ],
+        "title": "SPMProvenance",
+        "description": "Detached calculation receipt; data certification is a separate claim."
+      },
+      "SPMSelection": {
+        "properties": {
+          "forecast_content_sha256": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Content Sha256"
+          },
+          "scenario": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario"
+          },
+          "geography_kind": {
+            "type": "string",
+            "enum": [
+              "county",
+              "national",
+              "metro"
+            ],
+            "title": "Geography Kind"
+          },
+          "geography_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Geography Id"
+          },
+          "county_vintage": {
+            "type": "string",
+            "pattern": "^[0-9]{4}$",
+            "title": "County Vintage"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SPMSelection",
+        "description": "Select from the bundle's pinned artifact; national geography is explicit.\n\nCounty mode reads the household's observed ``county_fips``. A state alone\ndoes not identify an SPM area. These settings contain no provider or path."
+      },
       "SimulationRequest": {
         "properties": {
           "country": {
             "type": "string",
             "title": "Country"
+          },
+          "spm": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SPMSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "version": {
             "anyOf": [
@@ -1903,6 +2203,26 @@
       },
       "SingleYearMacroOutput": {
         "properties": {
+          "spm_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SPMSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spm_provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SPMComparisonProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "model_version": {
             "type": "string",
             "title": "Model Version"
@@ -2195,6 +2515,14 @@
       },
       "VersionsResponse": {
         "properties": {
+          "spm_capabilities": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SPMCapability"
+            },
+            "type": "object",
+            "title": "Spm Capabilities",
+            "description": "Canonical SPM capabilities keyed by exact PolicyEngine wrapper version. Resolve a country-model route to its app in the routing maps, then find that app's exact version in the policyengine map. App names, country-model versions and latest aliases are not capability keys."
+          },
           "policyengine": {
             "$ref": "#/components/schemas/VersionMap"
           },

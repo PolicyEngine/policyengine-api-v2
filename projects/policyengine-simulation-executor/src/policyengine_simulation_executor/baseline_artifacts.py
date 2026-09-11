@@ -33,7 +33,8 @@ logger = logging.getLogger(__name__)
 
 # Artifact outcomes reported via the `baseline_artifact` observability
 # attribute. "hit": loaded (disk or in-process cache) and complete;
-# "incomplete": loaded but missing requested columns -> recomputed;
+# "incomplete": loaded but missing requested columns or a valid SPM receipt
+# -> recomputed;
 # "miss": no artifact -> computed (today's behavior).
 OUTCOME_HIT = "hit"
 OUTCOME_INCOMPLETE = "incomplete"
@@ -102,7 +103,11 @@ def qualifying_baseline_identity(
         return None
 
     return artifact_keys.collect_baseline_identity(
-        country, year, region=region, scope_key=scope_key
+        country,
+        year,
+        region=region,
+        scope_key=scope_key,
+        **({"spm": params["spm"]} if params.get("spm") is not None else {}),
     )
 
 
@@ -130,7 +135,11 @@ def deterministic_baseline_id(
             scoping_strategy=scoping_strategy,
             year=year,
         )
-    except Exception:
+    except Exception as exc:
+        from policyengine_simulation_contract.spm import spm_error_detail
+
+        if spm_error_detail(exc):
+            raise
         logger.warning(
             "Could not collect baseline artifact identity for %s; "
             "using a random simulation id",
@@ -171,23 +180,45 @@ class ArtifactBaselineSimulation(Simulation):
             self._artifact_outcome = outcome
 
     def ensure(self) -> None:
+        # The wrapper restores selection metadata on load/cache hits. Keep the
+        # request's selection so an invalid cached entry cannot replace it.
+        selection = getattr(self, "spm_config", None)
+        requested_spm = getattr(self, "spm", None)
         self._computed_this_process = False
         super().ensure()
         if self._computed_this_process:
             self._record_outcome(OUTCOME_MISS)
             return
 
+        from policyengine_simulation_contract.spm import SPMInputError
+
+        from policyengine_simulation_executor.spm import simulation_spm_result
+
+        # A tax-only artifact can legitimately have no receipt years. Check its
+        # columns first, then treat unusable cached receipts as another gap.
         missing = self._missing_output_columns()
-        if not missing:
+        receipt_error = None
+        if not missing and selection is not None:
+            try:
+                simulation_spm_result(
+                    self, self, selection, expected_year=self.dataset.year
+                )
+            except SPMInputError as exc:
+                receipt_error = str(exc)
+        if not missing and receipt_error is None:
             self._record_outcome(OUTCOME_HIT)
             return
 
         logger.warning(
-            "Baseline artifact %s is missing output columns %s; recomputing",
+            "Baseline artifact %s is incomplete (missing columns=%s, "
+            "SPM receipt=%s); recomputing",
             self.id,
             missing,
+            receipt_error,
         )
         self._record_outcome(OUTCOME_INCOMPLETE)
+        if selection is not None:
+            setattr(self, "spm", requested_spm)
         self.run()
         self.save()
         # Replace the in-process cache entry so this request's second
@@ -197,8 +228,11 @@ class ArtifactBaselineSimulation(Simulation):
         # existing key and exposes no remove, so evict directly first.
         from policyengine.core.simulation import _cache
 
-        _cache._cache.pop(self.id, None)
-        _cache.add(self.id, self)
+        _cache._cache.pop(getattr(self, "storage_id", self.id), None)
+        _cache.add(
+            getattr(self, "storage_id", self.id),
+            self.model_copy(deep=False) if selection is not None else self,
+        )
 
     def _missing_output_columns(self) -> list[tuple[str, str]]:
         data = getattr(self.output_dataset, "data", None)

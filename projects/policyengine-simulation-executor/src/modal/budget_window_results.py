@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from policyengine_simulation_contract.spm import SPMSelection, validate_spm_result
 from typing import Any
 
 from policyengine_simulation_contract.gateway_models import (
@@ -36,7 +37,9 @@ def extract_annual_impact(
     *,
     simulation_year: str,
     child_result: dict[str, Any],
+    spm: Any = None,
 ) -> BudgetWindowAnnualImpact:
+    receipt = validate_spm_result(child_result, spm, expected_year=simulation_year)
     budget = child_result.get("budget", {})
     if not isinstance(budget, dict):
         raise ValueError("Malformed budget-window child result: missing budget object")
@@ -61,6 +64,8 @@ def extract_annual_impact(
         state_tax_revenue_impact = 0.0
 
     return BudgetWindowAnnualImpact(
+        spm_config=SPMSelection.model_validate(spm) if spm is not None else None,
+        spm_provenance=receipt,
         year=simulation_year,
         taxRevenueImpact=tax_revenue_impact,
         federalTaxRevenueImpact=tax_revenue_impact - state_tax_revenue_impact,

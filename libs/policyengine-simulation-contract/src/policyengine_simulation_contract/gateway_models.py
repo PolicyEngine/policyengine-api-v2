@@ -14,10 +14,15 @@ from pydantic import (
     model_validator,
 )
 
+from policyengine_simulation_contract.spm import (
+    SPMSelection,
+    SPMCapability,
+    SPMComparisonProvenance,
+    SPMErrorDetail,
+)
 from policyengine_simulation_contract.json_types import JsonObject
 from policyengine_simulation_contract.macro_output import SingleYearMacroOutput
 from policyengine_simulation_observability.telemetry import TelemetryEnvelope
-
 
 # Hard cap on request body size (bytes). SimulationOptions + telemetry + any
 # reform/baseline parameter tree should fit comfortably in ~256 KB. A hostile
@@ -95,6 +100,7 @@ class GatewayRequestBase(BaseModel):
     """
 
     country: str
+    spm: Optional[SPMSelection] = None
     version: Optional[str] = None
     policyengine_version: Optional[str] = None
     telemetry: TelemetryEnvelope | None = None
@@ -156,6 +162,17 @@ class PolicyEngineBundle(BaseModel):
     policyengine_version: Optional[str] = None
     data_version: Optional[str] = None
     dataset: Optional[str] = None
+    spm: Optional[SPMCapability] = None
+
+
+class SimulationErrorResponse(BaseModel):
+    """Existing route errors and public typed SPM input failures."""
+
+    status: Literal["failed"] | None = None
+    result: None = None
+    error: str | None = None
+    errors: list[SPMErrorDetail] | None = None
+    detail: str | None = None
 
 
 class JobSubmitResponse(BaseModel):
@@ -176,6 +193,7 @@ class JobStatusResponse(BaseModel):
 
     status: Literal["running", "complete", "failed"]
     result: Optional[SingleYearMacroOutput] = None
+    errors: Optional[list[SPMErrorDetail]] = None
     error: Optional[str] = None
     resolved_app_name: Optional[str] = None
     policyengine_bundle: Optional[PolicyEngineBundle] = None
@@ -223,6 +241,8 @@ class BudgetWindowBatchRequest(GatewayRequestBase):
 class BudgetWindowAnnualImpact(BaseModel):
     """Annual budget-window impact row."""
 
+    spm_config: Optional[SPMSelection] = None
+    spm_provenance: Optional[SPMComparisonProvenance] = None
     year: str
     taxRevenueImpact: float
     federalTaxRevenueImpact: float
@@ -265,6 +285,7 @@ class BatchChildJobStatus(BaseModel):
         "failed",
         "cancelled",
     ]
+    errors: Optional[list[SPMErrorDetail]] = None
     error: Optional[str] = None
 
 
@@ -292,6 +313,7 @@ class BudgetWindowBatchStatusResponse(BaseModel):
     failed_years: list[str] = Field(default_factory=list)
     child_jobs: dict[str, BatchChildJobStatus] = Field(default_factory=dict)
     result: Optional[BudgetWindowResult] = None
+    errors: Optional[list[SPMErrorDetail]] = None
     error: Optional[str] = None
     resolved_app_name: Optional[str] = None
     policyengine_bundle: Optional[PolicyEngineBundle] = None
@@ -323,6 +345,7 @@ class BudgetWindowBatchState(BaseModel):
         default_factory=dict
     )
     result: Optional[BudgetWindowResult] = None
+    errors: Optional[list[SPMErrorDetail]] = None
     error: Optional[str] = None
     created_at: str
     updated_at: str
@@ -348,6 +371,15 @@ class VersionMap(RootModel[dict[str, str]]):
 class VersionsResponse(BaseModel):
     """All supported simulation routing version maps."""
 
+    spm_capabilities: dict[str, SPMCapability] = Field(
+        default_factory=dict,
+        description=(
+            "Canonical SPM capabilities keyed by exact PolicyEngine wrapper version. "
+            "Resolve a country-model route to its app in the routing maps, then "
+            "find that app's exact version in the policyengine map. App names, "
+            "country-model versions and latest aliases are not capability keys."
+        ),
+    )
     policyengine: VersionMap
     us: VersionMap
     uk: VersionMap

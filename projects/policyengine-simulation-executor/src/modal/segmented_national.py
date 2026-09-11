@@ -33,6 +33,11 @@ from policyengine_simulation_executor.national_partition import (
 from policyengine_simulation_executor.segmented_national_reduce import (
     build_national_output,
 )
+from policyengine_simulation_contract.spm import (
+    spm_error_detail,
+    SPMInputError,
+    combine_spm_results,
+)
 from policyengine_simulation_observability.errors import log_and_redact_exception
 from policyengine_simulation_observability.observability import SegmentName
 from policyengine_simulation_observability.telemetry import split_internal_payload
@@ -235,6 +240,10 @@ class SegmentedNationalRunner:
                     poll_errors.pop(index, None)
                     continue
                 except Exception as exc:
+                    detail = spm_error_detail(exc)
+                    if detail:
+                        self._cancel_all(handles)
+                        raise SPMInputError(detail.code, detail.message) from exc
                     # One transient poll-RPC blip must not kill the job; a
                     # real child failure re-raises on the next probe too.
                     attempts = poll_errors.get(index, 0) + 1
@@ -300,6 +309,13 @@ class SegmentedNationalRunner:
                 year=_parse_year(simulation_params),
                 resolved_data_version=_requested_data_version(simulation_params),
             )
+        output.update(
+            combine_spm_results(
+                child_results,
+                simulation_params.get("spm"),
+                expected_year=_parse_year(simulation_params),
+            )
+        )
         for key in ("model_version", "data_version"):
             if output.get(key):
                 set_attribute(key, str(output[key]))
@@ -315,6 +331,11 @@ def run_segmented_national_impl(
 def dispatch_run_simulation(params: dict[str, Any], *, app_name: str) -> dict[str, Any]:
     """The run_simulation entrypoint's routing: segmented national fan-out
     for eligible requests, the monolithic path for everything else."""
+    from policyengine_simulation_executor.spm import normalize_runtime_spm
+
+    selection = normalize_runtime_spm(params)
+    if selection is not None:
+        params = {**params, "spm": selection}
     if should_run_segmented_national(params):
         return run_segmented_national_impl(params, app_name=app_name)
 

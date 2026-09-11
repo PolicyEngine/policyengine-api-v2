@@ -1019,6 +1019,7 @@ class TestVersionEndpoints:
 
         assert response.status_code == 200
         assert response.json() == {
+            "spm_capabilities": {},
             "policyengine": {
                 "latest": "4.9.0",
                 "4.9.0": "old-py-app",
@@ -1236,7 +1237,9 @@ class TestBudgetWindowBatchEndpoints:
     def test__given_batch_state__then_poll_returns_completed_response(
         self, mock_modal, client: TestClient
     ):
-        from policyengine_simulation_contract.budget_window_state import put_batch_job_state
+        from policyengine_simulation_contract.budget_window_state import (
+            put_batch_job_state,
+        )
         from policyengine_simulation_contract.gateway_models import (
             BudgetWindowAnnualImpact,
             BudgetWindowBatchState,

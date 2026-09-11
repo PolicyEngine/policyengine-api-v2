@@ -136,7 +136,20 @@ def run_simulation_impl(params: dict) -> dict:
     # Set up GCP credentials if needed. The credentials temp file is
     # cleaned up on exit so we never leave signed JSON material on disk.
     with setup_gcp_credentials():
-        return _run_simulation_impl_core(params)
+        try:
+            return _run_simulation_impl_core(params)
+        except ValueError as exc:
+            # Gateway images intentionally do not install country packages.
+            # Transport the public error through the shared contract instead.
+            from policyengine_simulation_contract.spm import (
+                SPMInputError,
+                spm_error_detail,
+            )
+
+            detail = spm_error_detail(exc)
+            if detail is not None:
+                raise SPMInputError(detail.code, detail.message) from None
+            raise
 
 
 def _parse_year(params: dict[str, Any]) -> int:
@@ -490,6 +503,11 @@ def _build_simulation(
         deterministic_baseline_id,
     )
 
+    from policyengine_simulation_executor.spm import normalize_runtime_spm
+
+    selection = normalize_runtime_spm(params)
+    params = {**params, **({"spm": selection} if selection is not None else {})}
+    spm_kwargs = {"spm": selection} if selection is not None else {}
     country = params.get("country", "us")
     country_module = _country_module(country)
     simulation_id = deterministic_baseline_id(
@@ -505,6 +523,7 @@ def _build_simulation(
         # when one is baked beside the dataset, and the subclass validates
         # the load (falling back to run()) — see baseline_artifacts.
         return ArtifactBaselineSimulation(
+            **spm_kwargs,
             id=simulation_id,
             dataset=dataset,
             tax_benefit_model_version=country_module.model,
@@ -512,6 +531,7 @@ def _build_simulation(
             scoping_strategy=scoping_strategy,
         )
     return Simulation(
+        **spm_kwargs,
         dataset=dataset,
         tax_benefit_model_version=country_module.model,
         policy=policy,
@@ -523,6 +543,14 @@ def _run_simulation_impl_core(params: dict) -> dict:
     with segment(SegmentName.REQUEST_PARSE):
         simulation_params, telemetry, metadata = split_internal_payload(params)
     metadata = metadata or {}
+    from policyengine_simulation_executor.spm import (
+        normalize_runtime_spm,
+        simulation_spm_result,
+    )
+
+    selection = normalize_runtime_spm(simulation_params)
+    if selection is not None:
+        simulation_params["spm"] = selection
 
     logger.info(
         "Starting simulation for country=%s run_id=%s process_id=%s",
@@ -590,6 +618,11 @@ def _run_simulation_impl_core(params: dict) -> dict:
         resolved_region_code=region_resolution.code,
     )
     output = builder.serialize()
+    output.update(
+        simulation_spm_result(
+            baseline, reform, selection, expected_year=_parse_year(simulation_params)
+        )
+    )
     # ensure() has run inside the builder by now, so the artifact outcome
     # (hit / incomplete / miss) is known for deterministic-id baselines.
     artifact_outcome = getattr(baseline, "artifact_outcome", None)

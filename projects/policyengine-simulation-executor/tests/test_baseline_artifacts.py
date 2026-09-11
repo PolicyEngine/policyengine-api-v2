@@ -7,10 +7,14 @@ model versions are SimpleNamespace fakes and the policyengine in-process
 simulation cache is swapped per test.
 """
 
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+
+from policyengine.core import Simulation
+from pydantic import PrivateAttr
 
 from policyengine_simulation_executor import artifact_keys as ak
 from policyengine_simulation_executor import baseline_artifacts as ba
@@ -584,3 +588,381 @@ class TestArtifactDiskRoundTrip:
             year=2026,
         )
         assert "employment_income" in reloaded.data.person.columns
+
+
+SPM_SELECTION = {
+    "forecast_content_sha256": "a" * 64,
+    "scenario": "ce_trend",
+    "geography_kind": "national",
+    "geography_id": None,
+    "county_vintage": "2020",
+    "as_of": None,
+}
+
+
+def _spm_receipt(selection=None, *, year="2026"):
+    """One calculation receipt, the shape ``spm_provenance()`` returns.
+
+    ``simulation_spm_result`` reads one receipt per simulation and pairs the
+    baseline's with the reform's itself, so the wrapper hands back a flat
+    receipt rather than a baseline/reform comparison.
+    """
+    selection = selection or SPM_SELECTION
+    return {
+        "forecast_id": "test-only",
+        "forecast_sha256": selection["forecast_content_sha256"],
+        "scenario": selection["scenario"],
+        "geography_kind": selection["geography_kind"],
+        "runtime_versions": {"policyengine-us": "test-only"},
+        "years": {year: {"status": "forecast"}},
+        "geographies": [],
+        "composition_method": "classified-inputs",
+        "storage_method": "formula",
+    }
+
+
+def _installed_wrapper_supports_spm() -> bool:
+    return "spm" in Simulation.model_fields and hasattr(Simulation, "spm_provenance")
+
+
+_INSTALLED_WRAPPER_SUPPORTS_SPM = _installed_wrapper_supports_spm()
+
+
+class SPMWrapperSimulation(Simulation):
+    """Test double for the canonical wrapper's SPM surface.
+
+    The wrapper the canonical bundle installs adds an ``spm`` field, an
+    ``spm_config`` holding the selection an artifact was built under, and an
+    ``spm_provenance()`` calculation receipt; it restores that metadata on a
+    load or a cache hit. The ``policyengine`` this project pins has none of
+    it, which is why ``ensure()``'s receipt validation was reachable only
+    from the SPM_NATIVE_SMOKE_SOURCE-gated tests.
+
+    This double reproduces that surface's *shape and restore timing*, which
+    is all the guard depends on. It is deliberately more permissive than the
+    real wrapper, whose own load rejects an artifact built under a different
+    selection: the guard is written not to trust the wrapper, so it is
+    exercised here as the independent check it is meant to be.
+
+    It is evidence about ``ensure()``'s decisions, never about the wrapper.
+    It cannot show that a real ``spm_provenance()`` returns a mapping
+    ``SPMProvenance`` accepts, that a real load or cache hit restores the
+    artifact's selection at all, or that a real ``storage_id`` separates two
+    selections. Those three are the native suite's claims; hermetic green
+    here is not wrapper conformance.
+
+    ``storage_id`` is a plain field rather than a property derived from the
+    selection, so it stays put while a load rewrites ``spm`` — the double
+    makes no claim about how the wrapper computes it, only that the artifact
+    class keys the process cache on it.
+    """
+
+    spm: dict | None = None
+    spm_config: dict | None = None
+    spm_receipt: dict | None = None
+    storage_id: str = ""
+    _provenance_reads: list = PrivateAttr(default_factory=list)
+
+    def spm_provenance(self):
+        self._provenance_reads.append(deepcopy(self.spm_config))
+        return self.spm_receipt
+
+    def ensure(self):
+        from policyengine.core.simulation import _cache
+
+        cache_key = self.storage_id or self.id
+        cached = _cache.get(cache_key)
+        if cached is not None:
+            self.output_dataset = cached.output_dataset
+            # The restore the guard exists to survive: a cached entry's
+            # selection lands on this request's simulation, replacing the
+            # one the request asked for.
+            self.spm = deepcopy(getattr(cached, "spm", None))
+            self.spm_config = deepcopy(getattr(cached, "spm_config", None))
+            self.spm_receipt = deepcopy(getattr(cached, "spm_receipt", None))
+            return
+        try:
+            self.tax_benefit_model_version.load(self)
+        except Exception:
+            self.run()
+            self.save()
+        # The wrapper files a snapshot, not the live object, so re-pointing
+        # this simulation at another selection cannot rewrite the entry an
+        # earlier key names.
+        _cache.add(cache_key, self.model_copy(deep=False))
+
+
+class CanonicalSPMSimulation(ba.ArtifactBaselineSimulation, SPMWrapperSimulation):
+    """``ArtifactBaselineSimulation`` over a wrapper that supports SPM."""
+
+
+class SPMModelVersion(FakeModelVersion):
+    """Restores an artifact's stored SPM metadata on load, as the wrapper does."""
+
+    def __init__(
+        self, *, load_result="complete", stored_config=None, stored_receipt=None
+    ):
+        super().__init__(load_result=load_result)
+        self.stored_config = stored_config
+        self.stored_receipt = stored_receipt
+        self.spm_at_run = []
+
+    def load(self, simulation):
+        super().load(simulation)
+        # An artifact carries the selection it was built under, and the
+        # wrapper restores it over the requested one.
+        simulation.spm = deepcopy(self.stored_config)
+        simulation.spm_config = deepcopy(self.stored_config)
+        simulation.spm_receipt = deepcopy(self.stored_receipt)
+
+    def run(self, simulation):
+        super().run(simulation)
+        # A real recompute measures SPM under whatever ``spm`` now holds.
+        self.spm_at_run.append(deepcopy(simulation.spm))
+        simulation.spm_config = deepcopy(simulation.spm)
+        simulation.spm_receipt = _spm_receipt(simulation.spm)
+
+
+def _make_spm_sim(
+    model_version, *, spm=None, sim_id="bl1-spm", storage_id=None, year=2026
+):
+    selection = SPM_SELECTION if spm is None else spm
+    return CanonicalSPMSimulation.model_construct(
+        id=sim_id,
+        storage_id=storage_id or f"{sim_id}-{selection['scenario']}",
+        dataset=SimpleNamespace(year=year),
+        tax_benefit_model_version=model_version,
+        policy=None,
+        dynamic=None,
+        scoping_strategy=None,
+        extra_variables={},
+        output_dataset=None,
+        spm=deepcopy(SPM_SELECTION) if spm is None else deepcopy(spm),
+        # The wrapper carries the selection it was configured with from
+        # construction; a load or cache hit then overwrites it with whatever
+        # the artifact was built under, which is exactly what the guard in
+        # ``ensure()`` compares against the pre-load value.
+        spm_config=deepcopy(SPM_SELECTION) if spm is None else deepcopy(spm),
+        spm_receipt=None,
+    )
+
+
+class TestEnsureValidatesSPMReceipts:
+    """``ensure()``'s receipt validation, driven by fixtures rather than a model.
+
+    Only the opt-in native tests reached this block before, so hermetic CI
+    could not tell a working guard from a dead one. These cases fix the
+    guard's *decisions*; the native tests remain the only evidence that real
+    wrapper receipts have the shape the decisions are made on.
+    """
+
+    def test_matching_receipt_loads_as_a_hit(self, fresh_cache):
+        model = SPMModelVersion(
+            stored_config=deepcopy(SPM_SELECTION), stored_receipt=_spm_receipt()
+        )
+        sim = _make_spm_sim(model)
+        sim.ensure()
+        assert sim.artifact_outcome == ba.OUTCOME_HIT
+        assert model.calls == ["load"]
+
+    def test_artifact_built_under_another_selection_recomputes(self, fresh_cache):
+        other = {**SPM_SELECTION, "scenario": "zero_real"}
+        model = SPMModelVersion(stored_config=other, stored_receipt=_spm_receipt(other))
+        sim = _make_spm_sim(model)
+        sim.ensure()
+        assert sim.artifact_outcome == ba.OUTCOME_INCOMPLETE
+        assert model.calls == ["load", "run", "save"]
+        # The requested selection is restored before the recompute, so the
+        # new artifact is measured under the request, not the artifact.
+        assert model.spm_at_run == [SPM_SELECTION]
+        assert sim.spm_config == SPM_SELECTION
+
+    def test_artifact_without_a_receipt_recomputes(self, fresh_cache):
+        model = SPMModelVersion(
+            stored_config=deepcopy(SPM_SELECTION), stored_receipt=None
+        )
+        sim = _make_spm_sim(model)
+        sim.ensure()
+        assert sim.artifact_outcome == ba.OUTCOME_INCOMPLETE
+        assert model.calls == ["load", "run", "save"]
+
+    def test_malformed_receipt_recomputes(self, fresh_cache):
+        malformed = _spm_receipt()
+        del malformed["composition_method"]
+        model = SPMModelVersion(
+            stored_config=deepcopy(SPM_SELECTION), stored_receipt=malformed
+        )
+        sim = _make_spm_sim(model)
+        sim.ensure()
+        assert sim.artifact_outcome == ba.OUTCOME_INCOMPLETE
+        assert model.calls == ["load", "run", "save"]
+
+    def test_receipt_from_another_forecast_recomputes(self, fresh_cache):
+        stale = _spm_receipt()
+        stale["forecast_sha256"] = "b" * 64
+        model = SPMModelVersion(
+            stored_config=deepcopy(SPM_SELECTION), stored_receipt=stale
+        )
+        sim = _make_spm_sim(model)
+        sim.ensure()
+        assert sim.artifact_outcome == ba.OUTCOME_INCOMPLETE
+        assert model.calls == ["load", "run", "save"]
+
+    def test_receipt_for_another_year_recomputes(self, fresh_cache):
+        model = SPMModelVersion(
+            stored_config=deepcopy(SPM_SELECTION),
+            stored_receipt=_spm_receipt(year="2024"),
+        )
+        sim = _make_spm_sim(model)
+        sim.ensure()
+        assert sim.artifact_outcome == ba.OUTCOME_INCOMPLETE
+        assert model.calls == ["load", "run", "save"]
+
+    def test_cached_entry_with_an_unusable_receipt_is_revalidated(self, fresh_cache):
+        """A cache hit skips the load entirely, so the entry's receipt is
+        the only thing standing between the request and someone else's
+        output. A tax-only run leaves a receipt with no years under the same
+        selection; the guard has to notice and recompute."""
+        stale = _make_spm_sim(SPMModelVersion())
+        stale.output_dataset = _output(_complete_frames())
+        stale.spm_receipt = _spm_receipt(year="2024")
+        fresh_cache.add(stale.storage_id, stale)
+
+        model = SPMModelVersion()
+        sim = _make_spm_sim(model)
+        sim.ensure()
+        assert sim.artifact_outcome == ba.OUTCOME_INCOMPLETE
+        # Cache hit short-circuits the load; the guard still forces the run.
+        assert model.calls == ["run", "save"]
+
+    def test_cached_selection_cannot_replace_the_request(self, fresh_cache):
+        """Defense in depth: an entry whose selection disagrees with the key
+        it is filed under. A correct wrapper never writes one — the key is
+        derived from the selection — but a cache hit restores the entry's
+        selection onto this request without revalidating, so the guard
+        keeps the request's own selection and recomputes under it."""
+        other = {**SPM_SELECTION, "scenario": "zero_real"}
+        stale = _make_spm_sim(SPMModelVersion(), spm=other)
+        stale.output_dataset = _output(_complete_frames())
+        stale.spm_receipt = _spm_receipt(other)
+        request = _make_spm_sim(SPMModelVersion())
+        fresh_cache.add(request.storage_id, stale)
+
+        model = SPMModelVersion()
+        sim = _make_spm_sim(model)
+        sim.ensure()
+        assert sim.artifact_outcome == ba.OUTCOME_INCOMPLETE
+        assert model.calls == ["run", "save"]
+        assert model.spm_at_run == [SPM_SELECTION]
+        assert sim.spm_config == SPM_SELECTION
+
+    def test_recompute_replaces_the_cache_with_this_request_s_selection(
+        self, fresh_cache
+    ):
+        other = {**SPM_SELECTION, "scenario": "zero_real"}
+        model = SPMModelVersion(stored_config=other, stored_receipt=_spm_receipt(other))
+        sim = _make_spm_sim(model)
+        sim.ensure()
+        assert fresh_cache.get(sim.storage_id).spm_config == SPM_SELECTION
+
+        # The next request in this container hits the replaced entry and
+        # validates clean: one recompute for the container, not one each.
+        later_model = SPMModelVersion(stored_config=other)
+        later = _make_spm_sim(later_model)
+        later.ensure()
+        assert later.artifact_outcome == ba.OUTCOME_HIT
+        assert later_model.calls == []
+
+    def test_missing_columns_are_decided_before_the_receipt(self, fresh_cache):
+        """A tax-only artifact can legitimately carry no usable receipt.
+        Columns are checked first so the outcome is attributed to the gap
+        that actually exists, and the receipt is never consulted."""
+        model = SPMModelVersion(
+            load_result="incomplete",
+            stored_config=deepcopy(SPM_SELECTION),
+            stored_receipt=None,
+        )
+        sim = _make_spm_sim(model)
+        sim.ensure()
+        assert sim.artifact_outcome == ba.OUTCOME_INCOMPLETE
+        assert sim._provenance_reads == []
+
+    def test_a_request_without_a_selection_never_validates_receipts(self, fresh_cache):
+        """The legacy path: no selection, so a complete artifact is a hit
+        even though the wrapper surface exists and holds no receipt."""
+        model = SPMModelVersion(stored_config=None, stored_receipt=None)
+        sim = _make_spm_sim(model, sim_id="bl1-legacy")
+        sim.spm = None
+        sim.spm_config = None
+        sim.ensure()
+        assert sim.artifact_outcome == ba.OUTCOME_HIT
+        assert model.calls == ["load"]
+        assert sim._provenance_reads == []
+
+    def test_the_cache_is_keyed_by_storage_id_not_simulation_id(self, fresh_cache):
+        """One caller id must not serve two selections.
+
+        The deterministic simulation id is shared by every selection; only
+        the storage id separates them, and the artifact class evicts and
+        replaces under it. Keyed on the id instead, a national recompute
+        would answer the next county request from cache.
+        """
+        other = {**SPM_SELECTION, "scenario": "zero_real"}
+        first_model = SPMModelVersion(
+            stored_config=other, stored_receipt=_spm_receipt(other)
+        )
+        first = _make_spm_sim(first_model)
+        first.ensure()
+        assert first.artifact_outcome == ba.OUTCOME_INCOMPLETE
+
+        second_model = SPMModelVersion(
+            stored_config=other, stored_receipt=_spm_receipt(other)
+        )
+        second = _make_spm_sim(second_model, spm=other)
+        assert second.id == first.id
+        assert second.storage_id != first.storage_id
+        second.ensure()
+        # It read its own artifact rather than the entry the first request
+        # left behind, and both entries survive side by side.
+        assert second_model.calls == ["load"]
+        assert second.artifact_outcome == ba.OUTCOME_HIT
+        # The artifact class filed the recompute under the storage id, and
+        # nothing was ever filed under the bare simulation id.
+        assert fresh_cache.get(first.storage_id).spm_config == SPM_SELECTION
+        assert fresh_cache.get(second.storage_id) is not None
+        assert fresh_cache.get(first.id) is None
+
+    def test_the_replaced_cache_entry_is_a_snapshot(self, fresh_cache):
+        """The replacement is a copy so that re-pointing this simulation at
+        another selection and running it again cannot overwrite the output
+        the earlier key names."""
+        other = {**SPM_SELECTION, "scenario": "zero_real"}
+        model = SPMModelVersion(stored_config=other, stored_receipt=_spm_receipt(other))
+        sim = _make_spm_sim(model)
+        sim.ensure()
+        cached = fresh_cache.get(sim.storage_id)
+        assert cached is not sim
+
+        # A later request in the same process re-points the live object.
+        model.load(sim)
+        assert sim.spm_config == other
+        assert cached.spm_config == SPM_SELECTION
+
+    @pytest.mark.skipif(
+        not _INSTALLED_WRAPPER_SUPPORTS_SPM,
+        reason=(
+            "The pinned policyengine is pre-canonical; this checks the double "
+            "above against the real surface as soon as an SPM-capable wrapper "
+            "is pinned, at which point the double should be retired for it."
+        ),
+    )
+    def test_the_double_matches_the_installed_wrapper_surface(self):
+        from policyengine.core import Simulation
+
+        assert "spm" in Simulation.model_fields
+        assert callable(getattr(Simulation, "spm_provenance", None))
+        assert isinstance(
+            getattr(type(Simulation), "storage_id", None)
+            or Simulation.__dict__.get("storage_id"),
+            property,
+        )

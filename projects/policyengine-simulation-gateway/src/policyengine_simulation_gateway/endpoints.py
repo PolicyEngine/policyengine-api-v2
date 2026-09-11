@@ -24,6 +24,12 @@ from policyengine_simulation_contract.budget_window_state import (
     put_batch_job_state,
 )
 from policyengine_simulation_gateway.auth import require_auth
+from policyengine_simulation_contract.spm import (
+    SPMCapability,
+    SPMInputError,
+    spm_error_detail,
+    resolve_spm_selection,
+)
 from policyengine_simulation_observability.errors import log_and_redact_exception
 from policyengine_simulation_contract.gateway_models import (
     BudgetWindowBatchRequest,
@@ -76,6 +82,11 @@ class RouteResolution:
     response_version: str
     policyengine_version: str | None
     bundle_manifest: dict
+    route_provenance: str | None = None
+    # The country model version this route names, when it names one. A
+    # country route's key is that version; a policyengine-keyed route's is
+    # not, and echoing a wrapper version there reads as a model version.
+    country_model_version: str | None = None
 
 
 def _job_metadata_store():
@@ -338,22 +349,76 @@ def _bundle_manifest(state: dict, policyengine_version: str | None) -> dict:
     return manifest if isinstance(manifest, dict) else {}
 
 
-def _policyengine_version_for_app(state: dict, app_name: str) -> str | None:
-    for policyengine_version, routed_app in _routing_state_routes(
-        state, "policyengine"
-    ).items():
-        if routed_app == app_name:
-            return (
-                policyengine_version if isinstance(policyengine_version, str) else None
-            )
+def _policyengine_version_for_app(
+    state: dict, app_name: str, *, country: str, model_version: str
+) -> str | None:
+    """The wrapper version serving this country route, or None.
 
-    for policyengine_version, manifest in _routing_state_bundles(state).items():
-        if isinstance(manifest, dict) and manifest.get("app_name") == app_name:
-            return (
-                policyengine_version if isinstance(policyengine_version, str) else None
-            )
+    Behaviour change from the pre-canonical gateway, deliberate: a country
+    route whose one candidate bundle states a *different* model version is
+    now rejected with a 400 instead of resolving. Publishing only ever adds
+    country routes and overwrites the bundle manifest for the wrapper
+    version it deploys (``update_version_registry``), so re-publishing one
+    wrapper with an upgraded country model leaves the old country route
+    pointing at an app whose manifest now states the new model. Before, that
+    route resolved and the 202 body contradicted itself -- ``version`` from
+    the stale route, ``policyengine_bundle.model_version`` from the live
+    manifest -- and with canonical SPM the caller would also have been
+    reading a capability the requested model never had. Nothing prunes the
+    stale route, so the gateway refuses it instead.
 
-    return None
+    "States a different model version" and "states none" are one
+    classification, computed once below: an absent country entry, an absent,
+    non-string, empty or whitespace ``model_version`` all contradict
+    nothing and still resolve.
+    """
+    candidates = {
+        version
+        for version, routed_app in _routing_state_routes(state, "policyengine").items()
+        if isinstance(version, str) and version != "latest" and routed_app == app_name
+    } | {
+        version
+        for version, manifest in _routing_state_bundles(state).items()
+        if isinstance(version, str)
+        and version != "latest"
+        and isinstance(manifest, dict)
+        and manifest.get("app_name") == app_name
+    }
+    matching = []
+    unclassified = []
+    for version in candidates:
+        manifest = _bundle_manifest(state, version)
+        country_bundle = manifest.get(country)
+        candidate_model = (
+            country_bundle.get("model_version")
+            if isinstance(country_bundle, dict)
+            else None
+        )
+        if not isinstance(candidate_model, str) or not candidate_model.strip():
+            unclassified.append(version)
+        elif candidate_model == model_version:
+            matching.append(version)
+    if len(matching) == 1 and not unclassified:
+        return matching[0]
+    if len(candidates) > 1:
+        raise ValueError(
+            f"Ambiguous bundle for {country} version {model_version}; pass "
+            "policyengine_version to select a bundle explicitly"
+        )
+    if not candidates:
+        return None
+    version = next(iter(candidates))
+    if not unclassified:
+        # Reuse the classification above rather than re-deriving it: the
+        # shared validator reads any string as a stated model version, so
+        # calling it unconditionally rejected a blank one here while the
+        # ambiguity check above treated blank as unstated.
+        _validate_legacy_version_matches_bundle(
+            country=country,
+            requested_version=model_version,
+            manifest=_bundle_manifest(state, version),
+        )
+    return version
 
 
 def _policyengine_version_from_app_name(app_name: str) -> str | None:
@@ -392,12 +457,30 @@ def _resolve_country_route(
     app_name = _routing_state_routes(state, country).get(version)
     if not isinstance(app_name, str):
         return None
-    policyengine_version = _policyengine_version_for_app(state, app_name)
+    policyengine_version = _policyengine_version_for_app(
+        state, app_name, country=country, model_version=version
+    )
+    if policyengine_version is None:
+        # The legacy seed producer infers these same wrapper routes. Missing
+        # registry metadata must not erase a known future app version.
+        policyengine_version = _policyengine_version_from_app_name(app_name)
     return RouteResolution(
         app_name=app_name,
         response_version=version,
         policyengine_version=policyengine_version,
         bundle_manifest=_bundle_manifest(state, policyengine_version),
+        country_model_version=version,
+        # A country route the registry ties to no wrapper bundle at all is
+        # pre-canonical by construction: every publish writes the wrapper
+        # route and the bundle manifest for the app it deploys, and the
+        # legacy seed only infers wrapper routes for prefixed app names. The
+        # registry's ``generation`` marker cannot carry this — the next
+        # publish rewrites it (update_version_registry).
+        route_provenance=(
+            "legacy-country-route"
+            if policyengine_version is None and state.get("schema_version") == 1
+            else None
+        ),
     )
 
 
@@ -534,6 +617,8 @@ def _resolve_from_legacy_dicts(
         response_version=resolved_version,
         policyengine_version=_policyengine_version_from_app_name(app_name),
         bundle_manifest={},
+        country_model_version=resolved_version,
+        route_provenance="legacy-country-dict",
     )
 
 
@@ -568,6 +653,15 @@ def _build_policyengine_bundle(
     policyengine_version = app_bundle.get(
         "policyengine_version", resolution.policyengine_version
     )
+    capability = app_bundle.get("spm") if country.lower() == "us" else None
+    if capability is not None:
+        try:
+            capability = SPMCapability.model_validate(capability)
+        except ValueError as exc:
+            raise SPMInputError(
+                "SPM_CONFIGURATION_UNAVAILABLE",
+                "This worker bundle has invalid canonical SPM capability metadata",
+            ) from exc
     return PolicyEngineBundle(
         model_version=str(model_version),
         policyengine_version=(
@@ -575,6 +669,53 @@ def _build_policyengine_bundle(
         ),
         data_version=str(data_version) if isinstance(data_version, str) else None,
         dataset=resolved_dataset,
+        spm=capability,
+    )
+
+
+def _certified_model_version(country: str, route: RouteResolution) -> str | None:
+    """The country model version the registry states for this route.
+
+    ``PolicyEngineBundle.model_version`` falls back to the routing response
+    version so the response always carries one. On a policyengine-keyed
+    route with no manifest that fallback is a wrapper version, and reading
+    it as a model version is how a legacy 5.2.0/5.3.0 route stopped
+    resolving. An unstated model version contradicts nothing.
+    """
+    country_bundle = route.bundle_manifest.get(country.lower())
+    if isinstance(country_bundle, dict):
+        stated = country_bundle.get("model_version")
+        if isinstance(stated, str) and stated.strip():
+            return stated
+    return route.country_model_version
+
+
+def _resolve_request_spm(request, bundle, route):
+    selection = resolve_spm_selection(
+        request.country,
+        request.spm,
+        capability=bundle.spm,
+        policyengine_version=bundle.policyengine_version,
+        model_version=_certified_model_version(request.country, route),
+        route_provenance=route.route_provenance,
+    )
+    if selection is not None:
+        from policyengine_simulation_contract.spm import SPMSelection
+
+        request.spm = SPMSelection.model_validate(selection)
+    return selection
+
+
+def _bundle_payload(bundle: PolicyEngineBundle, **dump_kwargs) -> dict:
+    """Dump a bundle, omitting ``spm`` when the route has no capability.
+
+    The 202 and 500 job bodies splat this dict in directly, bypassing the
+    routes' ``response_model_exclude_none``. Every other optional bundle
+    field was already emitted as an explicit null before canonical SPM, so
+    only the new key is dropped: a legacy no-SPM body stays byte-identical.
+    """
+    return bundle.model_dump(
+        exclude=None if bundle.spm is not None else {"spm"}, **dump_kwargs
     )
 
 
@@ -585,7 +726,7 @@ def _serialize_job_metadata(
 ) -> dict:
     return {
         "resolved_app_name": resolved_app_name,
-        "policyengine_bundle": bundle.model_dump(),
+        "policyengine_bundle": _bundle_payload(bundle),
         "run_id": run_id,
     }
 
@@ -602,13 +743,15 @@ def _build_budget_window_parent_payload(
         mode="json",
         exclude_none=True,
     )
+    if request.spm is not None:
+        payload["spm"] = request.spm.model_dump(mode="json")
     payload["version"] = resolved_version
     if request.telemetry is not None:
         payload["_telemetry"] = request.telemetry.model_dump(mode="json")
     payload["_metadata"] = {
         "resolved_version": resolved_version,
         "resolved_app_name": resolved_app_name,
-        "policyengine_bundle": bundle.model_dump(mode="json"),
+        "policyengine_bundle": _bundle_payload(bundle, mode="json"),
     }
     return payload
 
@@ -694,9 +837,18 @@ async def submit_simulation(request: SimulationRequest):
                 route,
                 payload,
             )
+        _resolve_request_spm(request, bundle, route)
     except (ValueError, HuggingFaceDatasetReferenceError) as exc:
+        detail = spm_error_detail(exc)
+        if detail:
+            return failed_job_response(
+                error=detail.message, errors=[detail.model_dump()]
+            )
         record_error(exc, handled=True, status_code=400, include_stack=False)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if request.spm is not None:
+        payload["spm"] = request.spm.model_dump(mode="json")
 
     logger.info(
         "Routing %s:%s to app %s (run_id=%s)",
@@ -766,7 +918,13 @@ async def submit_budget_window_batch(request: BudgetWindowBatchRequest):
                 route,
                 request.model_dump(mode="json"),
             )
+        _resolve_request_spm(request, bundle, route)
     except (ValueError, HuggingFaceDatasetReferenceError) as exc:
+        detail = spm_error_detail(exc)
+        if detail:
+            return failed_job_response(
+                error=detail.message, errors=[detail.model_dump()]
+            )
         record_error(exc, handled=True, status_code=400, include_stack=False)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     with segment(SegmentName.REQUEST_PARSE):
@@ -854,6 +1012,13 @@ async def get_job_status(job_id: str):
         if _is_modal_job_not_found(exc):
             record_error(exc, handled=True, status_code=404, include_stack=False)
             raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+        detail = spm_error_detail(exc)
+        if detail:
+            return failed_job_response(
+                error=detail.message,
+                errors=[detail.model_dump()],
+                job_metadata=job_metadata,
+            )
         redacted = log_and_redact_exception(
             exc,
             scope="simulation_job_status",
@@ -922,13 +1087,19 @@ async def get_budget_window_job_status(batch_job_id: str):
         # "submitted" status from the seed store (#448). We deliberately
         # overwrite the main job store entry as well as the seed so either
         # lookup path observes the terminal failed state.
-        redacted = log_and_redact_exception(
-            exc,
-            scope="budget_window_parent_call",
-            context={"batch_job_id": batch_job_id},
+        detail = spm_error_detail(exc)
+        message = (
+            detail.message
+            if detail
+            else log_and_redact_exception(
+                exc,
+                scope="budget_window_parent_call",
+                context={"batch_job_id": batch_job_id},
+            )
         )
         seed_state.status = "failed"
-        seed_state.error = redacted
+        seed_state.errors = [detail] if detail else None
+        seed_state.error = message
         with segment(SegmentName.BUDGET_WINDOW_STATE_WRITE):
             put_batch_job_state(seed_state)
             put_batch_job_seed(seed_state)
@@ -947,7 +1118,16 @@ async def list_versions() -> VersionsResponse:
     with segment(SegmentName.ROUTE_RESOLUTION):
         state = _active_routing_state()
     if state:
+        capabilities = {}
+        for name, bundle in _routing_state_bundles(state).items():
+            if not isinstance(bundle, dict) or bundle.get("spm") is None:
+                continue
+            try:
+                capabilities[name] = SPMCapability.model_validate(bundle["spm"])
+            except ValueError:
+                logger.warning("Omitting invalid SPM capability for bundle %s", name)
         return VersionsResponse(
+            spm_capabilities=capabilities,
             policyengine=_version_map_from_state(state, "policyengine"),
             us=_version_map_from_state(state, "us"),
             uk=_version_map_from_state(state, "uk"),

@@ -30,6 +30,7 @@ from policyengine_simulation_contract.budget_window_state import (
     put_batch_job_seed,
     put_batch_job_state,
 )
+from policyengine_simulation_contract.spm import spm_error_detail
 from policyengine_simulation_observability.errors import log_and_redact_exception
 from policyengine_simulation_observability.observability import SegmentName
 
@@ -186,6 +187,15 @@ class BudgetWindowBatchRunner:
             except TimeoutError:
                 continue
             except Exception as exc:
+                detail = spm_error_detail(exc)
+                if detail:
+                    self.state.errors = [detail]
+                    self.fail_batch_for_child_error(
+                        simulation_year=simulation_year, error=detail.message
+                    )
+                    self.state.child_jobs[simulation_year].errors = [detail]
+                    put_batch_job_state(self.state)
+                    return False
                 redacted = log_and_redact_exception(
                     exc,
                     scope="budget_window_child_call",
@@ -212,8 +222,18 @@ class BudgetWindowBatchRunner:
                     annual_impact = extract_annual_impact(
                         simulation_year=simulation_year,
                         child_result=child_result,
+                        spm=self.state.request_payload.get("spm"),
                     )
             except Exception as exc:
+                detail = spm_error_detail(exc)
+                if detail:
+                    self.state.errors = [detail]
+                    self.fail_batch_for_child_error(
+                        simulation_year=simulation_year, error=detail.message
+                    )
+                    self.state.child_jobs[simulation_year].errors = [detail]
+                    put_batch_job_state(self.state)
+                    return False
                 redacted = log_and_redact_exception(
                     exc,
                     scope="budget_window_child_result_parsing",

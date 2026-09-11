@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict
+from policyengine_simulation_contract.spm import SPMSelection
 
 from policyengine_simulation_executor.simulation_macro_output import (
     SingleYearMacroOutput,
@@ -15,6 +16,7 @@ class SimulationOptions(BaseModel):
     """Legacy request schema name kept for generated clients."""
 
     country: str
+    spm: Optional[SPMSelection] = None
     scope: Optional[str] = None
     data: Optional[str] = None
     time_period: Optional[str | int] = None
