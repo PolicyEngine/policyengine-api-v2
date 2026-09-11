@@ -56,12 +56,13 @@ def test_explicit_national_discards_default_metro_area():
     "provenance,wrapper,model,accepted",
     [
         ("legacy-country-dict", None, "1.500.0", True),
-        ("legacy-seed", None, "1.715.2", True),
-        ("legacy-seed", None, "1.764.6", True),
+        ("legacy-country-route", None, "1.715.2", True),
+        ("legacy-country-route", None, "1.764.6", True),
         (None, None, "1.715.2", False),
         ("unknown", None, "1.715.2", False),
-        ("legacy-seed", None, "1.764.7", False),
-        ("legacy-seed", None, "unknown", False),
+        ("legacy-seed", None, "1.715.2", False),
+        ("legacy-country-route", None, "1.764.7", False),
+        ("legacy-country-route", None, "unknown", False),
         ("legacy-country-dict", "5.3.1", "1.715.2", False),
     ],
 )
@@ -84,3 +85,49 @@ def test_legacy_allowance_requires_route_provenance_and_historical_model(
         with pytest.raises(SPMInputError) as error:
             resolve_spm_selection("us", selection, **kwargs)
         assert error.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
+
+
+@pytest.mark.parametrize("wrapper", ["5.2.0", "5.3.0"])
+@pytest.mark.parametrize("model", [None, "1.764.6"])
+def test_pinned_pre_canonical_wrapper_is_historical_without_a_stated_model(
+    wrapper, model
+):
+    """A routing entry with no bundle manifest states no model version.
+
+    Requiring the pin's model version there rejected live 5.2.0/5.3.0
+    routes, because the response's model version falls back to the wrapper
+    version when the registry carries no manifest.
+    """
+    assert (
+        resolve_spm_selection(
+            "us",
+            None,
+            capability=None,
+            policyengine_version=wrapper,
+            model_version=model,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "wrapper,model",
+    [
+        ("5.2.0", "1.824.7"),
+        ("5.3.0", "1.824.7"),
+        ("5.4.0", None),
+        ("5.4.0", "1.764.6"),
+    ],
+)
+def test_unpinned_or_contradicted_wrapper_is_not_historical(wrapper, model):
+    """A stated model version that contradicts the pin, and any wrapper
+    outside the pinned pre-canonical set, still fail closed."""
+    with pytest.raises(SPMInputError) as error:
+        resolve_spm_selection(
+            "us",
+            None,
+            capability=None,
+            policyengine_version=wrapper,
+            model_version=model,
+        )
+    assert error.value.code == "SPM_CONFIGURATION_UNAVAILABLE"

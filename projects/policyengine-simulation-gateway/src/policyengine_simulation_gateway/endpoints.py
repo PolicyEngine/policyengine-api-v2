@@ -83,6 +83,10 @@ class RouteResolution:
     policyengine_version: str | None
     bundle_manifest: dict
     route_provenance: str | None = None
+    # The country model version this route names, when it names one. A
+    # country route's key is that version; a policyengine-keyed route's is
+    # not, and echoing a wrapper version there reads as a model version.
+    country_model_version: str | None = None
 
 
 def _job_metadata_store():
@@ -440,10 +444,16 @@ def _resolve_country_route(
         response_version=version,
         policyengine_version=policyengine_version,
         bundle_manifest=_bundle_manifest(state, policyengine_version),
+        country_model_version=version,
+        # A country route the registry ties to no wrapper bundle at all is
+        # pre-canonical by construction: every publish writes the wrapper
+        # route and the bundle manifest for the app it deploys, and the
+        # legacy seed only infers wrapper routes for prefixed app names. The
+        # registry's ``generation`` marker cannot carry this — the next
+        # publish rewrites it (update_version_registry).
         route_provenance=(
-            "legacy-seed"
-            if state.get("generation") == "legacy-seed"
-            and state.get("schema_version") == 1
+            "legacy-country-route"
+            if policyengine_version is None and state.get("schema_version") == 1
             else None
         ),
     )
@@ -582,6 +592,7 @@ def _resolve_from_legacy_dicts(
         response_version=resolved_version,
         policyengine_version=_policyengine_version_from_app_name(app_name),
         bundle_manifest={},
+        country_model_version=resolved_version,
         route_provenance="legacy-country-dict",
     )
 
@@ -637,13 +648,30 @@ def _build_policyengine_bundle(
     )
 
 
+def _certified_model_version(country: str, route: RouteResolution) -> str | None:
+    """The country model version the registry states for this route.
+
+    ``PolicyEngineBundle.model_version`` falls back to the routing response
+    version so the response always carries one. On a policyengine-keyed
+    route with no manifest that fallback is a wrapper version, and reading
+    it as a model version is how a legacy 5.2.0/5.3.0 route stopped
+    resolving. An unstated model version contradicts nothing.
+    """
+    country_bundle = route.bundle_manifest.get(country.lower())
+    if isinstance(country_bundle, dict):
+        stated = country_bundle.get("model_version")
+        if isinstance(stated, str) and stated.strip():
+            return stated
+    return route.country_model_version
+
+
 def _resolve_request_spm(request, bundle, route):
     selection = resolve_spm_selection(
         request.country,
         request.spm,
         capability=bundle.spm,
         policyengine_version=bundle.policyengine_version,
-        model_version=bundle.model_version,
+        model_version=_certified_model_version(request.country, route),
         route_provenance=route.route_provenance,
     )
     if selection is not None:

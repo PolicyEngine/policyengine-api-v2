@@ -210,16 +210,23 @@ def resolve_spm_selection(
             and all(re.fullmatch(r"[0-9]+", p) for p in version_parts)
             and tuple(map(int, version_parts)) < (5, 2, 0)
         )
+        # The last two pre-canonical wrappers pin US 1.764.6. A route the
+        # registry carries no manifest for states no model version at all,
+        # and states nothing that contradicts the wrapper pin; a route that
+        # states a different model version does.
         historical = historical or (
-            policyengine_version in {"5.2.0", "5.3.0"} and model_version == "1.764.6"
+            policyengine_version in {"5.2.0", "5.3.0"}
+            and model_version in (None, "1.764.6")
         )
-        # Country-only routes seeded from the original registry may have no
-        # wrapper version. Require both their actual route provenance and a
-        # pre-canonical US model; absence of capability alone proves nothing.
+        # Country-only routes predating the bundle manifests have no wrapper
+        # version. Require both their route provenance -- derived from route
+        # shape, not from the registry's rewritable generation marker -- and
+        # a pre-canonical US model; absence of capability alone proves
+        # nothing.
         model_parts = str(model_version or "").split(".")
         historical = historical or (
             policyengine_version is None
-            and route_provenance in {"legacy-country-dict", "legacy-seed"}
+            and route_provenance in {"legacy-country-dict", "legacy-country-route"}
             and len(model_parts) == 3
             and all(re.fullmatch(r"[0-9]+", p) for p in model_parts)
             and tuple(map(int, model_parts)) <= (1, 764, 6)

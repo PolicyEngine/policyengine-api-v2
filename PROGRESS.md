@@ -11,7 +11,7 @@ Worktree created at PR head. Investigating the nine review findings.
 ## Findings checklist
 
 - [x] Medium 1 — completed results drop explicit nulls from `spm_config` on the wire
-- [ ] Medium 2 — legacy no-SPM provenance `legacy-seed` expires on next publish
+- [x] Medium 2 — legacy no-SPM provenance `legacy-seed` expires on next publish
 - [ ] Medium 3 — precompute storage identity never shown to match the wrapper
 - [ ] Medium 4 — budget-window scheduler typed-error branches untested
 - [x] Low 1 — legacy no-SPM poll bodies not byte-identical to base

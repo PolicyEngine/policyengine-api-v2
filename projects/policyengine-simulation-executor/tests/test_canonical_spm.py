@@ -452,6 +452,8 @@ def test_gateway_submission_uses_registry_capability_before_spawn(monkeypatch):
         app_name="test-app",
         response_version="test-only",
         policyengine_version="test-only",
+        bundle_manifest={},
+        country_model_version="test-only",
         route_provenance=None,
     )
     monkeypatch.setattr(endpoints, "resolve_route", lambda *args: route)
@@ -624,7 +626,11 @@ def test_as_of_presence_survives_budget_parent(date_fields, expected_as_of):
         },
     )
     selection = _resolve_request_spm(
-        request, bundle, SimpleNamespace(route_provenance=None)
+        request,
+        bundle,
+        SimpleNamespace(
+            bundle_manifest={}, country_model_version=None, route_provenance=None
+        ),
     )
     assert selection["as_of"] == expected_as_of
     parent = _build_budget_window_parent_payload(

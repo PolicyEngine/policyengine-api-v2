@@ -20,7 +20,17 @@ ENDPOINTS = [
 ]
 
 
+# ``generation`` is one global marker that every publish rewrites, so a
+# seeded route has to resolve the same before and after a canonical deploy.
+PUBLISHED_GENERATION = "5.4.0:policyengine-simulation-py5-4-0"
+LEGACY_SOURCES = ["legacy-country-dict", "legacy-seed", PUBLISHED_GENERATION]
+
+
 def legacy_route(mock_modal, source, model_version):
+    """Two shapes of pre-canonical route: the original per-country Modal
+    dicts, and a seeded routing-state country route the registry ties to no
+    wrapper bundle. For the latter, ``source`` is the state's ``generation``
+    marker, which must not change how the route resolves."""
     app_name = "policyengine-simulation-us1-715-2-uk2-88-20"
     if source == "legacy-country-dict":
         app_name = "legacy-app"
@@ -42,7 +52,7 @@ def legacy_route(mock_modal, source, model_version):
 
 
 @pytest.mark.parametrize("endpoint,extra", ENDPOINTS)
-@pytest.mark.parametrize("source", ["legacy-country-dict", "legacy-seed"])
+@pytest.mark.parametrize("source", LEGACY_SOURCES)
 @pytest.mark.parametrize("version", [None, "1.715.2"])
 def test_historical_no_wrapper_route_submits_without_spm(
     mock_modal, client, endpoint, extra, source, version
@@ -58,7 +68,7 @@ def test_historical_no_wrapper_route_submits_without_spm(
 
 
 @pytest.mark.parametrize("endpoint,extra", ENDPOINTS)
-@pytest.mark.parametrize("source", ["legacy-country-dict", "legacy-seed"])
+@pytest.mark.parametrize("source", LEGACY_SOURCES)
 @pytest.mark.parametrize("selection", [{}, {"geography_kind": "national"}])
 def test_historical_route_rejects_any_explicit_spm(
     mock_modal, client, endpoint, extra, source, selection
@@ -76,8 +86,9 @@ def test_historical_route_rejects_any_explicit_spm(
     [
         ("legacy-country-dict", "1.824.7"),
         ("legacy-seed", "1.824.7"),
+        (PUBLISHED_GENERATION, "1.824.7"),
         ("legacy-seed", "future-model"),
-        ("unknown-generation", "1.715.2"),
+        (PUBLISHED_GENERATION, "future-model"),
     ],
 )
 def test_missing_wrapper_does_not_certify_unknown_routes(
@@ -351,7 +362,7 @@ def test_completed_budget_window_rows_keep_resolved_nulls(mock_modal, client):
 LEGACY_BUNDLE_KEYS = {"model_version", "policyengine_version", "data_version", "dataset"}
 
 
-@pytest.mark.parametrize("source", ["legacy-country-dict", "legacy-seed"])
+@pytest.mark.parametrize("source", LEGACY_SOURCES)
 def test_legacy_poll_bodies_carry_no_spm_key(mock_modal, client, source):
     """The 202 and 500 bodies splat job metadata in raw, bypassing the
     routes' ``response_model_exclude_none``. A legacy no-SPM job must stay
@@ -374,7 +385,7 @@ def test_legacy_poll_bodies_carry_no_spm_key(mock_modal, client, source):
     assert set(failed.json()["policyengine_bundle"]) == LEGACY_BUNDLE_KEYS
 
 
-@pytest.mark.parametrize("source", ["legacy-country-dict", "legacy-seed"])
+@pytest.mark.parametrize("source", LEGACY_SOURCES)
 def test_legacy_budget_window_metadata_carries_no_spm_key(mock_modal, client, source):
     """The same bundle rides to the worker in ``_metadata``."""
     legacy_route(mock_modal, source, "1.715.2")
@@ -402,3 +413,98 @@ def test_canonical_poll_bodies_still_carry_the_capability(mock_modal, client):
     bundle = running.json()["policyengine_bundle"]
     assert set(bundle) == LEGACY_BUNDLE_KEYS | {"spm"}
     assert bundle["spm"]["defaults"]["scenario"] == "ce_trend"
+
+
+@pytest.mark.parametrize("endpoint,extra", ENDPOINTS)
+def test_publishing_does_not_revoke_a_seeded_country_route(
+    mock_modal, client, endpoint, extra
+):
+    """The route is unchanged across a publish; only the global marker moved.
+
+    Keying the allowance on ``generation`` meant the first canonical deploy
+    turned every seeded country route's bare submission into a 400.
+    """
+    for generation in ("legacy-seed", PUBLISHED_GENERATION):
+        legacy_route(mock_modal, generation, "1.715.2")
+        response = client.post(endpoint, json={"country": "us", **extra})
+        assert response.status_code == 200, f"{generation}: {response.text}"
+        assert "spm" not in mock_modal["func"].last_payload
+
+
+def wrapper_route_without_manifest(mock_modal, wrapper):
+    """A seeded wrapper route the app-release snapshot had no bundle for."""
+    state = deepcopy(TEST_ROUTING_STATE)
+    app_name = f"policyengine-simulation-py{wrapper.replace('.', '-')}"
+    state["routes"]["policyengine"][wrapper] = app_name
+    mock_modal["dicts"]["simulation-api-routing-state"] = {"active": state}
+
+
+@pytest.mark.parametrize("endpoint,extra", ENDPOINTS)
+@pytest.mark.parametrize("wrapper", ["5.2.0", "5.3.0"])
+def test_pinned_wrapper_route_without_manifest_submits_without_spm(
+    mock_modal, client, endpoint, extra, wrapper
+):
+    """With no manifest the response's ``model_version`` echoes the wrapper
+    version. Reading that back as a country model version rejected the two
+    pinned pre-canonical bundles."""
+    wrapper_route_without_manifest(mock_modal, wrapper)
+    response = client.post(
+        endpoint, json={"country": "us", "policyengine_version": wrapper, **extra}
+    )
+    assert response.status_code == 200, response.text
+    assert "spm" not in mock_modal["func"].last_payload
+    assert response.json()["policyengine_bundle"]["model_version"] == wrapper
+
+
+@pytest.mark.parametrize("endpoint,extra", ENDPOINTS)
+@pytest.mark.parametrize("wrapper", ["5.2.0", "5.3.0"])
+def test_pinned_wrapper_through_legacy_dicts_submits_without_spm(
+    mock_modal, client, endpoint, extra, wrapper
+):
+    """Same route shape through the pre-registry Modal dicts."""
+    del mock_modal["dicts"]["simulation-api-routing-state"]
+    app_name = f"policyengine-simulation-py{wrapper.replace('.', '-')}"
+    mock_modal["dicts"]["simulation-api-policyengine-versions"] = {wrapper: app_name}
+    response = client.post(
+        endpoint, json={"country": "us", "policyengine_version": wrapper, **extra}
+    )
+    assert response.status_code == 200, response.text
+    assert "spm" not in mock_modal["func"].last_payload
+
+
+@pytest.mark.parametrize("endpoint,extra", ENDPOINTS)
+def test_unpinned_wrapper_route_without_manifest_still_fails_closed(
+    mock_modal, client, endpoint, extra
+):
+    """Only the two pinned pre-canonical wrappers are vouched for without a
+    manifest; an unrecognized bundle proves nothing."""
+    wrapper_route_without_manifest(mock_modal, "5.4.0")
+    response = client.post(
+        endpoint, json={"country": "us", "policyengine_version": "5.4.0", **extra}
+    )
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
+    assert mock_modal["func"].calls == []
+
+
+@pytest.mark.parametrize("endpoint,extra", ENDPOINTS)
+def test_stated_model_version_still_contradicts_the_wrapper_pin(
+    mock_modal, client, endpoint, extra
+):
+    """A manifest that states a post-canonical model under a pinned wrapper
+    is a republish we cannot vouch for."""
+    state = deepcopy(TEST_ROUTING_STATE)
+    original = state["bundles"]["4.10.0"]
+    state["routes"]["policyengine"]["5.3.0"] = original["app_name"]
+    state["bundles"]["5.3.0"] = {
+        **deepcopy(original),
+        "policyengine_version": "5.3.0",
+        "us": {**original["us"], "model_version": "1.824.7"},
+    }
+    mock_modal["dicts"]["simulation-api-routing-state"] = {"active": state}
+    response = client.post(
+        endpoint, json={"country": "us", "policyengine_version": "5.3.0", **extra}
+    )
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
+    assert mock_modal["func"].calls == []
