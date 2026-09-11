@@ -359,7 +359,12 @@ def test_completed_budget_window_rows_keep_resolved_nulls(mock_modal, client):
 
 
 # Every optional field the pre-SPM gateway emitted in a raw 202/500 body.
-LEGACY_BUNDLE_KEYS = {"model_version", "policyengine_version", "data_version", "dataset"}
+LEGACY_BUNDLE_KEYS = {
+    "model_version",
+    "policyengine_version",
+    "data_version",
+    "dataset",
+}
 
 
 @pytest.mark.parametrize("source", LEGACY_SOURCES)
