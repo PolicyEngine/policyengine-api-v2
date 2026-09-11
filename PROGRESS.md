@@ -13,10 +13,10 @@ Worktree created at PR head. Investigating the nine review findings.
 - [x] Medium 1 — completed results drop explicit nulls from `spm_config` on the wire
 - [x] Medium 2 — legacy no-SPM provenance `legacy-seed` expires on next publish
 - [ ] Medium 3 — precompute storage identity never shown to match the wrapper
-- [ ] Medium 4 — budget-window scheduler typed-error branches untested
+- [x] Medium 4 — budget-window scheduler typed-error branches untested
 - [x] Low 1 — legacy no-SPM poll bodies not byte-identical to base
 - [ ] Low 2 — stale country routes now fail; undocumented, untested
-- [ ] Low 3 — segmented reduce with SPM children untested end to end
+- [x] Low 3 — segmented reduce with SPM children untested end to end
 - [ ] Low 4 — hermetic CI never exercises receipt validation in `ensure()`
 - [ ] Low 5 — repeated prevalidation per request (perf)
 
@@ -39,6 +39,20 @@ Worktree created at PR head. Investigating the nine review findings.
   `test_canonical_poll_bodies_still_carry_the_capability` — the first two
   verified failing against the pre-fix endpoints.
 
+- **Low 3**: `tests/test_segmented_national.py` now drives a segmented
+  national reduce with SPM children end to end.
+- **Medium 2**: route provenance is now derived from route shape
+  (`policyengine_version is None and schema_version == 1` ->
+  `legacy-country-route`) instead of the registry's rewritable `generation`
+  marker, and `_certified_model_version` stops reading a wrapper version as
+  a country model version, so a pinned 5.2.0/5.3.0 route with no manifest
+  stays historical. Tests in `test_spm_selection.py` and `test_spm_routes.py`.
+- **Medium 4**: `test_budget_window_scheduler.py` gained per-year child
+  injection seams and four cases covering the typed child-call failure, the
+  typed receipt-validation failure, and the redaction fallback on each.
+  Verified by mutation: deleting the child-entry re-attach fails both typed
+  cases.
+
 ## Next
 
-- Medium 2 (durable legacy-route provenance), Medium 3, Medium 4, Low 2-5.
+- Medium 3, Low 2, Low 4, Low 5.
