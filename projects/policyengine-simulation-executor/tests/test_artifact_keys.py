@@ -9,6 +9,8 @@ any change into a conscious, reviewable diff instead of silent cache
 churn (or, worse, a writer/reader mismatch).
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 from fixtures.identity_stubs import install_identity_stubs
@@ -218,15 +220,25 @@ class TestWrapperStorageIdAgreement:
       the wheel above, so our side cannot drift from the contract without a
       reviewable diff, and the digest cannot be quietly reformatted;
     * ``test_spm_arm_matches_the_installed_wrapper`` stops skipping and
-      starts asserting real equality on its own the moment an SPM-capable
-      wrapper is pinned.
+      asserts real equality the moment an SPM-capable wrapper is pinned. It
+      supplies the two things that wrapper's ``spm_config`` needs and this
+      project cannot assume — a US model version, and a bundle pinning this
+      selection — because ``spm_config`` refuses a non-US model and
+      re-resolves the selection through ``get_current_bundle`` rather than
+      reading it off the object.
 
-    Agreement with the real 5.3.0 wrapper was checked out of band on
-    2026-09-11 by resolving seven selection shapes through both that wheel's
-    ``resolve_spm_selection`` and this repo's, and comparing both the
-    resolved configs and the resulting storage ids: all seven agreed. That
-    is a recorded observation, not coverage — only the native lane re-runs
-    anything like it.
+    Agreement with the real wrapper was checked out of band on 2026-09-11 by
+    running the executor environment with that wheel's ``policyengine``
+    shadowing the pinned one, then resolving seven selection shapes (unset,
+    empty, national, county, metro, a moved ``as_of``, and a non-ASCII
+    scenario) through both the wheel's ``resolve_spm_selection`` and this
+    repo's, and comparing the resolved configs and the storage ids. All
+    seven agreed on both. That is a recorded observation, not coverage —
+    only the native lane re-runs anything like it.
+
+    The wheel's sha256 is load-bearing, not decoration: two builds both
+    named ``policyengine-5.3.0-py3-none-any.whl`` are available locally, and
+    the other one (``962882ea…``) has no ``storage_id`` at all.
     """
 
     @pytest.fixture
@@ -291,12 +303,19 @@ class TestWrapperStorageIdAgreement:
         """The no-selection arm, through the accessor precompute uses.
 
         ``precompute`` reads ``getattr(baseline, "storage_id", baseline.id)``.
-        With no selection that has to be the planned id on *any* wrapper:
-        pre-canonical, because the attribute is absent and the fallback is
-        the id; canonical, because its property short-circuits to the id
-        when there is no config. The assertion is the same either way, so
-        this pins the accessor's contract rather than telling the two
-        wrappers apart.
+        With no resolved selection that has to be the planned id on *any*
+        wrapper: pre-canonical, because the attribute is absent and the
+        fallback is the id; canonical, because the property short-circuits
+        to the id when ``spm_config`` is None. The assertion is the same
+        either way, so this pins the accessor's contract rather than telling
+        the two wrappers apart.
+
+        "No resolved selection" is the condition, not "the caller sent no
+        selection". On a canonical bundle the wrapper resolves an unset
+        ``spm`` into the bundle's defaults and returns a suffixed id — and
+        so does this project, through the same rule in
+        ``resolve_spm_selection``, which is why they still agree. A plain id
+        is what a bundle with no SPM measurement produces.
         """
         from policyengine.core import Simulation
 
@@ -312,9 +331,29 @@ class TestWrapperStorageIdAgreement:
             "pinned, replacing the transcribed expression above."
         ),
     )
-    def test_spm_arm_matches_the_installed_wrapper(self, identity):
+    def test_spm_arm_matches_the_installed_wrapper(self, identity, monkeypatch):
+        """Real equality against the wrapper, once one can be imported.
+
+        The canonical ``spm_config`` reads the model version's country and
+        re-resolves the selection through the installed bundle, so a bare
+        ``model_construct(id=..., spm=...)`` raises "SPM selection is only
+        supported by the US model" instead of comparing anything. Both are
+        supplied here so this activates on a pin rather than erroring.
+        """
+        import policyengine.bundle
         from policyengine.core import Simulation
 
         built = identity(_SPM_SELECTION)
-        wrapper = Simulation.model_construct(id=built.simulation_id, spm=_SPM_SELECTION)
+        # Only after the planner has read the real installed bundle: this
+        # stub is for the wrapper's re-resolution, not for ours.
+        monkeypatch.setattr(
+            policyengine.bundle,
+            "get_current_bundle",
+            lambda: {"measurements": {"spm": _SPM_SELECTION}},
+        )
+        wrapper = Simulation.model_construct(
+            id=built.simulation_id,
+            spm=_SPM_SELECTION,
+            tax_benefit_model_version=SimpleNamespace(country_code="us"),
+        )
         assert wrapper.storage_id == built.storage_id

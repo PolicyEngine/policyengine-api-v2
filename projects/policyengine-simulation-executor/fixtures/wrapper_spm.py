@@ -25,7 +25,17 @@ wrapper, and only the SPM_NATIVE_SMOKE_SOURCE-gated suites run against one.
 
 Read from ``policyengine-5.3.0-py3-none-any.whl`` sha256
 ``8c640d967575dddad70840bcbe938cea251c56958eded647c83eb9c5902735f1``, the
-build the native qualification lane installs.
+unpublished development wheel the native qualification lane installs. The
+hash is the identifier, not the version: another local build carries the
+same filename and version and has no ``storage_id`` at all.
+
+``spm_config`` above is not a stored value. On the canonical wrapper it
+refuses a non-US ``tax_benefit_model_version`` and otherwise re-resolves
+``spm`` through the installed bundle, so an unset selection becomes the
+bundle's defaults rather than None -- which is why this function takes a
+config that has already been resolved, and why the agreement claim is
+about the digest, not about the resolution. Both are checked against that
+wheel in ``TestWrapperStorageIdAgreement``'s recorded out-of-band run.
 """
 
 import hashlib

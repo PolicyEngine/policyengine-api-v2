@@ -18,6 +18,7 @@ import src.modal.budget_window_batch as batch_module
 import src.modal.budget_window_scheduler as scheduler_module
 import policyengine_simulation_contract.budget_window_state as state_module
 from policyengine_simulation_contract.budget_window_state import (
+    BUDGET_WINDOW_JOB_DICT_NAME,
     BUDGET_WINDOW_JOB_SEED_DICT_NAME,
 )
 from policyengine_simulation_contract.spm import SPMInputError, SPMSelection
@@ -379,6 +380,66 @@ def test_typed_result_validation_failure_persists_errors_and_stops_the_batch(
     assert body["failed_years"] == ["2026"]
     assert body["queued_years"] == ["2027", "2028"]
     assert [payload["time_period"] for payload in runtime.child_payloads] == ["2026"]
+
+
+def test_a_typed_child_failure_cancels_the_siblings_already_running(
+    budget_window_semi_integration_client,
+):
+    """The early return, where a single-parallel batch cannot show it.
+
+    ``poll_running_children_once`` returns False on a typed failure instead
+    of continuing round the loop. With ``max_parallel=1`` there is never a
+    second running child, so replacing that return with ``continue`` changed
+    nothing observable. At two, the sibling that was already running must
+    be cancelled rather than harvested: the batch has failed, and a
+    completed 2027 alongside a failed 2026 would be a partial window nobody
+    asked for.
+    """
+    client, runtime = budget_window_semi_integration_client
+    runtime.child_errors["2026"] = SPMInputError(
+        "SPM_GEOGRAPHY_REQUIRED", "County required"
+    )
+
+    batch_job_id = submit_budget_window(client, max_parallel=2)
+    assert client.get(f"/budget-window-jobs/{batch_job_id}").status_code == 202
+
+    body = client.get(f"/budget-window-jobs/{batch_job_id}").json()
+
+    assert [payload["time_period"] for payload in runtime.child_payloads] == [
+        "2026",
+        "2027",
+    ]
+    assert body["completed_years"] == []
+    assert body["child_jobs"]["2027"]["status"] == "cancelled"
+    assert body["failed_years"] == ["2026"]
+    assert body["queued_years"] == ["2028"]
+
+
+def test_a_typed_child_failure_is_persisted_not_only_returned(
+    budget_window_semi_integration_client,
+):
+    """The poll body is serialized from the state run() returns in memory.
+
+    Both typed branches write the re-attached errors back through
+    ``put_batch_job_state`` before returning, and nothing else re-reads the
+    batch-state dict, so deleting those writes left the suite green. A
+    later poll -- a different container, or the same one after a restart --
+    reads the dict, so what is in it is what the client eventually sees.
+    """
+    client, runtime = budget_window_semi_integration_client
+    runtime.child_errors["2026"] = SPMInputError(
+        "SPM_GEOGRAPHY_REQUIRED", "County required"
+    )
+
+    batch_job_id = submit_budget_window(client)
+    assert client.get(f"/budget-window-jobs/{batch_job_id}").status_code == 202
+    assert client.get(f"/budget-window-jobs/{batch_job_id}").status_code == 400
+
+    persisted = runtime.dicts[BUDGET_WINDOW_JOB_DICT_NAME][batch_job_id]
+    expected = [{"code": "SPM_GEOGRAPHY_REQUIRED", "message": "County required"}]
+    assert persisted["status"] == "failed"
+    assert persisted["errors"] == expected
+    assert persisted["child_jobs"]["2026"]["errors"] == expected
 
 
 def test_untyped_child_failure_is_redacted_and_carries_no_typed_errors(
