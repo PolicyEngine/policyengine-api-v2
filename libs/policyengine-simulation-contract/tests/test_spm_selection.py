@@ -3,7 +3,11 @@
 import pytest
 
 from policyengine_simulation_contract.gateway_models import SimulationRequest
-from policyengine_simulation_contract.spm import SPMInputError, resolve_spm_selection
+from policyengine_simulation_contract.spm import (
+    SPMInputError,
+    SPMSelection,
+    resolve_spm_selection,
+)
 
 
 def resolve(selection, *, kind="metro", area="35620"):
@@ -131,3 +135,68 @@ def test_unpinned_or_contradicted_wrapper_is_not_historical(wrapper, model):
             model_version=model,
         )
     assert error.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
+
+
+class TestSerializerPreservesExplicitNulls:
+    """``exclude_none`` must not turn a resolved selection back into a partial.
+
+    Presence is the contract: an omitted option inherits the bundle default,
+    so an option that was explicitly selected as null is a different request
+    from one that was omitted. The poll routes serialise every body with
+    ``response_model_exclude_none``, so the serializer is the only thing
+    standing between a completed result and a body a client cannot replay.
+    """
+
+    resolved = SPMSelection(
+        forecast_content_sha256="a" * 64,
+        scenario="ce_trend",
+        geography_kind="national",
+        geography_id=None,
+        county_vintage="2020",
+        as_of=None,
+    )
+
+    def test_exclude_none_keeps_explicitly_selected_nulls(self):
+        assert self.resolved.model_dump(mode="json", exclude_none=True) == {
+            "forecast_content_sha256": "a" * 64,
+            "scenario": "ce_trend",
+            "geography_kind": "national",
+            "geography_id": None,
+            "county_vintage": "2020",
+            "as_of": None,
+        }
+
+    def test_exclude_none_still_drops_options_the_caller_omitted(self):
+        partial = SPMSelection(geography_kind="national")
+        assert partial.model_dump(mode="json", exclude_none=True) == {
+            "geography_kind": "national"
+        }
+
+    def test_exclude_none_survives_nesting_in_a_response_model(self):
+        nested = SimulationRequest(country="us", spm=self.resolved)
+        assert nested.model_dump(mode="json", exclude_none=True)["spm"] == {
+            "forecast_content_sha256": "a" * 64,
+            "scenario": "ce_trend",
+            "geography_kind": "national",
+            "geography_id": None,
+            "county_vintage": "2020",
+            "as_of": None,
+        }
+
+    def test_explicit_exclude_still_removes_a_null_option(self):
+        assert "as_of" not in self.resolved.model_dump(
+            mode="json", exclude_none=True, exclude={"as_of"}
+        )
+
+    def test_ordinary_serialization_is_unchanged(self):
+        assert self.resolved.model_dump(mode="json") == {
+            "forecast_content_sha256": "a" * 64,
+            "scenario": "ce_trend",
+            "geography_kind": "national",
+            "geography_id": None,
+            "county_vintage": "2020",
+            "as_of": None,
+        }
+        assert SPMSelection(geography_kind="national").model_dump(mode="json") == {
+            "geography_kind": "national"
+        }
