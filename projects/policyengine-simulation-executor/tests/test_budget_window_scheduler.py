@@ -17,8 +17,41 @@ from fastapi.testclient import TestClient
 import src.modal.budget_window_batch as batch_module
 import src.modal.budget_window_scheduler as scheduler_module
 import policyengine_simulation_contract.budget_window_state as state_module
+from policyengine_simulation_contract.budget_window_state import (
+    BUDGET_WINDOW_JOB_SEED_DICT_NAME,
+)
+from policyengine_simulation_contract.spm import SPMInputError, SPMSelection
 from policyengine_simulation_gateway.testing import create_gateway_app
 from policyengine_simulation_gateway import endpoints
+
+SPM_SELECTION = SPMSelection(
+    forecast_content_sha256="a" * 64,
+    scenario="ce_trend",
+    geography_kind="national",
+    geography_id=None,
+    county_vintage="2020",
+    as_of=None,
+).model_dump(mode="json")
+
+
+def spm_child_result(runtime, simulation_year, *, receipt_year):
+    """A child result carrying a canonical SPM receipt for ``receipt_year``."""
+    receipt = {
+        "forecast_id": "test-only",
+        "forecast_sha256": SPM_SELECTION["forecast_content_sha256"],
+        "scenario": SPM_SELECTION["scenario"],
+        "geography_kind": SPM_SELECTION["geography_kind"],
+        "runtime_versions": {"policyengine-us": "test-only"},
+        "years": {receipt_year: {"status": "forecast"}},
+        "geographies": [],
+        "composition_method": "classified-inputs",
+        "storage_method": "formula",
+    }
+    return {
+        "spm_config": dict(SPM_SELECTION),
+        "spm_provenance": {"baseline": [receipt], "reform": [dict(receipt)]},
+        **runtime.child_result_for_year(simulation_year),
+    }
 
 
 @dataclass
@@ -30,6 +63,15 @@ class SemiIntegrationRuntime:
     next_parent_call_id: str = "parent-batch-123"
     active_child_calls: set[str] = field(default_factory=set)
     max_active_child_calls: int = 0
+    # Per-year injection seams: a child call raises ``child_errors[year]``
+    # instead of returning, or returns ``child_results[year]`` verbatim.
+    child_errors: dict[str, BaseException] = field(default_factory=dict)
+    child_results: dict[str, dict] = field(default_factory=dict)
+
+    def child_outcome_for_year(self, simulation_year: str) -> dict:
+        return self.child_results.get(
+            simulation_year, self.child_result_for_year(simulation_year)
+        )
 
     def child_result_for_year(self, simulation_year: str) -> dict:
         offset = int(simulation_year) - 2025
@@ -69,15 +111,23 @@ class MockDict:
 
 class MockChildCall:
     def __init__(
-        self, runtime: SemiIntegrationRuntime, *, object_id: str, result: dict
+        self,
+        runtime: SemiIntegrationRuntime,
+        *,
+        object_id: str,
+        result: dict,
+        error: BaseException | None = None,
     ):
         self.runtime = runtime
         self.object_id = object_id
         self.result = result
+        self.error = error
         self.runtime.child_started(object_id)
 
     def get(self, timeout: int = 0):
         self.runtime.child_finished(self.object_id)
+        if self.error is not None:
+            raise self.error
         return self.result
 
 
@@ -124,7 +174,8 @@ class MockFunction:
         call = MockChildCall(
             self.runtime,
             object_id=f"child-{simulation_year}",
-            result=self.runtime.child_result_for_year(simulation_year),
+            result=self.runtime.child_outcome_for_year(simulation_year),
+            error=self.runtime.child_errors.get(simulation_year),
         )
         self.runtime.calls[call.object_id] = call
         return call
@@ -246,3 +297,123 @@ def test_budget_window_submit_and_poll_exercise_gateway_worker_seams(
     assert all("window_size" not in payload for payload in runtime.child_payloads)
     assert all("max_parallel" not in payload for payload in runtime.child_payloads)
     assert all("_metadata" not in payload for payload in runtime.child_payloads)
+
+
+def submit_budget_window(client, *, window_size=3, max_parallel=1):
+    response = client.post(
+        "/simulate/economy/budget-window",
+        json={
+            "country": "us",
+            "region": "us",
+            "scope": "macro",
+            "reform": {},
+            "start_year": "2026",
+            "window_size": window_size,
+            "max_parallel": max_parallel,
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["batch_job_id"]
+
+
+def test_typed_child_call_failure_persists_errors_and_stops_the_batch(
+    budget_window_semi_integration_client,
+):
+    """A child that raises ``SPMInputError`` is transported, not redacted."""
+    client, runtime = budget_window_semi_integration_client
+    runtime.child_errors["2026"] = SPMInputError(
+        "SPM_GEOGRAPHY_REQUIRED", "County required"
+    )
+
+    batch_job_id = submit_budget_window(client)
+    assert client.get(f"/budget-window-jobs/{batch_job_id}").status_code == 202
+
+    failure = client.get(f"/budget-window-jobs/{batch_job_id}")
+    assert failure.status_code == 400
+    body = failure.json()
+    expected = [{"code": "SPM_GEOGRAPHY_REQUIRED", "message": "County required"}]
+    assert body["status"] == "failed"
+    assert body["errors"] == expected
+    assert body["error"] == "County required"
+    # ``mark_child_failed`` replaces the child entry, so the scheduler has to
+    # re-attach the typed payload after it.
+    assert body["child_jobs"]["2026"]["errors"] == expected
+    assert body["child_jobs"]["2026"]["status"] == "failed"
+    assert body["failed_years"] == ["2026"]
+    # The scheduler returns early: the remaining years are never spawned.
+    assert body["queued_years"] == ["2027", "2028"]
+    assert [payload["time_period"] for payload in runtime.child_payloads] == ["2026"]
+
+
+def test_typed_result_validation_failure_persists_errors_and_stops_the_batch(
+    budget_window_semi_integration_client,
+):
+    """A mismatched SPM receipt fails the batch with the typed code."""
+    client, runtime = budget_window_semi_integration_client
+    batch_job_id = submit_budget_window(client)
+
+    # The gateway records the resolved selection on the seed whenever the
+    # route advertises a canonical SPM capability; the parent reads it back
+    # from the seed to validate each child receipt. Seeding it here keeps the
+    # test on the scheduler seam instead of the registry's.
+    seed = runtime.dicts[BUDGET_WINDOW_JOB_SEED_DICT_NAME][batch_job_id]
+    seed["request_payload"]["spm"] = dict(SPM_SELECTION)
+    runtime.child_results["2026"] = spm_child_result(
+        runtime, "2026", receipt_year="1999"
+    )
+
+    assert client.get(f"/budget-window-jobs/{batch_job_id}").status_code == 202
+
+    failure = client.get(f"/budget-window-jobs/{batch_job_id}")
+    assert failure.status_code == 400
+    body = failure.json()
+    expected = [
+        {
+            "code": "SPM_CONFIGURATION_UNAVAILABLE",
+            "message": "Result SPM provenance does not cover the requested year",
+        }
+    ]
+    assert body["status"] == "failed"
+    assert body["errors"] == expected
+    assert body["child_jobs"]["2026"]["errors"] == expected
+    assert body["failed_years"] == ["2026"]
+    assert body["queued_years"] == ["2027", "2028"]
+    assert [payload["time_period"] for payload in runtime.child_payloads] == ["2026"]
+
+
+def test_untyped_child_failure_is_redacted_and_carries_no_typed_errors(
+    budget_window_semi_integration_client,
+):
+    """Only public typed errors escape redaction; others stay 500 with no code."""
+    client, runtime = budget_window_semi_integration_client
+    runtime.child_errors["2026"] = RuntimeError("internal detail")
+
+    batch_job_id = submit_budget_window(client)
+    assert client.get(f"/budget-window-jobs/{batch_job_id}").status_code == 202
+
+    failure = client.get(f"/budget-window-jobs/{batch_job_id}")
+    assert failure.status_code == 500
+    body = failure.json()
+    assert "errors" not in body
+    assert "internal detail" not in body["error"]
+    assert "errors" not in body["child_jobs"]["2026"]
+
+
+def test_untyped_result_parsing_failure_is_redacted_and_stops_the_batch(
+    budget_window_semi_integration_client,
+):
+    """A malformed child result fails the batch without leaking the reason."""
+    client, runtime = budget_window_semi_integration_client
+    runtime.child_results["2026"] = {"budget": "not-an-object"}
+
+    batch_job_id = submit_budget_window(client)
+    assert client.get(f"/budget-window-jobs/{batch_job_id}").status_code == 202
+
+    failure = client.get(f"/budget-window-jobs/{batch_job_id}")
+    assert failure.status_code == 500
+    body = failure.json()
+    assert "errors" not in body
+    assert "missing budget object" not in body["error"]
+    assert body["failed_years"] == ["2026"]
+    assert body["queued_years"] == ["2027", "2028"]
+    assert [payload["time_period"] for payload in runtime.child_payloads] == ["2026"]
