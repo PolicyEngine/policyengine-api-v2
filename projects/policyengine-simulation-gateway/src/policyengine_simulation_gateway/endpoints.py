@@ -352,6 +352,26 @@ def _bundle_manifest(state: dict, policyengine_version: str | None) -> dict:
 def _policyengine_version_for_app(
     state: dict, app_name: str, *, country: str, model_version: str
 ) -> str | None:
+    """The wrapper version serving this country route, or None.
+
+    Behaviour change from the pre-canonical gateway, deliberate: a country
+    route whose one candidate bundle states a *different* model version is
+    now rejected with a 400 instead of resolving. Publishing only ever adds
+    country routes and overwrites the bundle manifest for the wrapper
+    version it deploys (``update_version_registry``), so re-publishing one
+    wrapper with an upgraded country model leaves the old country route
+    pointing at an app whose manifest now states the new model. Before, that
+    route resolved and the 202 body contradicted itself -- ``version`` from
+    the stale route, ``policyengine_bundle.model_version`` from the live
+    manifest -- and with canonical SPM the caller would also have been
+    reading a capability the requested model never had. Nothing prunes the
+    stale route, so the gateway refuses it instead.
+
+    "States a different model version" and "states none" are one
+    classification, computed once below: an absent country entry, an absent,
+    non-string, empty or whitespace ``model_version`` all contradict
+    nothing and still resolve.
+    """
     candidates = {
         version
         for version, routed_app in _routing_state_routes(state, "policyengine").items()
@@ -388,11 +408,16 @@ def _policyengine_version_for_app(
     if not candidates:
         return None
     version = next(iter(candidates))
-    _validate_legacy_version_matches_bundle(
-        country=country,
-        requested_version=model_version,
-        manifest=_bundle_manifest(state, version),
-    )
+    if not unclassified:
+        # Reuse the classification above rather than re-deriving it: the
+        # shared validator reads any string as a stated model version, so
+        # calling it unconditionally rejected a blank one here while the
+        # ambiguity check above treated blank as unstated.
+        _validate_legacy_version_matches_bundle(
+            country=country,
+            requested_version=model_version,
+            manifest=_bundle_manifest(state, version),
+        )
     return version
 
 

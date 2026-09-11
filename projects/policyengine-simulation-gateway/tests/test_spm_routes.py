@@ -508,3 +508,80 @@ def test_stated_model_version_still_contradicts_the_wrapper_pin(
     assert response.status_code == 400
     assert response.json()["errors"][0]["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
     assert mock_modal["func"].calls == []
+
+
+def republished_wrapper_state(mock_modal, *, model_version):
+    """The registry a re-publish leaves behind.
+
+    ``update_version_registry`` only ever adds country routes and it
+    overwrites the bundle manifest for the wrapper version it deploys, so
+    re-publishing one wrapper with an upgraded country model leaves
+    ``routes["us"]["1.459.0"]`` pointing at an app whose manifest now states
+    something else. Nothing prunes it.
+    """
+    state = deepcopy(TEST_ROUTING_STATE)
+    state["bundles"]["3.9.0"]["us"] = {
+        **state["bundles"]["3.9.0"]["us"],
+        "model_version": model_version,
+    }
+    mock_modal["dicts"]["simulation-api-routing-state"] = {"active": state}
+    return state
+
+
+@pytest.mark.parametrize("endpoint,extra", ENDPOINTS)
+def test_stale_country_route_is_refused_rather_than_served(
+    mock_modal, client, endpoint, extra
+):
+    """The behaviour change. Before, this route resolved and the 202 body
+    contradicted itself: ``version`` from the stale route,
+    ``policyengine_bundle.model_version`` from the live manifest."""
+    republished_wrapper_state(mock_modal, model_version="1.470.0")
+    response = client.post(
+        endpoint, json={"country": "us", "version": "1.459.0", **extra}
+    )
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "1.459.0" in detail and "1.470.0" in detail
+    # A routing refusal, not an SPM one.
+    assert "errors" not in response.json()
+    assert mock_modal["func"].calls == []
+
+
+@pytest.mark.parametrize("endpoint,extra", ENDPOINTS)
+def test_a_country_route_its_bundle_still_states_is_served(
+    mock_modal, client, endpoint, extra
+):
+    """The other half: a route the manifest agrees with keeps working, so
+    the refusal above is about disagreement and not about single-candidate
+    country routes in general."""
+    republished_wrapper_state(mock_modal, model_version="1.459.0")
+    response = client.post(
+        endpoint, json={"country": "us", "version": "1.459.0", **extra}
+    )
+    assert response.status_code == 200, response.text
+    bundle = response.json()["policyengine_bundle"]
+    assert bundle["policyengine_version"] == "3.9.0"
+    assert bundle["model_version"] == "1.459.0"
+
+
+@pytest.mark.parametrize("endpoint,extra", ENDPOINTS)
+@pytest.mark.parametrize("model_version", [None, "", "   ", 42])
+def test_a_bundle_that_states_no_model_version_contradicts_nothing(
+    mock_modal, client, endpoint, extra, model_version
+):
+    """Unstated is unstated, whichever way it is unstated.
+
+    The ambiguity check classifies a blank or whitespace model version as
+    unstated; the shared validator reads any string as stated. Deriving the
+    same fact twice made a blank manifest entry a 400 here while
+    ``test_shared_app_with_missing_model_metadata_is_ambiguous`` treats the
+    identical value as missing metadata.
+    """
+    state = republished_wrapper_state(mock_modal, model_version=model_version)
+    if model_version is None:
+        del state["bundles"]["3.9.0"]["us"]["model_version"]
+    response = client.post(
+        endpoint, json={"country": "us", "version": "1.459.0", **extra}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["policyengine_bundle"]["policyengine_version"] == "3.9.0"
